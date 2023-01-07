@@ -53,13 +53,12 @@ jobs:
           ls -Ra DXSDK
 
   build:
-    name: Build VPinballX-${{ matrix.config }}-${{ matrix.platform }}
+    name: Build VPinballX-${{ matrix.config }}
     runs-on: windows-2019
     needs: [ version, dxsdk ]
     strategy:
       fail-fast: false
       matrix:
-        platform: [win-x64, win-x86]
         config: [Release, Debug]
     steps:
       - uses: actions/checkout@v3
@@ -67,41 +66,46 @@ jobs:
         with:
           path: DXSDK
           key: cache-dxsdk
-      - run: |
+      - name: Prepare Build
+        run: |
           perl -i -pe"s/0/${{ needs.version.outputs.revision }}/g" git_version.h
           perl -i -pe"s/unknown/${{ needs.version.outputs.sha7 }}/g" git_version.h
+          # cmake can't find fxc.exe so copy one into the a directory in the path
+          cp "/c/Program Files (x86)/Windows Kits/10/bin/10.0.19041.0/x86/fxc.exe" /mingw64/bin
       - name: Build
         run: |
           export DXSDK_DIR="${GITHUB_WORKSPACE}/DXSDK"
-          cp cmake/CMakeLists_${{ matrix.platform}}.txt CMakeLists.txt
-          # cmake can't find fxc.exe so copy one into the a directory in the path
-          cp "/c/Program Files (x86)/Windows Kits/10/bin/10.0.19041.0/x86/fxc.exe" /mingw64/bin
-          if [[ "${{ matrix.platform }}" == "win-x64" ]]; then
-            cmake -T v141_xp -G "Visual Studio 16 2019" -A x64 -B build
-          else
-            cmake -T v141_xp -G "Visual Studio 16 2019" -A Win32 -B build
-          fi
+          cp cmake/CMakeLists_win-x86.txt CMakeLists.txt
+          cmake -T v141_xp -G "Visual Studio 16 2019" -A Win32 -B build
           cmake --build build --config ${{ matrix.config }}
-      - run: |
+          # Cleanup to allow a second build to be run with a different arch
+          rm -r build/CMakeFiles/
+          rm build/CMakeCache.txt
+          rm CMakeLists.txt
+          cp cmake/CMakeLists_win-x64.txt CMakeLists.txt
+          cmake -T v141_xp -G "Visual Studio 16 2019" -A x64 -B build
+          cmake --build build --config ${{ matrix.config }}
+      - name: Create Artefact
+        run: |
           mkdir tmp
           cp build/${{ matrix.config }}/VPinballX.exe tmp
+          cp build/${{ matrix.config }}/VPinballX64.exe tmp
           cp build/${{ matrix.config }}/*.dll tmp
           cp -r build/${{ matrix.config }}/scripts tmp
           cp -r build/${{ matrix.config }}/tables tmp
           cp -r build/${{ matrix.config }}/docs tmp
       - uses: actions/upload-artifact@v3
         with:
-          name: VPinballX-${{ needs.version.outputs.tag }}-${{ matrix.config }}-${{ matrix.platform }}
+          name: VPinballX-${{ needs.version.outputs.tag }}-${{ matrix.config }}
           path: tmp
 
   build-gl:
-    name: Build VPinballX_GL-${{ matrix.config }}-${{ matrix.platform }}
+    name: Build VPinballX_GL-${{ matrix.config }}
     runs-on: windows-2022
     needs: [ version, dxsdk ]
     strategy:
       fail-fast: false
       matrix:
-        platform: [win-x64, win-x86]
         config: [Release, Debug]
     steps:
       - uses: actions/checkout@v3
@@ -109,22 +113,28 @@ jobs:
         with:
           path: DXSDK
           key: cache-dxsdk
-      - run: |
+      - name: Prepare Build
+        run: |
           perl -i -pe"s/0/${{ needs.version.outputs.revision }}/g" git_version.h
           perl -i -pe"s/unknown/${{ needs.version.outputs.sha7 }}/g" git_version.h
       - name: Build
         run: |
           export DXSDK_DIR="${GITHUB_WORKSPACE}/DXSDK"
-          cp cmake/CMakeLists_gl-${{ matrix.platform}}.txt CMakeLists.txt
-          if [[ "${{ matrix.platform }}" == "win-x64" ]]; then
-            cmake -G "Visual Studio 17 2022" -A x64 -B build
-          else
-            cmake -G "Visual Studio 17 2022" -A Win32 -B build
-          fi
+          cp cmake/CMakeLists_gl-win-x86.txt CMakeLists.txt
+          cmake -G "Visual Studio 17 2022" -A Win32 -B build
           cmake --build build --config ${{ matrix.config }}
-      - run: |
+          # Cleanup to allow a second build to be run with a different arch
+          rm -r build/CMakeFiles/
+          rm build/CMakeCache.txt
+          rm CMakeLists.txt
+          cp cmake/CMakeLists_gl-win-x64.txt CMakeLists.txt
+          cmake -G "Visual Studio 17 2022" -A x64 -B build
+          cmake --build build --config ${{ matrix.config }}
+      - name: Create Artefact
+        run: |
           mkdir tmp
           cp build/${{ matrix.config }}/VPinballX_GL.exe tmp
+          cp build/${{ matrix.config }}/VPinballX64_GL.exe tmp
           cp build/${{ matrix.config }}/*.dll tmp
           cp -r build/${{ matrix.config }}/shader tmp
           cp -r build/${{ matrix.config }}/scripts tmp
@@ -132,5 +142,5 @@ jobs:
           cp -r build/${{ matrix.config }}/docs tmp
       - uses: actions/upload-artifact@v3
         with:
-          name: VPinballX_GL-${{ needs.version.outputs.tag }}-${{ matrix.config }}-${{ matrix.platform }}
+          name: VPinballX_GL-${{ needs.version.outputs.tag }}-${{ matrix.config }}
           path: tmp
