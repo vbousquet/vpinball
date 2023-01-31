@@ -309,6 +309,7 @@
     <ClCompile Include="inc\BAM\BAMView.cpp">
       <Filter>inc\BAM</Filter>
     </ClCompile>
+    <ClCompile Include="inc\bgfx-imgui\imgui_impl_bgfx.cpp" />
     <ClCompile Include="LiveUI.cpp" />
     <ClCompile Include="imgui\imgui_stdlib.cpp">
       <Filter>imgui</Filter>
