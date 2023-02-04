@@ -38,10 +38,12 @@ class Sampler
 {
 public:
    Sampler(RenderDevice* rd, BaseTexture* const surf, const bool force_linear_rgb, const SamplerAddressMode clampu = SA_UNDEFINED, const SamplerAddressMode clampv = SA_UNDEFINED, const SamplerFilter filter = SF_UNDEFINED);
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
    Sampler(RenderDevice* rd, GLuint glTexture, bool ownTexture, bool force_linear_rgb, const SamplerAddressMode clampu = SA_UNDEFINED, const SamplerAddressMode clampv = SA_UNDEFINED, const SamplerFilter filter = SF_UNDEFINED);
    GLuint GetCoreTexture() const { return m_texture; }
-#else
+#else // DirectX 9
    Sampler(RenderDevice* rd, IDirect3DTexture9* dx9Texture, bool ownTexture, bool force_linear_rgb, const SamplerAddressMode clampu = SA_UNDEFINED, const SamplerAddressMode clampv = SA_UNDEFINED, const SamplerFilter filter = SF_UNDEFINED);
    IDirect3DTexture9* GetCoreTexture() { return m_texture;  }
 #endif
@@ -73,10 +75,12 @@ private:
    SamplerAddressMode m_clampv;
    SamplerFilter m_filter;
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
    GLuint m_texture = 0;
    GLuint CreateTexture(unsigned int Width, unsigned int Height, unsigned int Levels, colorFormat Format, void* data, int stereo);
-#else
+#else // DirectX 9
    IDirect3DTexture9* m_texture;
    IDirect3DTexture9* CreateSystemTexture(BaseTexture* const surf, const bool force_linear_rgb, colorFormat& texformat);
 #endif

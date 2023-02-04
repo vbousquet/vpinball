@@ -9,11 +9,10 @@ bool captureExternalDMD();
 bool capturePUP();
 void captureStop();
 
-// Disabled for DX9 since it causes conflict with DX9
-#ifdef ENABLE_SDL
-#include <d3d11.h>
-#include <dxgi1_2.h>
+#if defined(ENABLE_BGFX) // BGFX
 
+#elif defined(ENABLE_SDL) // OpenGL
+// Only supported for OpenGL since for DX9 since it causes conflict with DX9
 enum ecStage { ecSearching, ecFoundWaiting, ecTexture, ecFailure, ecCapturing, ecUninitialized };
 
 class ExtCapture;
@@ -82,4 +81,7 @@ public:
    int m_DispTop = 0, m_DispLeft = 0;
    int m_Width, m_Height = 0;
 };
+
+#else // DirectX 9
+
 #endif

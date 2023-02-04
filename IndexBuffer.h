@@ -16,7 +16,7 @@ public:
 
    enum LockFlags
    {
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) || defined(ENABLE_SDL) // BGFX & OpenGL
       WRITEONLY,
       DISCARDCONTENTS
 #else

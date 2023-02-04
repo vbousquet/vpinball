@@ -2,7 +2,9 @@
 #include "RenderTarget.h"
 #include "RenderDevice.h"
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
 #include "Shader.h"
 #endif
 
@@ -10,7 +12,9 @@
 #include "inc/nvapi.h"
 #endif
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
 int RenderTarget::m_current_stereo_mode = -1;
 #endif
 
@@ -32,7 +36,9 @@ RenderTarget::RenderTarget(RenderDevice* const rd, const int width, const int he
 {
    m_color_sampler = nullptr;
    m_depth_sampler = nullptr;
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&m_framebuffer); // Not sure about this (taken from VPVR original implementation). Doesn't the back buffer always bind to 0 on OpenGL ?
    m_color_tex = 0;
    m_depth_tex = 0;
@@ -64,7 +70,10 @@ RenderTarget::RenderTarget(RenderDevice* const rd, const RenderTargetType type, 
 
    m_color_sampler = nullptr;
    m_depth_sampler = nullptr;
-#ifdef ENABLE_SDL
+
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
    const GLuint col_type = ((format == RGBA32F) || (format == RGB32F)) ? GL_FLOAT : ((format == RGBA16F) || (format == RGB16F)) ? GL_HALF_FLOAT : GL_UNSIGNED_BYTE;
    const GLuint col_format = ((format == GREY8) || (format == RED16F))                                                                                                      ? GL_RED
       : ((format == GREY_ALPHA) || (format == RG16F))                                                                                                                       ? GL_RG
@@ -207,7 +216,7 @@ RenderTarget::RenderTarget(RenderDevice* const rd, const RenderTargetType type, 
    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-#else
+#else // DirectX 9
    assert(m_type == RT_DEFAULT); // Layered rendering is not yet supported by the DX9 backend
    m_color_tex = nullptr;
    m_color_surface = nullptr;
@@ -268,7 +277,8 @@ RenderTarget::~RenderTarget()
    delete m_color_sampler;
    if (!m_shared_depth)
       delete m_depth_sampler;
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
    if (m_nMSAASamples > 1)
    {
       glDeleteRenderbuffers(1, &m_color_tex);
@@ -282,7 +292,7 @@ RenderTarget::~RenderTarget()
          glDeleteTextures(1, &m_depth_tex);
    }
    glDeleteFramebuffers(1, &m_framebuffer);
-#else
+#else // DirectX 9
    // Texture share its refcount with surface, it must be decremented, but it won't be 0 until surface is also released
    SAFE_RELEASE_NO_RCC(m_color_tex);
    SAFE_RELEASE(m_color_surface);
@@ -312,7 +322,10 @@ RenderTarget::~RenderTarget()
    
 void RenderTarget::UpdateDepthSampler(bool insideBeginEnd)
 {
-#if !defined(DISABLE_FORCE_NVIDIA_OPTIMUS) && !defined(ENABLE_SDL)
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
+#else // DirectX 9
+   #if !defined(DISABLE_FORCE_NVIDIA_OPTIMUS)
    if (m_has_depth && m_use_alternate_depth && m_rd->NVAPIinit)
    {
       // do not put inside BeginScene/EndScene Block
@@ -324,6 +337,7 @@ void RenderTarget::UpdateDepthSampler(bool insideBeginEnd)
       if (insideBeginEnd)
          m_rd->GetCoreDevice()->BeginScene();
    }
+   #endif
 #endif
 }
 
@@ -341,7 +355,8 @@ void RenderTarget::CopyTo(RenderTarget* dest, const bool copyColor, const bool c
    int pw1 = w1 == -1 ? GetWidth() : w1, ph1 = h1 == -1 ? GetHeight() : h1;
    int px2 = x2 == -1 ? 0 : x2, py2 = y2 == -1 ? 0 : y2;
    int pw2 = w2 == -1 ? dest->GetWidth() : w2, ph2 = h2 == -1 ? dest->GetHeight() : h2;
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
    if (w1 == w2 && h1 == h2)
    {
       int bitmask = (copyColor ? GL_COLOR_BUFFER_BIT : 0) | (m_has_depth && dest->m_has_depth && copyDepth ? GL_DEPTH_BUFFER_BIT : 0);
@@ -385,7 +400,7 @@ void RenderTarget::CopyTo(RenderTarget* dest, const bool copyColor, const bool c
          }
       }
    }
-#else
+#else // DirectX 9
    if (copyColor)
    {
       CHECKD3D(m_rd->GetCoreDevice()->StretchRect(m_color_surface, nullptr, dest->m_color_surface, nullptr, w1 == w2 && h1 == h2 ? D3DTEXF_NONE : D3DTEXF_LINEAR));
@@ -400,7 +415,9 @@ void RenderTarget::CopyTo(RenderTarget* dest, const bool copyColor, const bool c
 
 void RenderTarget::Activate(const bool ignoreStereo)
 {
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
    if (current_render_target == this && m_current_stereo_mode == (ignoreStereo ? STEREO_OFF : m_stereo))
       return;
    m_current_stereo_mode = ignoreStereo ? STEREO_OFF : m_stereo;
@@ -434,7 +451,7 @@ void RenderTarget::Activate(const bool ignoreStereo)
       glViewportArrayv(0, 2, viewPorts);
       break;
    }
-#else
+#else // DirectX 9
    static IDirect3DSurface9* currentColorSurface = nullptr;
    if (currentColorSurface != m_color_surface)
    {

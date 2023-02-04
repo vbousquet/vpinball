@@ -201,9 +201,10 @@ public:
 
    void FreeShader();
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
    int getGLVersion() const { return m_GLversion; }
-#else
+#else // DirectX 9
    IDirect3DDevice9* GetCoreDevice() const { return m_pD3DDevice; }
 #endif
 
@@ -261,11 +262,12 @@ public:
    void SetSamplerState(int unit, SamplerFilter filter, SamplerAddressMode clamp_u, SamplerAddressMode clamp_v);
 
 private:
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
    GLfloat m_maxaniso;
    int m_GLversion;
    static GLuint m_samplerStateCache[3 * 3 * 5];
-#else
+#else // DirectX 9
    DWORD m_maxaniso;
    bool m_mag_aniso;
    static constexpr DWORD TEXTURESET_STATE_CACHE_SIZE = 32;
@@ -288,7 +290,9 @@ public:
    MeshBuffer* m_quadPTDynMeshBuffer = nullptr;  // internal vb for rendering dynamic quads (position/texture)
 
 public:
-#ifndef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
+#else // DirectX 9
    bool m_useNvidiaApi;
    bool m_INTZ_support;
    bool NVAPIinit;
@@ -323,8 +327,10 @@ private :
    RenderPass* m_currentPass = nullptr;
 
 public:
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
    std::vector<SamplerBinding*> m_samplerBindings;
+#else // DirectX 9
 #endif
 
    unsigned int m_curDrawnTriangles, m_frameDrawnTriangles;

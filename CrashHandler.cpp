@@ -121,9 +121,11 @@ namespace
 
    void WriteHeader(FILE* f)
    {
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+      fprintf(f, "Crash report VPX BGFX rev%i (%s)\n============\n", GIT_REVISION, GIT_SHA);
+#elif defined(ENABLE_SDL) // OpenGL
       fprintf(f, "Crash report VPX GL rev%i (%s)\n============\n", GIT_REVISION, GIT_SHA);
-#else
+#else // DirectX 9
       fprintf(f, "Crash report VPX rev%i (%s)\n============\n", GIT_REVISION, GIT_SHA);
 #endif
    }

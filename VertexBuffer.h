@@ -8,7 +8,7 @@ class VertexBuffer final
 public:
    enum LockFlags
    {
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) || defined(ENABLE_SDL)
       WRITEONLY,
       DISCARDCONTENTS
 #else
@@ -62,13 +62,16 @@ private:
    vector<PendingUpload> m_pendingUploads;
    PendingUpload m_lock = { 0, 0, nullptr };
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+   bgfx::VertexBufferHandle m_vb = BGFX_INVALID_HANDLE;
+
+#elif defined(ENABLE_SDL) // OpenGL
    GLuint m_vb = 0;
 
 public:
    GLuint GetBuffer() const { return m_vb; }
 
-#else
+#else // DirectX 9
    IDirect3DVertexBuffer9* m_vb = nullptr;
 
 public:

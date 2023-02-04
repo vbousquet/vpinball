@@ -549,7 +549,9 @@ void Pin3D::InitRenderState(RenderDevice * const pd3dDevice)
    pd3dDevice->SetRenderState(RenderState::CLIPPLANEENABLE, RenderState::RS_FALSE);
 
    // initialize first texture stage
-#ifndef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
+#else // DirectX 9
    CHECKD3D(pd3dDevice->GetCoreDevice()->SetRenderState(D3DRS_LIGHTING, FALSE));
    CHECKD3D(pd3dDevice->GetCoreDevice()->SetRenderState(D3DRS_CLIPPING, FALSE));
    CHECKD3D(pd3dDevice->GetCoreDevice()->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1));
@@ -621,7 +623,9 @@ void Pin3D::InitLights()
    emission.y *= g_pplayer->m_ptable->m_lightEmissionScale*g_pplayer->m_globalEmissionScale;
    emission.z *= g_pplayer->m_ptable->m_lightEmissionScale*g_pplayer->m_globalEmissionScale;
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
    float lightPos[MAX_LIGHT_SOURCES][4] = { 0.f };
    float lightEmission[MAX_LIGHT_SOURCES][4] = { 0.f };
 
@@ -633,7 +637,7 @@ void Pin3D::InitLights()
 
    m_pd3dPrimaryDevice->basicShader->SetFloat4v(SHADER_basicLightPos, (vec4*) lightPos, MAX_LIGHT_SOURCES);
    m_pd3dPrimaryDevice->basicShader->SetFloat4v(SHADER_basicLightEmission, (vec4*) lightEmission, MAX_LIGHT_SOURCES);
-#else
+#else // DirectX 9
    struct CLight
    {
       float vPos[3];

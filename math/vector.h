@@ -2,7 +2,7 @@
 
 #include <cfloat>
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX)  || defined(ENABLE_SDL) // BGFX & OpenGL
 class Matrix3D;
 
 class alignas(16) vec4 final

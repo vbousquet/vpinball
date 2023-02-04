@@ -17,7 +17,10 @@
 #include "shader/AreaTex.h"
 #include "shader/SearchTex.h"
 
-#if defined(ENABLE_SDL) // OpenGL
+#if defined(ENABLE_BGFX) // BGFX
+#include "bx/platform.h"
+
+#elif defined(ENABLE_SDL) // OpenGL
 #include "typedefs3D.h"
 #include "TextureManager.h"
 #include <SDL2/SDL_syswm.h>
@@ -32,7 +35,9 @@
 #endif
 
 
-#if defined(ENABLE_SDL) // OpenGL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
 GLuint RenderDevice::m_samplerStateCache[3 * 3 * 5];
 
 #else // DirectX 9
@@ -150,7 +155,9 @@ static const char* glErrorToString(const int error) {
 void ReportFatalError(const HRESULT hr, const char *file, const int line)
 {
    char msg[2048+128];
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
    sprintf_s(msg, sizeof(msg), "GL Fatal Error 0x%0002X %s in %s:%d", hr, glErrorToString(hr), file, line);
 #else
    sprintf_s(msg, sizeof(msg), "Fatal error %s (0x%x: %s) at %s:%d", DXGetErrorString(hr), hr, DXGetErrorDescription(hr), file, line);
@@ -163,10 +170,13 @@ void ReportFatalError(const HRESULT hr, const char *file, const int line)
 void ReportError(const char *errorText, const HRESULT hr, const char *file, const int line)
 {
    char msg[4096];
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
    sprintf_s(msg, sizeof(msg), "GL Error 0x%0002X %s in %s:%d\n%s", hr, glErrorToString(hr), file, line, errorText);
    ShowError(msg);
-#else
+
+#else // DirectX 9
    sprintf_s(msg, sizeof(msg), "%s %s (0x%x: %s) at %s:%d", errorText, DXGetErrorString(hr), hr, DXGetErrorDescription(hr), file, line);
    ShowError(msg);
    exit(-1);
@@ -257,7 +267,9 @@ void EnumerateDisplayModes(const int display, vector<VideoMode>& modes)
       return;
    const int adapter = displays[display].adapter;
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
    const int amount = SDL_GetNumDisplayModes(adapter);
    for (int mode = 0; mode < amount; ++mode) {
       SDL_DisplayMode sdlMode;
@@ -353,7 +365,7 @@ int getDisplayList(vector<DisplayConfig>& displays)
 {
    displays.clear();
 
-#if defined(ENABLE_SDL) && defined(WIN32)
+#if (defined(ENABLE_SDL) || defined(ENABLE_BGFX)) && defined(WIN32)
    // Windows and SDL order of display enumeration do not match, therefore the display identifier will not match between DX and OpenGL version
    // SDL2 display identifier do not match the id of the native Windows settings
    // SDL2 does not offer a way to get the adapter (i.e. Graphics Card) associated with a display (i.e. Monitor) so we use the monitor name for both
@@ -387,7 +399,7 @@ int getDisplayList(vector<DisplayConfig>& displays)
       }
       i++;
    }
-#elif defined(ENABLE_SDL)
+#elif defined(ENABLE_SDL) || defined(ENABLE_BGFX)
    int i = 0;
    for (; i < SDL_GetNumVideoDisplays(); ++i)
    {
@@ -480,7 +492,11 @@ int getPrimaryDisplay()
 
 ////////////////////////////////////////////////////////////////////
 
-#ifndef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
+
+#else // DirectX 9
 #ifdef USE_D3D9EX
  typedef HRESULT(WINAPI *pD3DC9Ex)(UINT SDKVersion, IDirect3D9Ex**);
  static pD3DC9Ex mDirect3DCreate9Ex = nullptr;
@@ -501,12 +517,15 @@ RenderDevice::RenderDevice(const HWND hwnd, const int width, const int height, c
       m_colorDepth(colordepth), m_vsync(VSync), m_AAfactor(AAfactor), m_stereo3D(stereo3D),
       m_ssRefl(ss_refl), m_disableDwm(disable_dwm), m_sharpen(sharpen), m_FXAA(FXAA), m_BWrendering(BWrendering), m_texMan(*this), m_renderFrame(this)
 {
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
 #ifdef ENABLE_VR
    m_pHMD = nullptr;
    m_rTrackedDevicePose = nullptr;
 #endif
-#else
+
+#else // DirectX 9
     m_useNvidiaApi = useNvidiaApi;
     m_INTZ_support = false;
     NVAPIinit = false;
@@ -540,7 +559,39 @@ void RenderDevice::CreateDevice(int &refreshrate, UINT adapterIndex)
    assert(g_pplayer != nullptr); // Player must be created to give access to the output window
    colorFormat back_buffer_format;
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+   bool video10bit = false;
+
+   bgfx::Init init;
+#if BX_PLATFORM_LINUX || BX_PLATFORM_BSD
+   init.platformData.ndt = wmInfo.info.x11.display;
+   init.platformData.nwh = (void*)(uintptr_t)wmInfo.info.x11.window;
+#elif BX_PLATFORM_OSX
+   init.platformData.nwh = wmInfo.info.cocoa.window;
+#elif BX_PLATFORM_WINDOWS
+   init.platformData.nwh = g_pplayer->GetHwnd();
+#elif BX_PLATFORM_STEAMLINK
+   init.platformData.ndt = wmInfo.info.vivante.display;
+   init.platformData.nwh = wmInfo.info.vivante.window;
+#endif // BX_PLATFORM_
+   init.platformData.context = NULL;
+   init.platformData.backBuffer = NULL;
+   init.platformData.backBufferDS = NULL;
+   init.resolution.width = 2560;
+   init.resolution.height = 1440;
+   init.resolution.reset = BGFX_RESET_VSYNC;
+   if (!bgfx::init(init))
+   {
+      PLOGE << "FAILED";
+   }
+   bgfx::setDebug(BGFX_DEBUG_TEXT /*| BGFX_DEBUG_STATS*/);
+   bgfx::setViewClear(0, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x303030ff, 1.0f, 0);
+   bgfx::setViewRect(0, 0, 0, bgfx::BackbufferRatio::Equal);
+
+   // FIXME use desktop or fullscreen backbuffer format
+   back_buffer_format = colorFormat::RGB8;
+
+#elif defined(ENABLE_SDL) // OpenGL
    ///////////////////////////////////
    // OpenGL device initialization
    const int displays = SDL_GetNumVideoDisplays();
@@ -692,7 +743,7 @@ void RenderDevice::CreateDevice(int &refreshrate, UINT adapterIndex)
 
    SetRenderState(RenderState::ZFUNC, RenderState::Z_LESSEQUAL);
 
-#else
+#else // DirectX 9
    ///////////////////////////////////
    // DirectX 9 device initialization
 
@@ -935,15 +986,22 @@ void RenderDevice::CreateDevice(int &refreshrate, UINT adapterIndex)
 
    // Retrieve a reference to the back buffer.
    int back_buffer_width, back_buffer_height;
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+   back_buffer_width = m_width;
+   back_buffer_height = m_height;
+
+#elif defined(ENABLE_SDL) // OpenGL
    SDL_GL_GetDrawableSize(m_sdl_playfieldHwnd, &back_buffer_width, &back_buffer_height);
+
 #else
    back_buffer_width = m_width;
    back_buffer_height = m_height;
 #endif
    m_pBackBuffer = new RenderTarget(this, back_buffer_width, back_buffer_height, back_buffer_format);
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+   const colorFormat render_format = ((m_BWrendering == 1) ? colorFormat::RG16F : ((m_BWrendering == 2) ? colorFormat::RED16F : colorFormat::RGB16F));
+#elif defined(ENABLE_SDL) // OpenGL
    const colorFormat render_format = ((m_BWrendering == 1) ? colorFormat::RG16F : ((m_BWrendering == 2) ? colorFormat::RED16F : colorFormat::RGB16F));
 #else
    const colorFormat render_format = ((m_BWrendering == 1) ? colorFormat::RG16F : ((m_BWrendering == 2) ? colorFormat::RED16F : colorFormat::RGBA16F));
@@ -954,7 +1012,9 @@ void RenderDevice::CreateDevice(int &refreshrate, UINT adapterIndex)
 
    // alloc float buffer for rendering
    int nMSAASamples = (g_pplayer != nullptr) ? g_pplayer->m_MSAASamples : 1;
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
    int maxSamples;
    glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
    nMSAASamples = min(maxSamples, nMSAASamples);
@@ -1001,11 +1061,32 @@ void RenderDevice::CreateDevice(int &refreshrate, UINT adapterIndex)
    #endif
 
    // Buffers for post-processing (postprocess is done at scene resolution, on a LDR render target without MSAA or full scene supersampling)
+#if defined(ENABLE_BGFX) // BGFX
+   colorFormat pp_format = video10bit ? colorFormat::RGB10 : colorFormat::RGB8;
+#elif defined(ENABLE_SDL) // OpenGL
+    colorFormat pp_format = video10bit ? colorFormat::RGB10 : colorFormat::RGB8;
+#else // DirectX 9
+    colorFormat pp_format = video10bit ? colorFormat::RGBA10 : colorFormat::RGBA8;
+#endif
+
    if (video10bit && (m_FXAA == Quality_SMAA || m_FXAA == Standard_DLAA))
       ShowError("SMAA or DLAA post-processing AA should not be combined with 10bit-output rendering (will result in visible artifacts)!");
 
-#ifndef ENABLE_SDL
    // create default vertex declarations for shaders
+#if defined(ENABLE_BGFX) // BGFX
+   m_pVertexTexelDeclaration = new bgfx::VertexLayout; // FIXME delete
+   m_pVertexNormalTexelDeclaration = new bgfx::VertexLayout;
+   m_pVertexTexelDeclaration->begin()
+      .add(bgfx::Attrib::Position, 3, bgfx::AttribType::Float)
+      .add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
+      .end();
+   m_pVertexNormalTexelDeclaration->begin()
+      .add(bgfx::Attrib::Position, 3, bgfx::AttribType::Float)
+      .add(bgfx::Attrib::Normal, 3, bgfx::AttribType::Float)
+      .add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
+      .end();
+#elif defined(ENABLE_SDL) // OpenGL
+#else // DirectX 9
    CHECKD3D(m_pD3DDevice->CreateVertexDeclaration(VertexTexelElement, &m_pVertexTexelDeclaration));
    CHECKD3D(m_pD3DDevice->CreateVertexDeclaration(VertexNormalTexelElement, &m_pVertexNormalTexelDeclaration));
 #endif
@@ -1043,7 +1124,8 @@ void RenderDevice::CreateDevice(int &refreshrate, UINT adapterIndex)
 
 bool RenderDevice::LoadShaders()
 {
-#ifdef ENABLE_SDL // OpenGL
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL 
    basicShader = new Shader(this, "BasicShader.glfx"s);
    DMDShader = new Shader(this, m_stereo3D == STEREO_VR ? "DMDShaderVR.glfx"s : "DMDShader.glfx"s);
    FBShader = new Shader(this, "FBShader.glfx"s, "SMAA.glfx"s);
@@ -1135,7 +1217,9 @@ void RenderDevice::ResolveMSAA()
 
 bool RenderDevice::DepthBufferReadBackAvailable()
 {
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+   return true; // FIXME
+#elif defined(ENABLE_SDL) // OpenGL
    return true;
 #else
     if (m_INTZ_support && !m_useNvidiaApi)
@@ -1146,12 +1230,13 @@ bool RenderDevice::DepthBufferReadBackAvailable()
 }
 
 #ifdef _DEBUG
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
 static void CheckForGLLeak()
 {
    //TODO
 }
-#else
+#else // DirectX 9
 static void CheckForD3DLeak(IDirect3DDevice9* d3d)
 {
    IDirect3DSwapChain9 *swapChain;
@@ -1234,7 +1319,10 @@ RenderDevice::~RenderDevice()
    delete m_quadPNTDynMeshBuffer;
    delete m_nullTexture;
 
-#ifndef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
+#else // DirectX 9
+   //
    m_pD3DDevice->SetStreamSource(0, nullptr, 0, 0);
    m_pD3DDevice->SetIndices(nullptr);
    m_pD3DDevice->SetVertexShader(nullptr);
@@ -1265,7 +1353,40 @@ RenderDevice::~RenderDevice()
    delete m_SMAAareaTexture;
    delete m_SMAAsearchTexture;
 
-#ifndef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
+   MeshBuffer::ClearSharedBuffers();
+   VertexBuffer::ClearSharedBuffers();
+   IndexBuffer::ClearSharedBuffers();
+   for (auto binding : m_samplerBindings)
+      delete binding;
+   m_samplerBindings.clear();
+#ifdef ENABLE_VR
+   if (m_pHMD)
+   {
+      turnVROff();
+      SaveValueFloat(regKey[RegName::Player], "VRSlope"s, m_slope);
+      SaveValueFloat(regKey[RegName::Player], "VROrientation"s, m_orientation);
+      SaveValueFloat(regKey[RegName::Player], "VRTableX"s, m_tablex);
+      SaveValueFloat(regKey[RegName::Player], "VRTableY"s, m_tabley);
+      SaveValueFloat(regKey[RegName::Player], "VRTableZ"s, m_tablez);
+   }
+#endif
+
+   for (size_t i = 0; i < sizeof(m_samplerStateCache) / sizeof(m_samplerStateCache[0]); i++)
+   {
+      if (m_samplerStateCache[i] != 0)
+      {
+         glDeleteSamplers(1, &m_samplerStateCache[i]);
+         m_samplerStateCache[i] = 0;
+      }
+   }
+
+   SDL_GL_DeleteContext(m_sdl_context);
+   SDL_DestroyWindow(m_sdl_playfieldHwnd);
+
+#else // DirectX 9
 #ifdef _DEBUG
    CheckForD3DLeak(m_pD3DDevice);
 #endif
@@ -1317,19 +1438,11 @@ RenderDevice::~RenderDevice()
    }
 #endif
 
-   for (size_t i = 0; i < sizeof(m_samplerStateCache)/sizeof(m_samplerStateCache[0]); i++)
-   {
-      if (m_samplerStateCache[i] != 0)
-      {
-         glDeleteSamplers(1, &m_samplerStateCache[i]);
-         m_samplerStateCache[i] = 0;
-      }
-   }
+void RenderDevice::BeginScene()
+{
+#if defined(ENABLE_BGFX) // BGFX
 
-   SDL_GL_DeleteContext(m_sdl_context);
-   SDL_DestroyWindow(m_sdl_playfieldHwnd);
-#endif
-}
+#elif defined(ENABLE_SDL) // OpenGL
 
 /*static void FlushGPUCommandBuffer(IDirect3DDevice9* pd3dDevice)
 {
@@ -1362,7 +1475,10 @@ void RenderDevice::Flip(const bool vsync)
 {
    FlushRenderFrame();
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX)
+   // Advance to next frame. Process submitted rendering primitives.
+   bgfx::frame();
+#elif defined(ENABLE_SDL)
    SDL_GL_SwapWindow(m_sdl_playfieldHwnd);
 #ifdef ENABLE_VR
    //glFlush();
@@ -1423,7 +1539,9 @@ void RenderDevice::UploadAndSetSMAATextures()
    delete searchBaseTex;
 
    // FIXME use standard BaseTexture / Sampler code instead
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
    // Update bind cache
    auto tex_unit = m_samplerBindings.back();
    if (tex_unit->sampler != nullptr)
@@ -1465,7 +1583,8 @@ void RenderDevice::UploadAndSetSMAATextures()
    glGenerateMipmap(GL_TEXTURE_2D); // Generate mip-maps, when using TexStorage will generate same amount as specified in TexStorage, otherwise good idea to limit by GL_TEXTURE_MAX_LEVEL
    m_SMAAareaTexture = new Sampler(this, glTexture, true, true, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR);
    m_SMAAareaTexture->SetName("SMAA Area"s);
-#else
+
+#else // DirectX 9
    {
       IDirect3DTexture9 *sysTex, *tex;
       HRESULT hr = m_pD3DDevice->CreateTexture(AREATEX_WIDTH, AREATEX_HEIGHT, 0, 0, (D3DFORMAT)colorFormat::GREYA8, (D3DPOOL)memoryPool::SYSTEM, &sysTex, nullptr);
@@ -1494,7 +1613,9 @@ void RenderDevice::UploadAndSetSMAATextures()
 
 void RenderDevice::SetSamplerState(int unit, SamplerFilter filter, SamplerAddressMode clamp_u, SamplerAddressMode clamp_v)
 {
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
    assert(sizeof(m_samplerStateCache)/sizeof(m_samplerStateCache[0]) == 3*3*5);
    int samplerStateId = min((int)clamp_u, 2) * 5 * 3
                       + min((int)clamp_v, 2) * 5
@@ -1540,7 +1661,8 @@ void RenderDevice::SetSamplerState(int unit, SamplerFilter filter, SamplerAddres
    }
    glBindSampler(unit, sampler_state);
    m_curStateChanges++;
-#else
+
+#else // DirectX 9
    if (filter != m_bound_filter[unit])
    {
       switch (filter)
@@ -1648,7 +1770,8 @@ void RenderDevice::ApplyRenderStates()
 
 void RenderDevice::SetClipPlane(const vec4 &plane)
 {
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
    DMDShader->SetVector(SHADER_clip_plane, &plane);
    basicShader->SetVector(SHADER_clip_plane, &plane);
    lightShader->SetVector(SHADER_clip_plane, &plane);
@@ -1862,7 +1985,8 @@ static ViewPort viewPort;
 
 void RenderDevice::SetViewport(const ViewPort* p1)
 {
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
    memcpy(&viewPort, p1, sizeof(ViewPort));
 #else
    CHECKD3D(m_pD3DDevice->SetViewport((D3DVIEWPORT9*)p1));
@@ -1871,7 +1995,8 @@ void RenderDevice::SetViewport(const ViewPort* p1)
 
 void RenderDevice::GetViewport(ViewPort* p1)
 {
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
    memcpy(p1, &viewPort, sizeof(ViewPort));
 #else
    CHECKD3D(m_pD3DDevice->GetViewport((D3DVIEWPORT9*)p1));

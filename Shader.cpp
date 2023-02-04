@@ -323,7 +323,8 @@ Shader::Shader(RenderDevice* renderDevice, const std::string& src1, const std::s
    #endif
    
    m_technique = SHADER_TECHNIQUE_INVALID;
-   #ifdef ENABLE_SDL // OpenGL
+   #if defined(ENABLE_BGFX) // BGFX
+   #elif defined(ENABLE_SDL) // OpenGL
    memset(m_techniques, 0, sizeof(ShaderTechnique*) * SHADER_TECHNIQUE_COUNT);
    #else // DirectX 9
    memset(m_boundTexture, 0, sizeof(IDirect3DTexture9*) * TEXTURESET_STATE_CACHE_SIZE);
@@ -398,7 +399,8 @@ Shader::Shader(RenderDevice* renderDevice, const std::string& src1, const std::s
 Shader::~Shader()
 {
    delete m_state;
-#ifdef ENABLE_SDL // OpenGL
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
    for (int j = 0; j < SHADER_TECHNIQUE_COUNT; ++j)
    {
       if (m_techniques[j] != nullptr)
@@ -422,16 +424,19 @@ void Shader::Begin()
    if (m_boundTechnique != m_technique)
    {
       m_renderDevice->m_curTechniqueChanges++;
-      m_boundTechnique = m_technique;
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
       glUseProgram(m_techniques[m_technique]->program);
-#else
+#else // DirectX 9
       CHECKD3D(m_shader->SetTechnique((D3DXHANDLE)shaderTechniqueNames[m_technique].c_str()));
 #endif
    }
    for (auto uniformName : m_uniforms[m_technique])
       ApplyUniform(uniformName);
-#ifndef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
+#else // DirectX 9 
    unsigned int cPasses;
    CHECKD3D(m_shader->Begin(&cPasses, 0));
    CHECKD3D(m_shader->BeginPass(0));
@@ -442,7 +447,9 @@ void Shader::End()
 {
    assert(current_shader == this);
    current_shader = nullptr;
-#ifndef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
+#else // DirectX 9
    CHECKD3D(m_shader->EndPass());
    CHECKD3D(m_shader->End());
 #endif
@@ -585,12 +592,13 @@ void Shader::SetTechniqueMetal(ShaderTechniques technique, const Material& mat, 
 {
    const bool isMetal = mat.m_type == Material::MaterialType::METAL;
    ShaderTechniques tech = technique;
-#ifdef ENABLE_SDL
+#ifdef ENABLE_BGFX
+#elif defined(ENABLE_SDL)
    // For OpenGL doReflections is computed from the reflection factor
    SetBool(SHADER_is_metal, isMetal);
    SetBool(SHADER_doNormalMapping, doNormalMapping);
    SetBool(SHADER_doRefractions, doRefractions);
-#else
+#else // DirextX 9
    switch (technique)
    {
    case SHADER_TECHNIQUE_basic_with_texture:
@@ -645,7 +653,8 @@ void Shader::SetTechnique(ShaderTechniques technique)
 {
    assert(current_shader != this); // Changing the technique of a used shader is not allowed (between Begin/End)
    assert(0 <= technique && technique < SHADER_TECHNIQUE_COUNT);
-#ifdef ENABLE_SDL
+#ifdef ENABLE_BGFX
+#elif defined(ENABLE_SDL)
    if (m_techniques[technique] == nullptr)
    {
       m_technique = SHADER_TECHNIQUE_INVALID;
@@ -661,7 +670,8 @@ void Shader::ApplyUniform(const ShaderUniforms uniformName)
    assert(0 <= uniformName && uniformName < SHADER_UNIFORM_COUNT);
    assert(m_stateOffsets[uniformName] != -1);
 
-#ifdef ENABLE_SDL
+#ifdef ENABLE_BGFX
+#elif defined(ENABLE_SDL)
    ShaderState* const __restrict boundState = m_boundState[m_technique];
    // For OpenGL uniform binding state is per technique (i.e. program)
    const UniformDesc& desc = m_techniques[m_technique]->uniform_desc[uniformName];
@@ -908,7 +918,16 @@ void Shader::ApplyUniform(const ShaderUniforms uniformName)
    }
 }
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+///////////////////////////////////////////////////////////////////////////////
+// BGFX specific implementation
+
+bool Shader::Load(const std::string& name, const BYTE* code, unsigned int codeSize)
+{
+   return true;   
+}
+
+#elif defined(ENABLE_SDL) // OpenGL
 ///////////////////////////////////////////////////////////////////////////////
 // OpenGL specific implementation
 

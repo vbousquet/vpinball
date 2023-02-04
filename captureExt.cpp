@@ -666,7 +666,7 @@ void ExtCapture::Dispose()
    m_allCaptures.clear();
 }
 
-#else
+#else // BGFX & DirectX 9
 bool captureExternalDMD() { return false; }
 bool capturePUP() { return false; }
 void captureStop() { }

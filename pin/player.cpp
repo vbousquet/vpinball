@@ -464,7 +464,10 @@ void Player::PreCreate(CREATESTRUCT& cs)
 
 void Player::CreateWnd(HWND parent /* = 0 */)
 {
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+    Create();
+
+#elif defined(ENABLE_SDL) // OpenGL
    // SDL needs to create the window (as of SDL 2.0.22, SDL_CreateWindowFrom does not support OpenGL contexts) so we create it through SDL and attach it to win32++
    WNDCLASS wc;
    ZeroMemory(&wc, sizeof(wc));
@@ -601,8 +604,10 @@ void Player::CreateWnd(HWND parent /* = 0 */)
       else
          SDL_ShowWindow(m_sdl_playfieldHwnd);
    }
-#else
+
+#else // DirectX 9
    Create();
+
 #endif // ENABLE_SDL
 }
 
@@ -702,6 +707,10 @@ void Player::Shutdown()
 
    delete m_liveUI;
    m_liveUI = nullptr;
+
+#ifdef ENABLE_BGFX
+   bgfx::shutdown();
+#endif
 
    if (m_toogle_DTFS && m_ptable->m_BG_current_set != BG_FSS)
    {
@@ -3212,7 +3221,8 @@ void Player::StereoFXAA(RenderTarget* renderedRT, const bool stereo, const bool 
 
    if (stereo)
    {
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
       // For STEREO_OFF, STEREO_TB, STEREO_SBS, this won't do anything. The previous postprocess steps should already have written to OutputBackBuffer
       // For VR, copy each eye to the HMD texture and render the wanted preview if activated
       if (m_stereo3D == STEREO_VR)
@@ -3272,7 +3282,8 @@ void Player::StereoFXAA(RenderTarget* renderedRT, const bool stereo, const bool 
          // STEREO_OFF, STEREO_TB: top bottom, STEREO_SBS: side by side : nothing to do
          assert(renderedRT == m_pin3d.m_pd3dPrimaryDevice->GetOutputBackBuffer());
       }
-#else
+
+#else // DirectX 9
       // DirectX doesn't support 'real' stereo, instead of performing 2 renders from each eyes, it fakes stereo using a postprocess parallax filter
       assert(renderedRT != m_pin3d.m_pd3dPrimaryDevice->GetOutputBackBuffer());
       outputRT = m_pin3d.m_pd3dPrimaryDevice->GetOutputBackBuffer();
@@ -3918,8 +3929,196 @@ void Player::LockForegroundWindow(const bool enable)
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+#ifdef ENABLE_BGFX
+
+static const bgfx::Memory *loadMem(bx::FileReaderI *_reader, const char *_filePath)
+{
+    if (bx::open(_reader, _filePath))
+    {
+       uint32_t size = (uint32_t)bx::getSize(_reader);
+       const bgfx::Memory *mem = bgfx::alloc(size + 1);
+       bx::read(_reader, mem->data, size, bx::ErrorAssert {});
+       bx::close(_reader);
+       mem->data[mem->size - 1] = '\0';
+       return mem;
+    }
+
+    PLOGD << "Failed to load " << _filePath;
+    return NULL;
+}
+
+static bgfx::ShaderHandle loadShader(bx::FileReaderI *_reader, const char *_name)
+{
+    char filePath[512];
+
+    const char *shaderPath = "???";
+
+    switch (bgfx::getRendererType())
+    {
+    case bgfx::RendererType::Noop:
+    case bgfx::RendererType::Direct3D9: shaderPath = "shaders-bgfx/dx9/"; break;
+    case bgfx::RendererType::Direct3D11:
+    case bgfx::RendererType::Direct3D12: shaderPath = "shaders-bgfx/dx11/"; break;
+    case bgfx::RendererType::Agc:
+    case bgfx::RendererType::Gnm: shaderPath = "shaders-bgfx/pssl/"; break;
+    case bgfx::RendererType::Metal: shaderPath = "shaders-bgfx/metal/"; break;
+    case bgfx::RendererType::Nvn: shaderPath = "shaders-bgfx/nvn/"; break;
+    case bgfx::RendererType::OpenGL: shaderPath = "shaders-bgfx/glsl/"; break;
+    case bgfx::RendererType::OpenGLES: shaderPath = "shaders-bgfx/essl/"; break;
+    case bgfx::RendererType::Vulkan: shaderPath = "shaders-bgfx/spirv/"; break;
+    case bgfx::RendererType::WebGPU: shaderPath = "shaders-bgfx/spirv/"; break;
+
+    case bgfx::RendererType::Count: BX_ASSERT(false, "You should not be here!"); break;
+    }
+
+    bx::strCopy(filePath, BX_COUNTOF(filePath), shaderPath);
+    bx::strCat(filePath, BX_COUNTOF(filePath), _name);
+    bx::strCat(filePath, BX_COUNTOF(filePath), ".bin");
+
+    bgfx::ShaderHandle handle = bgfx::createShader(loadMem(_reader, filePath));
+    bgfx::setName(handle, _name);
+
+    return handle;
+}
+
+bgfx::ProgramHandle loadProgram(bx::FileReaderI *_reader, const char *_vsName, const char *_fsName)
+{
+    bgfx::ShaderHandle vsh = loadShader(_reader, _vsName);
+    bgfx::ShaderHandle fsh = BGFX_INVALID_HANDLE;
+    if (NULL != _fsName)
+    {
+       fsh = loadShader(_reader, _fsName);
+    }
+
+    return bgfx::createProgram(vsh, fsh, true /* destroy shaders when program is destroyed */);
+}
+
+      struct PosColorVertex
+      {
+         float m_x;
+         float m_y;
+         float m_z;
+      };
+
+      static PosColorVertex s_cubeVertices[] =
+      {
+	      {-1.0f,  1.0f,  1.0f },
+	      { 1.0f,  1.0f,  1.0f },
+	      {-1.0f, -1.0f,  1.0f },
+	      { 1.0f, -1.0f,  1.0f },
+	      {-1.0f,  1.0f, -1.0f },
+	      { 1.0f,  1.0f, -1.0f },
+	      {-1.0f, -1.0f, -1.0f },
+	      { 1.0f, -1.0f, -1.0f },
+      };
+
+      static const uint16_t s_cubeTriList[] =
+      {
+	      0, 1, 2, // 0
+	      1, 3, 2,
+	      4, 6, 5, // 2
+	      5, 6, 7,
+	      0, 2, 4, // 4
+	      4, 2, 6,
+	      1, 5, 3, // 6
+	      5, 7, 3,
+	      0, 4, 1, // 8
+	      4, 5, 1,
+	      2, 3, 6, // 10
+	      6, 3, 7,
+      };
+#endif
+
 void Player::Render()
 {
+   #ifdef ENABLE_BGFX
+   // Basic debug render to check everything is set up
+   static int oldWidth = -1, oldHeight = -1;
+   int width, height;
+   // SDL_GL_GetDrawableSize(m_sdl_playfieldHwnd, &width, &height);
+   width = this->m_wnd_width;
+   height = this->m_wnd_height;
+   if (width != oldWidth || height != oldHeight)
+      bgfx::reset((uint32_t)width, (uint32_t)height, BGFX_RESET_VSYNC);
+
+   // This dummy draw call is here to make sure that view 0 is cleared if no other draw calls are submitted to view 0.
+   bgfx::touch(0);
+   // Use debug font to print information about this example.
+   bgfx::dbgTextClear();
+   //bgfx::dbgTextImage(bx::max<uint16_t>(uint16_t(width / 2 / 8), 20) - 20, bx::max<uint16_t>(uint16_t(height / 2 / 16), 6) - 6, 40, 12, s_logo, 160);
+   bgfx::dbgTextPrintf(0, 0, 0x0f, "Press F1 to toggle stats.");
+   bgfx::dbgTextPrintf(0, 1, 0x0f, "Color can be changed with ANSI \x1b[9;me\x1b[10;ms\x1b[11;mc\x1b[12;ma\x1b[13;mp\x1b[14;me\x1b[0m code too.");
+   bgfx::dbgTextPrintf(80, 1, 0x0f, "\x1b[;0m    \x1b[;1m    \x1b[; 2m    \x1b[; 3m    \x1b[; 4m    \x1b[; 5m    \x1b[; 6m    \x1b[; 7m    \x1b[0m");
+   bgfx::dbgTextPrintf(80, 2, 0x0f, "\x1b[;8m    \x1b[;9m    \x1b[;10m    \x1b[;11m    \x1b[;12m    \x1b[;13m    \x1b[;14m    \x1b[;15m    \x1b[0m");
+   const bgfx::Stats *stats = bgfx::getStats();
+   bgfx::dbgTextPrintf(0, 2, 0x0f, "Backbuffer %dW x %dH in pixels, debug text %dW x %dH in characters.", stats->width, stats->height, stats->textWidth, stats->textHeight);
+   // Enable stats or debug text.
+   bgfx::setDebug(BGFX_DEBUG_STATS);
+
+   static bgfx::ProgramHandle g_ShaderHandle = BGFX_INVALID_HANDLE;
+   static bgfx::VertexLayout g_VertexLayout;
+   static bgfx::VertexBufferHandle g_VBHandle = BGFX_INVALID_HANDLE;
+   static bgfx::IndexBufferHandle g_IBHandle = BGFX_INVALID_HANDLE;
+
+   if (!isValid(g_ShaderHandle))
+   {
+      bgfx::RendererType::Enum type = bgfx::getRendererType();
+      g_ShaderHandle = loadProgram(new bx::FileReader(), "vs_debug", "fs_debug");
+      g_VertexLayout.begin()
+         .add(bgfx::Attrib::Position, 3, bgfx::AttribType::Float)
+         //.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
+         .end();
+
+      // Create static vertex buffer.
+      g_VBHandle = bgfx::createVertexBuffer(
+         // Static data can be passed with bgfx::makeRef
+         bgfx::makeRef(s_cubeVertices, sizeof(s_cubeVertices)), g_VertexLayout);
+      // Create static index buffer for triangle list rendering.
+      g_IBHandle = bgfx::createIndexBuffer(
+         // Static data can be passed with bgfx::makeRef
+         bgfx::makeRef(s_cubeTriList, sizeof(s_cubeTriList)));
+   }
+
+   // Set view and projection matrix for view 0.
+   {
+      const bx::Vec3 at = { 0.0f, 0.0f, 0.0f };
+      const bx::Vec3 eye = { 0.0f, 0.0f, -35.0f };
+
+      float view[16];
+      bx::mtxLookAt(view, eye, at);
+
+      float proj[16];
+      bx::mtxProj(proj, 60.0f, float(width) / float(height), 0.1f, 100.0f, bgfx::getCaps()->homogeneousDepth);
+      bgfx::setViewTransform(0, view, proj);
+
+      // Set view 0 default viewport.
+      bgfx::setViewRect(0, 0, 0, uint16_t(width), uint16_t(height));
+   }
+
+   float mtx[16];
+   uint32_t yy = 0, xx = 0;
+   float time = (float)((bx::getHPCounter()) / double(bx::getHPFrequency()));
+   bx::mtxRotateXY(mtx, time + xx * 0.21f, time + yy * 0.37f);
+   mtx[12] = -15.0f + float(xx) * 3.0f;
+   mtx[13] = -15.0f + float(yy) * 3.0f;
+   mtx[14] = 0.0f;
+
+   // Set model matrix for rendering.
+   bgfx::setTransform(mtx);
+
+   // Set vertex and index buffer.
+   bgfx::setVertexBuffer(0, g_VBHandle);
+   bgfx::setIndexBuffer(g_IBHandle);
+
+   // Set render states.
+   uint64_t state = BGFX_STATE_WRITE_R | BGFX_STATE_WRITE_G | BGFX_STATE_WRITE_B | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z | 
+      BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_CULL_CW | BGFX_STATE_MSAA;
+   bgfx::setState(state);
+
+   // Submit primitive for rendering to view 0.
+   bgfx::submit(0, g_ShaderHandle);
+   #endif
+
    // Rendering outputs to m_pd3dPrimaryDevice->GetBackBufferTexture(). If MSAA is used, it is resolved as part of the rendering (i.e. this surface is NOT the MSAA rneder surface but its resolved copy)
    // Then it is tonemapped/bloom/dither/... to m_pd3dPrimaryDevice->GetPostProcessRenderTarget1() if needed for postprocessing (sharpen, FXAA,...), or directly to the main output framebuffer otherwise
    // The optional postprocessing is done from m_pd3dPrimaryDevice->GetPostProcessRenderTarget1() to the main output framebuffer
@@ -4021,7 +4220,9 @@ void Player::Render()
       if (pht->m_interval < 0)
          pht->m_pfe->FireGroupEvent(DISPID_TimerEvents_Timer);
 
-#ifndef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
+#else // DirectX 9
    if (GetProfilingMode() == PF_ENABLED)
       m_pin3d.m_gpu_profiler.BeginFrame(m_pin3d.m_pd3dPrimaryDevice->GetCoreDevice());
 #endif
@@ -4039,10 +4240,12 @@ void Player::Render()
    else if (m_cameraMode)
       m_pin3d.InitLayout();
 
+   #ifndef ENABLE_BGFX
    if (GetInfoMode() != IF_STATIC_ONLY)
    {
       RenderDynamics();
    }
+   #endif
 
    // Resolve MSAA buffer to a normal one (noop if not using MSAA), allowing sampling it for postprocessing
    m_pin3d.m_pd3dPrimaryDevice->ResolveMSAA();
@@ -4072,6 +4275,13 @@ void Player::Render()
       PrepareVideoBuffersAO();
    else
       PrepareVideoBuffersNormal();
+   #endif
+
+#ifdef USE_IMGUI
+   RenderHUD_IMGUI();
+#else
+   UpdateHUD();
+#endif
 
    m_liveUI->Update();
    m_pin3d.m_pd3dPrimaryDevice->RenderLiveUI();
@@ -4760,7 +4970,10 @@ void Player::DrawBalls()
          }
       }
 
-#if defined(DEBUG_BALL_SPIN) && !defined(ENABLE_SDL)        // draw debug points for visualizing ball rotation
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
+#else // DirectX 9
+#if defined(DEBUG_BALL_SPIN) // draw debug points for visualizing ball rotation
       if (ShowStats() && !ShowFPSonly())
       {
          // set transform
@@ -4784,6 +4997,7 @@ void Player::DrawBalls()
          // reset transform
          m_pin3d.GetMVP().SetModel(matOrig);
       }
+#endif
 #endif
 
    }   // end loop over all balls

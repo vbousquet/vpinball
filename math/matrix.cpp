@@ -131,7 +131,8 @@ Vertex3Ds RotateAround(const Vertex3Ds &pvAxis, const Vertex2D &pvPoint, const f
 
 //D3D Matrices ----------------------------------------------------------------------------------------------------------------
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) || defined(ENABLE_SDL) // BGFX & OpenGL
+// FIXME BGFX use BX maths
 
 D3DXMATRIX::D3DXMATRIX() {
    for (size_t i = 0;i < 4;++i)

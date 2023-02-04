@@ -503,7 +503,9 @@ private:
    Material currentMaterial;
    vec4 currentFlasherColor; // all flasher only-data
 
-#ifdef ENABLE_SDL // OpenGL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
    ShaderState* m_boundState[SHADER_TECHNIQUE_COUNT]; // The state currently applied to the backend (per technique for OpenGL)
    static ShaderTechniques m_boundTechnique; // This is global for OpenGL
    struct UniformDesc

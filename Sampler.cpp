@@ -12,7 +12,9 @@ Sampler::Sampler(RenderDevice* rd, BaseTexture* const surf, const bool force_lin
    m_clampu = clampu;
    m_clampv = clampv;
    m_filter = filter;
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
    colorFormat format;
    if (surf->m_format == BaseTexture::SRGBA)
       format = colorFormat::SRGBA;
@@ -41,7 +43,7 @@ Sampler::Sampler(RenderDevice* rd, BaseTexture* const surf, const bool force_lin
    }
    m_texture = CreateTexture(surf->width(), surf->height(), 0, format, surf->data(), 0);
    m_isLinear = format != colorFormat::SRGB && format != colorFormat::SRGBA;
-#else
+#else // DirectX 9
    colorFormat texformat;
    IDirect3DTexture9* sysTex = CreateSystemTexture(surf, force_linear_rgb, texformat);
 
@@ -64,7 +66,9 @@ Sampler::Sampler(RenderDevice* rd, BaseTexture* const surf, const bool force_lin
 #endif
 }
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
 Sampler::Sampler(RenderDevice* rd, GLuint glTexture, bool ownTexture, bool force_linear_rgb, const SamplerAddressMode clampu, const SamplerAddressMode clampv, const SamplerFilter filter)
 {
    m_rd = rd;
@@ -80,7 +84,7 @@ Sampler::Sampler(RenderDevice* rd, GLuint glTexture, bool ownTexture, bool force
    m_isLinear = !((internal_format == SRGB) || (internal_format == SRGBA) || (internal_format == SDXT5) || (internal_format == SBC7)) || force_linear_rgb;
    m_texture = glTexture;
 }
-#else
+#else // DirectX 9
 Sampler::Sampler(RenderDevice* rd, IDirect3DTexture9* dx9Texture, bool ownTexture, bool force_linear_rgb, const SamplerAddressMode clampu, const SamplerAddressMode clampv, const SamplerFilter filter)
 {
    m_rd = rd;
@@ -100,11 +104,13 @@ Sampler::Sampler(RenderDevice* rd, IDirect3DTexture9* dx9Texture, bool ownTextur
 
 Sampler::~Sampler()
 {
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
    Unbind();
    if (m_ownTexture)
       glDeleteTextures(1, &m_texture);
-#else
+#else // DirectX 9
    if (m_ownTexture)
       SAFE_RELEASE(m_texture);
 #endif
@@ -125,7 +131,9 @@ void Sampler::Unbind()
 
 void Sampler::UpdateTexture(BaseTexture* const surf, const bool force_linear_rgb)
 {
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
    colorFormat format;
    if (surf->m_format == BaseTexture::RGBA)
       format = colorFormat::RGBA;
@@ -169,7 +177,8 @@ void Sampler::UpdateTexture(BaseTexture* const surf, const bool force_linear_rgb
    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, surf->width(), surf->height(), col_format, col_type, surf->data());
    glGenerateMipmap(GL_TEXTURE_2D); // Generate mip-maps
    glBindTexture(GL_TEXTURE_2D, 0);
-#else
+
+#else // DirectX 9
    colorFormat texformat;
    IDirect3DTexture9* sysTex = CreateSystemTexture(surf, force_linear_rgb, texformat);
    CHECKD3D(m_rd->GetCoreDevice()->UpdateTexture(sysTex, m_texture));
@@ -197,7 +206,9 @@ void Sampler::SetName(const string& name)
    #endif
 }
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+
+#elif defined(ENABLE_SDL) // OpenGL
 GLuint Sampler::CreateTexture(unsigned int Width, unsigned int Height, unsigned int Levels, colorFormat Format, void* data, int stereo)
 {
    const GLuint col_type = ((Format == RGBA32F) || (Format == RGB32F)) ? GL_FLOAT : ((Format == RGBA16F) || (Format == RGB16F)) ? GL_HALF_FLOAT : GL_UNSIGNED_BYTE;
@@ -292,7 +303,7 @@ GLuint Sampler::CreateTexture(unsigned int Width, unsigned int Height, unsigned 
    return texture;
 }
 
-#else
+#else // DirectX 9
 
 IDirect3DTexture9* Sampler::CreateSystemTexture(BaseTexture* const surf, const bool force_linear_rgb, colorFormat& texformat)
 {
