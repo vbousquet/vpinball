@@ -57,7 +57,14 @@ private:
       bool isStatic;
    };
 
-   bool IsCreated() const { return m_ib; }
+   bool IsCreated() const
+   {
+#if defined(ENABLE_BGFX)
+      return m_isStatic ? bgfx::isValid(m_ib) : bgfx::isValid(m_dib);
+#else
+      return m_ib;
+#endif
+   }
 
    SharedBuffer* m_sharedBuffer = nullptr;
    unsigned int m_offset = 0; // Offset in bytes of the data inside the native GPU array
@@ -71,17 +78,29 @@ private:
       unsigned int offset;
       unsigned int size;
       BYTE* data;
+      #ifdef ENABLE_BGFX
+      const bgfx::Memory* buffer = nullptr;
+      #endif
    };
    vector<PendingUpload> m_pendingUploads;
    PendingUpload m_lock = { 0, 0, nullptr };
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+   bgfx::IndexBufferHandle m_ib = BGFX_INVALID_HANDLE;
+   bgfx::DynamicIndexBufferHandle m_dib = BGFX_INVALID_HANDLE; 
+   int* m_sharedBufferRefCount = nullptr;
+
+public:
+   bgfx::IndexBufferHandle GetStaticBuffer() const { return m_ib; }
+   bgfx::DynamicIndexBufferHandle GetDynamicBuffer() const { return m_dib; }
+
+#elif defined(ENABLE_SDL) // OpenGL
    GLuint m_ib = 0;
 
 public:
    GLuint GetBuffer() const { return m_ib; }
 
-#else
+#else // DirectX 9
    IDirect3DIndexBuffer9* m_ib = nullptr;
 
 public:

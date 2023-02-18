@@ -1661,6 +1661,9 @@
     <ClInclude Include="inc\BAM\BAMView.h">
       <Filter>inc\BAM</Filter>
     </ClInclude>
+    <ClInclude Include="inc\bgfx-imgui\imgui_impl_bgfx.h">
+      <Filter>imgui</Filter>
+    </ClInclude>
     <ClInclude Include="LiveUI.h">
       <Filter>headers</Filter>
     </ClInclude>

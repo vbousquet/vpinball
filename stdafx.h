@@ -7,13 +7,20 @@
 
 //#define DISABLE_FORCE_AMD_HIGHPERF // do not enable AMD high performance device (on Laptops, etc) by default
 
-#ifdef ENABLE_SDL
+#ifdef ENABLE_SDL // OpenGL
 #define DISABLE_FORCE_NVIDIA_OPTIMUS
-#else
+#define _SECURE_SCL 0
+#define _HAS_ITERATOR_DEBUGGING 0
 
+#elif defined(ENABLE_BGFX) // BGFX
+#pragma warning(disable : 4635) // Disable spurious malformed XML comment in BX library
+
+#else // DirectX 9
 //#define TWOSIDED_TRANSPARENCY // transparent hit targets are rendered backsided first, then frontsided
-
 #define USE_D3D9EX // if enabled can use extended API, does not benefit on XP though // currently only allows to enable adaptive vsync again (on win vista/7 only, seems to be broken in win8)
+#define _SECURE_SCL 0
+#define _HAS_ITERATOR_DEBUGGING 0
+
 #endif
 
 // Needed by ImPlot when using ImGUI
@@ -118,11 +125,6 @@
 #define AFX_STDAFX_H__35BEBBA5_0A4C_4321_A65C_AFFE89589F15__INCLUDED_
 
 #define _WINSOCKAPI_ // workaround some issue where windows.h is included before winsock2.h in some of the various includes
-
-#ifndef ENABLE_BGFX
-#define _SECURE_SCL 0
-#define _HAS_ITERATOR_DEBUGGING 0
-#endif
 
 #define STRICT
 

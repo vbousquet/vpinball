@@ -147,8 +147,8 @@ enum memoryPool
 
 enum clearType
 {
-   ZBUFFER,
-   TARGET
+   ZBUFFER = BGFX_CLEAR_DEPTH,
+   TARGET = BGFX_CLEAR_COLOR
 };
 
 #elif defined(ENABLE_SDL) // OpenGL

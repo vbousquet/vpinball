@@ -14,8 +14,8 @@
 #include "Shader.h"
 #include "typedefs3D.h"
 #include "captureExt.h"
-#ifndef ENABLE_SDL
-#include "BallShader.h"
+#if !defined(ENABLE_SDL) && !defined(ENABLE_BGFX) // DirectX 9 only
+ #include "BallShader.h"
 #endif
 #include "../math/bluenoise.h"
 #include "../inc/winsdk/legacy_touch.h"
@@ -618,6 +618,11 @@ void Player::OnInitialUpdate()
     m_supportsTouch = true;
 #endif
 #else
+#ifdef ENABLE_BGFX_PERF_TEST // BGFX Minimal test
+    ShowWindow();
+    return;
+#endif
+
     // Check for Touch support
     m_supportsTouch = ((GetSystemMetrics(SM_DIGITIZER) & NID_READY) != 0) && ((GetSystemMetrics(SM_DIGITIZER) & NID_MULTI_INPUT) != 0)
         && (GetSystemMetrics(SM_MAXIMUMTOUCHES) != 0);
@@ -1025,11 +1030,21 @@ void Player::UpdateBasicShaderMatrix(const Matrix3D& objectTrafo)
    matrices.matView = m_pin3d.GetMVP().GetView();
    matrices.matWorldView = m_pin3d.GetMVP().GetModelView();
    matrices.matWorldViewInverseTranspose = m_pin3d.GetMVP().GetModelViewInverseTranspose();
-
-#ifdef ENABLE_SDL // OpenGL
    const int nEyes = m_stereo3D != STEREO_OFF ? 2 : 1;
    for (int eye = 0; eye < nEyes; eye++)
       matrices.matWorldViewProj[eye] = m_pin3d.GetMVP().GetModelViewProj(eye);
+
+#if defined(ENABLE_BGFX) // BGFX
+   m_pin3d.m_pd3dPrimaryDevice->basicShader->SetMatrix(SHADER_matWorld, &matrices.matWorld);
+   m_pin3d.m_pd3dPrimaryDevice->basicShader->SetMatrix(SHADER_matView, &matrices.matView);
+   m_pin3d.m_pd3dPrimaryDevice->basicShader->SetMatrix(SHADER_matWorldView, &matrices.matWorldView);
+   m_pin3d.m_pd3dPrimaryDevice->basicShader->SetMatrix(SHADER_matWorldViewInverseTranspose, &matrices.matWorldViewInverseTranspose);
+   m_pin3d.m_pd3dPrimaryDevice->basicShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj[0]);
+   m_pin3d.m_pd3dPrimaryDevice->flasherShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj[0]);
+   m_pin3d.m_pd3dPrimaryDevice->lightShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj[0]);
+   m_pin3d.m_pd3dPrimaryDevice->DMDShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj[0]);
+
+#elif defined(ENABLE_SDL) // OpenGL
    m_pin3d.m_pd3dPrimaryDevice->flasherShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj[0].m[0][0], nEyes);
    m_pin3d.m_pd3dPrimaryDevice->lightShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj[0].m[0][0], nEyes);
    m_pin3d.m_pd3dPrimaryDevice->DMDShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj[0].m[0][0], nEyes);
@@ -1074,10 +1089,18 @@ void Player::UpdateBallShaderMatrix()
    matrices.matView = m_pin3d.GetMVP().GetView();
    matrices.matWorldView = m_pin3d.GetMVP().GetModelView();
    matrices.matWorldViewInverse = m_pin3d.GetMVP().GetModelViewInverse();
-#ifdef ENABLE_SDL
    const int nEyes = m_stereo3D != STEREO_OFF ? 2 : 1;
    for (int eye = 0; eye < nEyes; eye++)
       matrices.matWorldViewProj[eye] = m_pin3d.GetMVP().GetModelViewProj(eye);
+
+#if defined(ENABLE_BGFX) // BGFX
+   m_ballShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj[0]);
+   m_ballShader->SetMatrix(SHADER_matWorldView, &matrices.matWorldView);
+   m_ballShader->SetMatrix(SHADER_matWorldViewInverse, &matrices.matWorldViewInverse);
+   //m_ballShader->SetMatrix(SHADER_matWorldViewInverseTranspose, &matrices.matWorldViewInvTrans);
+   m_ballShader->SetMatrix(SHADER_matView, &matrices.matView);
+
+#elif defined(ENABLE_SDL) // OpenGL
    m_ballShader->SetUniformBlock(SHADER_ballMatrixBlock, &matrices.matView.m[0][0]);
 #else
    matrices.matWorldViewProj[0] = m_pin3d.GetMVP().GetModelViewProj(0);
@@ -1090,8 +1113,12 @@ void Player::UpdateBallShaderMatrix()
 
 void Player::InitBallShader()
 {
-#ifdef ENABLE_SDL
-   m_ballShader = new Shader(m_pin3d.m_pd3dPrimaryDevice, "BallShader.glfx"s);
+#if defined(ENABLE_BGFX) // BGFX
+   m_ballShader = new Shader(m_pin3d.m_pd3dPrimaryDevice, "BallShader"s);
+
+#elif defined(ENABLE_SDL) // OpenGL
+   m_ballShader = new Shader(m_pin3d.m_pd3dPrimaryDevice, "BallShader"s);
+   // In VR we scale the scene to the controller scale, so the shader needs to scale light range accordingly
 #else
    m_ballShader = new Shader(m_pin3d.m_pd3dPrimaryDevice, "BallShader.hlsl"s, g_ballShaderCode, sizeof(g_ballShaderCode));
 #endif
@@ -2479,7 +2506,7 @@ void Player::PhysicsSimulateCycle(float dtime) // move physics forward to this t
 
             // Collide may have changed the velocity of the ball, 
             // and therefore the bounding box for the next hit cycle
-            if (m_vball[i] != pball) // Ball still exists? may have been deleted from list
+            if (i >= m_vball.size() || m_vball[i] != pball) // Ball still exists? may have been deleted from list
             {
                // collision script deleted the ball, back up one count
                --i;
@@ -3132,7 +3159,7 @@ void Player::StereoFXAA(RenderTarget* renderedRT, const bool stereo, const bool 
    if (SMAA || DLAA || NFAA || FXAA1 || FXAA2 || FXAA3)
    {
       assert(renderedRT == m_pin3d.m_pd3dPrimaryDevice->GetPostProcessRenderTarget1());
-      outputRT = SMAA                   ? m_pin3d.m_pd3dPrimaryDevice->GetBackBufferTexture() : // SMAA use 3 passes, all of them using the initial render, so we reuse the back buffer for the first
+      outputRT = SMAA ? m_pin3d.m_pd3dPrimaryDevice->GetBackBufferTexture() : // SMAA use 3 passes, all of them using the initial render, so we reuse the back buffer for the first
          (DLAA || sharpen || pp_stereo) ? m_pin3d.m_pd3dPrimaryDevice->GetPostProcessRenderTarget(renderedRT)
                                         : m_pin3d.m_pd3dPrimaryDevice->GetOutputBackBuffer();
       m_pin3d.m_pd3dPrimaryDevice->SetRenderTarget(SMAA ? "SMAA Color/Edge Detection"s : "Post Process AA Pass 1"s, outputRT, true);
@@ -3168,7 +3195,7 @@ void Player::StereoFXAA(RenderTarget* renderedRT, const bool stereo, const bool 
 
       if (SMAA || DLAA) // actual SMAA/DLAA filtering pass, above only edge detection
       {
-         outputRT = SMAA                 ? m_pin3d.m_pd3dPrimaryDevice->GetPostProcessRenderTarget2() : // SMAA use 3 passes, so we have a special processing instead of RT ping pong
+         outputRT = SMAA ? m_pin3d.m_pd3dPrimaryDevice->GetPostProcessRenderTarget2() : // SMAA use 3 passes, so we have a special processing instead of RT ping pong
                     sharpen || pp_stereo ? m_pin3d.m_pd3dPrimaryDevice->GetPostProcessRenderTarget(renderedRT)
                                          : m_pin3d.m_pd3dPrimaryDevice->GetOutputBackBuffer();
          m_pin3d.m_pd3dPrimaryDevice->SetRenderTarget(SMAA ? "SMAA Blend weight calculation"s : "Post Process AA Pass 2"s, outputRT, true);
@@ -3469,7 +3496,7 @@ void Player::PrepareVideoBuffersNormal()
 {
    const bool useAA = ((m_AAfactor != 1.0f) && (m_ptable->m_useAA == -1)) || (m_ptable->m_useAA == 1);
    const bool stereo= m_stereo3D == STEREO_VR || ((m_stereo3D != STEREO_OFF) && m_stereo3Denabled && m_pin3d.m_pd3dPrimaryDevice->DepthBufferReadBackAvailable());
-#ifdef ENABLE_SDL
+#if defined(ENABLE_SDL) || defined(ENABLE_BGFX)
    const bool PostProcAA = true;
 #else
    // Since stereo is applied as a postprocess step in DX9, it disables AA and sharpening except for top/bottom & side by side modes
@@ -3510,7 +3537,7 @@ void Player::PrepareVideoBuffersNormal()
    }
 
    // switch to output buffer (main output frame buffer, or a temporary one for postprocessing)
-#ifdef ENABLE_SDL
+#if defined(ENABLE_SDL) || defined(ENABLE_BGFX)
    // On OpenGL, simple stereo is rendered directly through multiple viewport/geometry shader feature without needing postprocessing
    if (SMAA || DLAA || NFAA || FXAA1 || FXAA2 || FXAA3 || sharpen || (stereo && !(m_stereo3D == STEREO_OFF || m_stereo3D == STEREO_TB || m_stereo3D == STEREO_SBS)))
 #else
@@ -3754,13 +3781,21 @@ void Player::PrepareVideoBuffersAO()
    m_pin3d.m_pd3dPrimaryDevice->FBShader->SetBool(SHADER_do_dither, !m_ditherOff);
    m_pin3d.m_pd3dPrimaryDevice->FBShader->SetBool(SHADER_do_bloom, (m_ptable->m_bloom_strength > 0.0f && !m_bloomOff && infoMode <= IF_DYNAMIC_ONLY));
 
-   //const unsigned int jittertime = (unsigned int)((U64)msec()*90/1000);
-   const float jitter = (float)((msec()&2047)/1000.0);
-   m_pin3d.m_pd3dPrimaryDevice->FBShader->SetVector(SHADER_w_h_height, 
-      (float)(1.0 / (double)render_w), (float)(1.0 / (double)render_h), //1.0f, 1.0f);
-      jitter, //radical_inverse(jittertime)*11.0f,
-      jitter); //sobol(jittertime)*13.0f); // jitter for dither pattern
-   m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTechnique(infoMode == IF_AO_ONLY ? SHADER_TECHNIQUE_fb_AO : (useAA || infoMode == IF_RENDER_PROBES ? SHADER_TECHNIQUE_fb_tonemap_AO : SHADER_TECHNIQUE_fb_tonemap_AO_no_filter));
+   if (infoMode == IF_AO_ONLY)
+   {
+      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetVector(SHADER_w_h_height, (float)(1.0 / (double)render_w), (float)(1.0 / (double)render_h), 1.f, 1.f);
+      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_tex_fb_unfiltered, m_pin3d.m_pd3dPrimaryDevice->GetAORenderTarget(1)->GetColorSampler());
+      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTechnique(SHADER_TECHNIQUE_fb_mirror);
+   }
+   else
+   {
+      //const unsigned int jittertime = (unsigned int)((U64)msec()*90/1000);
+      const float jitter = (float)((msec() & 2047) / 1000.0);
+      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetVector(SHADER_w_h_height, (float)(1.0 / (double)render_w), (float)(1.0 / (double)render_h), //1.0f, 1.0f);
+         jitter, //radical_inverse(jittertime)*11.0f,
+         jitter); //sobol(jittertime)*13.0f); // jitter for dither pattern
+      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTechnique((useAA || infoMode == IF_RENDER_PROBES ? SHADER_TECHNIQUE_fb_tonemap_AO : SHADER_TECHNIQUE_fb_tonemap_AO_no_filter));
+   }
 
    const Vertex3D_TexelOnly shiftedVerts[4] =
    {
@@ -3929,197 +3964,92 @@ void Player::LockForegroundWindow(const bool enable)
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-#ifdef ENABLE_BGFX
-
-static const bgfx::Memory *loadMem(bx::FileReaderI *_reader, const char *_filePath)
-{
-    if (bx::open(_reader, _filePath))
-    {
-       uint32_t size = (uint32_t)bx::getSize(_reader);
-       const bgfx::Memory *mem = bgfx::alloc(size + 1);
-       bx::read(_reader, mem->data, size, bx::ErrorAssert {});
-       bx::close(_reader);
-       mem->data[mem->size - 1] = '\0';
-       return mem;
-    }
-
-    PLOGD << "Failed to load " << _filePath;
-    return NULL;
-}
-
-static bgfx::ShaderHandle loadShader(bx::FileReaderI *_reader, const char *_name)
-{
-    char filePath[512];
-
-    const char *shaderPath = "???";
-
-    switch (bgfx::getRendererType())
-    {
-    case bgfx::RendererType::Noop:
-    case bgfx::RendererType::Direct3D9: shaderPath = "shaders-bgfx/dx9/"; break;
-    case bgfx::RendererType::Direct3D11:
-    case bgfx::RendererType::Direct3D12: shaderPath = "shaders-bgfx/dx11/"; break;
-    case bgfx::RendererType::Agc:
-    case bgfx::RendererType::Gnm: shaderPath = "shaders-bgfx/pssl/"; break;
-    case bgfx::RendererType::Metal: shaderPath = "shaders-bgfx/metal/"; break;
-    case bgfx::RendererType::Nvn: shaderPath = "shaders-bgfx/nvn/"; break;
-    case bgfx::RendererType::OpenGL: shaderPath = "shaders-bgfx/glsl/"; break;
-    case bgfx::RendererType::OpenGLES: shaderPath = "shaders-bgfx/essl/"; break;
-    case bgfx::RendererType::Vulkan: shaderPath = "shaders-bgfx/spirv/"; break;
-    case bgfx::RendererType::WebGPU: shaderPath = "shaders-bgfx/spirv/"; break;
-
-    case bgfx::RendererType::Count: BX_ASSERT(false, "You should not be here!"); break;
-    }
-
-    bx::strCopy(filePath, BX_COUNTOF(filePath), shaderPath);
-    bx::strCat(filePath, BX_COUNTOF(filePath), _name);
-    bx::strCat(filePath, BX_COUNTOF(filePath), ".bin");
-
-    bgfx::ShaderHandle handle = bgfx::createShader(loadMem(_reader, filePath));
-    bgfx::setName(handle, _name);
-
-    return handle;
-}
-
-bgfx::ProgramHandle loadProgram(bx::FileReaderI *_reader, const char *_vsName, const char *_fsName)
-{
-    bgfx::ShaderHandle vsh = loadShader(_reader, _vsName);
-    bgfx::ShaderHandle fsh = BGFX_INVALID_HANDLE;
-    if (NULL != _fsName)
-    {
-       fsh = loadShader(_reader, _fsName);
-    }
-
-    return bgfx::createProgram(vsh, fsh, true /* destroy shaders when program is destroyed */);
-}
-
-      struct PosColorVertex
-      {
-         float m_x;
-         float m_y;
-         float m_z;
-      };
-
-      static PosColorVertex s_cubeVertices[] =
-      {
-	      {-1.0f,  1.0f,  1.0f },
-	      { 1.0f,  1.0f,  1.0f },
-	      {-1.0f, -1.0f,  1.0f },
-	      { 1.0f, -1.0f,  1.0f },
-	      {-1.0f,  1.0f, -1.0f },
-	      { 1.0f,  1.0f, -1.0f },
-	      {-1.0f, -1.0f, -1.0f },
-	      { 1.0f, -1.0f, -1.0f },
-      };
-
-      static const uint16_t s_cubeTriList[] =
-      {
-	      0, 1, 2, // 0
-	      1, 3, 2,
-	      4, 6, 5, // 2
-	      5, 6, 7,
-	      0, 2, 4, // 4
-	      4, 2, 6,
-	      1, 5, 3, // 6
-	      5, 7, 3,
-	      0, 4, 1, // 8
-	      4, 5, 1,
-	      2, 3, 6, // 10
-	      6, 3, 7,
-      };
-#endif
-
 void Player::Render()
 {
-   #ifdef ENABLE_BGFX
-   // Basic debug render to check everything is set up
-   static int oldWidth = -1, oldHeight = -1;
-   int width, height;
-   // SDL_GL_GetDrawableSize(m_sdl_playfieldHwnd, &width, &height);
-   width = this->m_wnd_width;
-   height = this->m_wnd_height;
-   if (width != oldWidth || height != oldHeight)
-      bgfx::reset((uint32_t)width, (uint32_t)height, BGFX_RESET_VSYNC);
+#ifdef ENABLE_BGFX_PERF_TEST // BGFX Minimal test
+   static bool initialized = false;
+   if (!initialized)
+   {
+      initialized = true;
+       bgfx::Init init;
 
-   // This dummy draw call is here to make sure that view 0 is cleared if no other draw calls are submitted to view 0.
+       // Untested implementations
+       init.type = bgfx::RendererType::Direct3D12;
+       init.type = bgfx::RendererType::OpenGL;
+       init.type = bgfx::RendererType::Metal; // Unsupported under Windows
+       init.type = bgfx::RendererType::OpenGLES; // Unsupported under Windows
+
+       // Tested & working backends
+       init.type = bgfx::RendererType::Vulkan;
+       init.type = bgfx::RendererType::Direct3D9;
+       init.type = bgfx::RendererType::Direct3D11;
+       
+       init.type = bgfx::RendererType::Count;
+       init.vendorId = 0;
+
+#if BX_PLATFORM_LINUX || BX_PLATFORM_BSD
+       init.platformData.ndt = wmInfo.info.x11.display;
+       init.platformData.nwh = (void *)(uintptr_t)wmInfo.info.x11.window;
+#elif BX_PLATFORM_OSX
+       init.platformData.nwh = wmInfo.info.cocoa.window;
+#elif BX_PLATFORM_WINDOWS
+       init.platformData.nwh = g_pplayer->GetHwnd();
+       init.platformData.ndt = NULL;
+#elif BX_PLATFORM_STEAMLINK
+       init.platformData.ndt = wmInfo.info.vivante.display;
+       init.platformData.nwh = wmInfo.info.vivante.window;
+#endif // BX_PLATFORM_
+       init.platformData.context = NULL;
+       init.platformData.backBuffer = NULL;
+       init.platformData.backBufferDS = NULL;
+       init.resolution.width = m_wnd_width;
+       init.resolution.height = m_wnd_height;
+       //init.resolution.maxFrameLatency = 1;
+       init.resolution.reset = BGFX_RESET_NONE;
+#ifdef DEBUG
+       //init.debug = true;
+#endif
+       if (!bgfx::init(init))
+       {
+            PLOGE << "FAILED";
+       }
+
+      //bgfx::setDebug(BGFX_DEBUG_STATS);
+   }
+   
+   {
+      static int oldWidth = -1, oldHeight = -1;
+      int width, height;
+      width = this->m_wnd_width;
+      height = this->m_wnd_height;
+      if (width != oldWidth || height != oldHeight)
+      {
+         //bgfx::reset((uint32_t)width, (uint32_t)height, BGFX_RESET_VSYNC);
+         bgfx::reset((uint32_t)width, (uint32_t)height, BGFX_RESET_NONE);
+         oldWidth = width;
+         oldHeight = height;
+      }
+   }
+
+   static int n = 0;
+   n++;
+   if (n == 100)
+   {
+      unsigned long long us = usec();
+      static unsigned long long last_us = 0;
+      n = 0;
+      OutputDebugString("FPS: "s.append(std::to_string(1000.0 / (((double)us - (double)last_us) / (1000 * 100.0)))).append("\n"s).c_str());
+      last_us = us;
+   }
+   bgfx::setViewRect(0, 0, 0, uint16_t(this->m_wnd_width), uint16_t(this->m_wnd_height));
+
    bgfx::touch(0);
-   // Use debug font to print information about this example.
-   bgfx::dbgTextClear();
-   //bgfx::dbgTextImage(bx::max<uint16_t>(uint16_t(width / 2 / 8), 20) - 20, bx::max<uint16_t>(uint16_t(height / 2 / 16), 6) - 6, 40, 12, s_logo, 160);
-   bgfx::dbgTextPrintf(0, 0, 0x0f, "Press F1 to toggle stats.");
-   bgfx::dbgTextPrintf(0, 1, 0x0f, "Color can be changed with ANSI \x1b[9;me\x1b[10;ms\x1b[11;mc\x1b[12;ma\x1b[13;mp\x1b[14;me\x1b[0m code too.");
-   bgfx::dbgTextPrintf(80, 1, 0x0f, "\x1b[;0m    \x1b[;1m    \x1b[; 2m    \x1b[; 3m    \x1b[; 4m    \x1b[; 5m    \x1b[; 6m    \x1b[; 7m    \x1b[0m");
-   bgfx::dbgTextPrintf(80, 2, 0x0f, "\x1b[;8m    \x1b[;9m    \x1b[;10m    \x1b[;11m    \x1b[;12m    \x1b[;13m    \x1b[;14m    \x1b[;15m    \x1b[0m");
-   const bgfx::Stats *stats = bgfx::getStats();
-   bgfx::dbgTextPrintf(0, 2, 0x0f, "Backbuffer %dW x %dH in pixels, debug text %dW x %dH in characters.", stats->width, stats->height, stats->textWidth, stats->textHeight);
-   // Enable stats or debug text.
-   bgfx::setDebug(BGFX_DEBUG_STATS);
 
-   static bgfx::ProgramHandle g_ShaderHandle = BGFX_INVALID_HANDLE;
-   static bgfx::VertexLayout g_VertexLayout;
-   static bgfx::VertexBufferHandle g_VBHandle = BGFX_INVALID_HANDLE;
-   static bgfx::IndexBufferHandle g_IBHandle = BGFX_INVALID_HANDLE;
+   bgfx::frame();
 
-   if (!isValid(g_ShaderHandle))
-   {
-      bgfx::RendererType::Enum type = bgfx::getRendererType();
-      g_ShaderHandle = loadProgram(new bx::FileReader(), "vs_debug", "fs_debug");
-      g_VertexLayout.begin()
-         .add(bgfx::Attrib::Position, 3, bgfx::AttribType::Float)
-         //.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
-         .end();
-
-      // Create static vertex buffer.
-      g_VBHandle = bgfx::createVertexBuffer(
-         // Static data can be passed with bgfx::makeRef
-         bgfx::makeRef(s_cubeVertices, sizeof(s_cubeVertices)), g_VertexLayout);
-      // Create static index buffer for triangle list rendering.
-      g_IBHandle = bgfx::createIndexBuffer(
-         // Static data can be passed with bgfx::makeRef
-         bgfx::makeRef(s_cubeTriList, sizeof(s_cubeTriList)));
-   }
-
-   // Set view and projection matrix for view 0.
-   {
-      const bx::Vec3 at = { 0.0f, 0.0f, 0.0f };
-      const bx::Vec3 eye = { 0.0f, 0.0f, -35.0f };
-
-      float view[16];
-      bx::mtxLookAt(view, eye, at);
-
-      float proj[16];
-      bx::mtxProj(proj, 60.0f, float(width) / float(height), 0.1f, 100.0f, bgfx::getCaps()->homogeneousDepth);
-      bgfx::setViewTransform(0, view, proj);
-
-      // Set view 0 default viewport.
-      bgfx::setViewRect(0, 0, 0, uint16_t(width), uint16_t(height));
-   }
-
-   float mtx[16];
-   uint32_t yy = 0, xx = 0;
-   float time = (float)((bx::getHPCounter()) / double(bx::getHPFrequency()));
-   bx::mtxRotateXY(mtx, time + xx * 0.21f, time + yy * 0.37f);
-   mtx[12] = -15.0f + float(xx) * 3.0f;
-   mtx[13] = -15.0f + float(yy) * 3.0f;
-   mtx[14] = 0.0f;
-
-   // Set model matrix for rendering.
-   bgfx::setTransform(mtx);
-
-   // Set vertex and index buffer.
-   bgfx::setVertexBuffer(0, g_VBHandle);
-   bgfx::setIndexBuffer(g_IBHandle);
-
-   // Set render states.
-   uint64_t state = BGFX_STATE_WRITE_R | BGFX_STATE_WRITE_G | BGFX_STATE_WRITE_B | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z | 
-      BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_CULL_CW | BGFX_STATE_MSAA;
-   bgfx::setState(state);
-
-   // Submit primitive for rendering to view 0.
-   bgfx::submit(0, g_ShaderHandle);
-   #endif
-
-   // Rendering outputs to m_pd3dPrimaryDevice->GetBackBufferTexture(). If MSAA is used, it is resolved as part of the rendering (i.e. this surface is NOT the MSAA rneder surface but its resolved copy)
+   return;
+#endif
+    // Rendering outputs to m_pd3dPrimaryDevice->GetBackBufferTexture(). If MSAA is used, it is resolved as part of the rendering (i.e. this surface is NOT the MSAA rneder surface but its resolved copy)
    // Then it is tonemapped/bloom/dither/... to m_pd3dPrimaryDevice->GetPostProcessRenderTarget1() if needed for postprocessing (sharpen, FXAA,...), or directly to the main output framebuffer otherwise
    // The optional postprocessing is done from m_pd3dPrimaryDevice->GetPostProcessRenderTarget1() to the main output framebuffer
 
@@ -4179,6 +4109,20 @@ void Player::Render()
 #endif
 
    m_LastKnownGoodCounter++;
+
+#ifdef ENABLE_BGFX
+   static int oldWidth = -1, oldHeight = -1;
+   int width, height;
+   width = this->m_wnd_width;
+   height = this->m_wnd_height;
+   if (width != oldWidth || height != oldHeight)
+   {
+      //bgfx::reset((uint32_t)width, (uint32_t)height, BGFX_RESET_VSYNC);
+      bgfx::reset((uint32_t)width, (uint32_t)height, BGFX_RESET_NONE);
+      oldWidth = width;
+      oldHeight = height;
+   }
+#endif
 
    U64 usecTimeStamp = usec(); // Time stamp for render command collect timing
    m_pin3d.m_pd3dPrimaryDevice->SetRenderTarget("Render Scene"s, m_pin3d.m_pd3dPrimaryDevice->GetMSAABackBufferTexture());
@@ -4240,12 +4184,10 @@ void Player::Render()
    else if (m_cameraMode)
       m_pin3d.InitLayout();
 
-   #ifndef ENABLE_BGFX
    if (GetInfoMode() != IF_STATIC_ONLY)
    {
       RenderDynamics();
    }
-   #endif
 
    // Resolve MSAA buffer to a normal one (noop if not using MSAA), allowing sampling it for postprocessing
    m_pin3d.m_pd3dPrimaryDevice->ResolveMSAA();
@@ -4275,13 +4217,6 @@ void Player::Render()
       PrepareVideoBuffersAO();
    else
       PrepareVideoBuffersNormal();
-   #endif
-
-#ifdef USE_IMGUI
-   RenderHUD_IMGUI();
-#else
-   UpdateHUD();
-#endif
 
    m_liveUI->Update();
    m_pin3d.m_pd3dPrimaryDevice->RenderLiveUI();
@@ -4289,7 +4224,10 @@ void Player::Render()
    m_frame_collect = usec() - usecTimeStamp;
 
    usecTimeStamp = usec();
+   #ifndef ENABLE_BGFX
    m_pin3d.m_pd3dPrimaryDevice->FlushRenderFrame();
+   #endif
+
    m_frame_submit = usec() - usecTimeStamp;
 
    // Force queue flushing of the driver. Not sure if it is really of any use nowadays. Anyway this must be done after submiting render commands
@@ -4682,6 +4620,11 @@ void Player::DrawBalls()
    m_pin3d.m_pd3dPrimaryDevice->SetRenderState(RenderState::BLENDOP, RenderState::BLENDOP_ADD);
    m_pin3d.m_pd3dPrimaryDevice->SetRenderStateCulling(RenderState::CULL_CCW);
 
+   #ifdef ENABLE_BGFX
+   // Set BGFX transform without any object transformation
+   UpdateBallShaderMatrix();
+   #endif
+
    if (m_debugBalls)
       // Set the render state to something that will always display.
       m_pin3d.m_pd3dPrimaryDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
@@ -4734,7 +4677,7 @@ void Player::DrawBalls()
                      *0.5f                  //!! additional magic correction factor due to everything being wrong in the earlier reflection/lighting implementation
                      );
       m_ballShader->SetVector(SHADER_invTableRes_playfield_height_reflection, &phr);
-
+      
       if ((zheight > maxz) || (pball->m_d.m_pos.z < minz))
       {
          // scaling the ball height by the z scale value results in a flying ball over the playfield/ramp
@@ -4752,11 +4695,11 @@ void Player::DrawBalls()
       emission.y *= m_ptable->m_lightEmissionScale * m_globalEmissionScale;
       emission.z *= m_ptable->m_lightEmissionScale * m_globalEmissionScale;
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_SDL) || defined(ENABLE_BGFX)
       float lightPos[MAX_LIGHT_SOURCES + MAX_BALL_LIGHT_SOURCES][4] = { 0.0f, 0.0f, 0.0f, 0.0f };
       float lightEmission[MAX_LIGHT_SOURCES + MAX_BALL_LIGHT_SOURCES][4] = { 0.0f, 0.0f, 0.0f, 0.0f };
       float *pLightPos = (float *)lightPos, *pLightEm = (float *)lightEmission;
-#else
+#else // DirectX 9
       struct CLight
       {
          float vPos[3];
@@ -4768,9 +4711,9 @@ void Player::DrawBalls()
 
       for (unsigned int i2 = 0; i2 < MAX_LIGHT_SOURCES; ++i2)
       {
-#ifdef ENABLE_SDL
+#if defined(ENABLE_SDL) || defined(ENABLE_BGFX)
          const int pPos = i2 * 4, pEm = pPos;
-#else
+#else // DirectX 9
          const int pPos = i2 * 6, pEm = pPos + 3;
 #endif
          memcpy(&pLightPos[pPos], &m_ptable->m_Light[i2].pos, sizeof(float) * 3);
@@ -4779,9 +4722,9 @@ void Player::DrawBalls()
 
       for (unsigned int light_i = 0; light_i < MAX_BALL_LIGHT_SOURCES; ++light_i)
       {
-#ifdef ENABLE_SDL
+#if defined(ENABLE_SDL) || defined(ENABLE_BGFX)
          const int pPos = (light_i + MAX_LIGHT_SOURCES) * 4, pEm = pPos;
-#else
+#else // DirectX 9
          const int pPos = (light_i + MAX_LIGHT_SOURCES) * 6, pEm = pPos + 3;
 #endif
          if (light_nearest[light_i] != nullptr)
@@ -4806,10 +4749,10 @@ void Player::DrawBalls()
          }
       }
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_SDL) || defined(ENABLE_BGFX)
       m_ballShader->SetFloat4v(SHADER_ballLightPos, (vec4 *)lightPos, MAX_LIGHT_SOURCES + MAX_BALL_LIGHT_SOURCES);
       m_ballShader->SetFloat4v(SHADER_ballLightEmission, (vec4 *)lightEmission, MAX_LIGHT_SOURCES + MAX_BALL_LIGHT_SOURCES);
-#else
+#else // DirectX 9
       m_ballShader->SetFloat4v(SHADER_ballPackedLights, (vec4 *)l, sizeof(CLight) * (MAX_LIGHT_SOURCES + MAX_BALL_LIGHT_SOURCES) / (4 * sizeof(float)));
 #endif
 
@@ -5007,6 +4950,10 @@ void Player::DrawBalls()
    // Set the render state to something that will always display.
    if (m_debugBalls)
       m_pin3d.m_pd3dPrimaryDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_TRUE);
+
+   #ifdef ENABLE_BGFX
+   UpdateBasicShaderMatrix();
+   #endif
 
    m_pin3d.m_pd3dPrimaryDevice->CopyRenderStates(false, initial_state);
 }

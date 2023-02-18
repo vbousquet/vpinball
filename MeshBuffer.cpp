@@ -22,7 +22,7 @@ MeshBuffer::MeshBuffer(const wstring& name, VertexBuffer* vb, IndexBuffer* ib, c
    , m_vb(vb)
    , m_ib(ib)
    , m_isVBOffsetApplied(applyVertexBufferOffsetToIndexBuffer)
-#ifndef ENABLE_SDL
+#if !defined(ENABLE_BGFX) && !defined(ENABLE_SDL)
    , m_vertexDeclaration(
       vb->m_vertexFormat == VertexFormat::VF_POS_NORMAL_TEX ? m_vb->m_rd->m_pVertexNormalTexelDeclaration :
       vb->m_vertexFormat == VertexFormat::VF_POS_TEX ? m_vb->m_rd->m_pVertexTexelDeclaration : nullptr)
@@ -55,7 +55,10 @@ MeshBuffer::~MeshBuffer()
 
 unsigned int MeshBuffer::GetSortKey() const
 {
-   #ifdef ENABLE_SDL // OpenGL
+   #if defined(ENABLE_BGFX) // BGFX
+   return ((m_vb->m_isStatic ? m_vb->GetStaticBuffer().idx : m_vb->GetDynamicBuffer().idx)
+      ^ (m_ib->m_isStatic ? m_ib->GetStaticBuffer().idx : m_ib->GetDynamicBuffer().idx));
+   #elif defined(ENABLE_SDL) // OpenGL
    return m_vao;
    #else // DirectX 9
    return (unsigned int) ((reinterpret_cast<uintptr_t>(m_vb)) ^ (reinterpret_cast<uintptr_t>(m_ib)));
@@ -65,7 +68,22 @@ unsigned int MeshBuffer::GetSortKey() const
 void MeshBuffer::bind()
 {
    RenderDevice* const rd = m_vb->m_rd;
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+   /* m_vb->Upload();
+   if (m_vb->m_isStatic)
+      bgfx::setVertexBuffer(0, m_vb->GetStaticBuffer(), m_vb->GetVertexOffset(), m_vb->m_vertexCount);
+   else
+      bgfx::setVertexBuffer(0, m_vb->GetDynamicBuffer(), m_vb->GetVertexOffset(), m_vb->m_vertexCount);
+   if (m_ib != nullptr)
+   {
+      m_ib->Upload();
+      if (m_ib->m_isStatic)
+         bgfx::setIndexBuffer(m_ib->GetStaticBuffer(), m_ib->GetIndexOffset(), m_ib->m_indexCount);
+      else
+         bgfx::setIndexBuffer(m_ib->GetDynamicBuffer(), m_ib->GetIndexOffset(), m_ib->m_indexCount);
+   }*/
+
+#elif defined(ENABLE_SDL) // OpenGL
    if (m_vao == 0)
    {
       // If index & vertex buffer are using shared buffers (for static objects), then we can also use a shared VAO
@@ -128,7 +146,7 @@ void MeshBuffer::bind()
    if (m_ib != nullptr)
       m_ib->Upload();
 
-#else
+#else // DirectX 9
    m_vb->Upload();
    IDirect3DVertexBuffer9 * vb = m_vb->GetBuffer();
    if (rd->m_curVertexBuffer != vb)

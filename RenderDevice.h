@@ -72,7 +72,18 @@ class ModelViewProj;
 class RenderDevice final
 {
 public:
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+   enum PrimitiveTypes
+   {
+      TRIANGLEFAN,
+      TRIANGLESTRIP,
+      TRIANGLELIST,
+      POINTLIST,
+      LINELIST,
+      LINESTRIP
+   };
+
+#elif defined(ENABLE_SDL) // OpenGL
    enum PrimitiveTypes
    {
       TRIANGLEFAN = GL_TRIANGLE_FAN,
@@ -85,7 +96,8 @@ public:
 
    SDL_Window* m_sdl_playfieldHwnd;
    SDL_GLContext m_sdl_context;
-#else
+
+#else // DirectX 9
    enum PrimitiveTypes
    {
       TRIANGLEFAN = D3DPT_TRIANGLEFAN,
@@ -202,10 +214,14 @@ public:
    void FreeShader();
 
 #if defined(ENABLE_BGFX) // BGFX
+   bgfx::ProgramHandle m_program = BGFX_INVALID_HANDLE; // Bound program for next draw submission
+
 #elif defined(ENABLE_SDL) // OpenGL
    int getGLVersion() const { return m_GLversion; }
+   
 #else // DirectX 9
    IDirect3DDevice9* GetCoreDevice() const { return m_pD3DDevice; }
+
 #endif
 
    HWND getHwnd() const { return m_windowHwnd; }
@@ -263,10 +279,12 @@ public:
 
 private:
 #if defined(ENABLE_BGFX) // BGFX
+
 #elif defined(ENABLE_SDL) // OpenGL
    GLfloat m_maxaniso;
    int m_GLversion;
    static GLuint m_samplerStateCache[3 * 3 * 5];
+
 #else // DirectX 9
    DWORD m_maxaniso;
    bool m_mag_aniso;
@@ -291,7 +309,9 @@ public:
 
 public:
 #if defined(ENABLE_BGFX) // BGFX
+   
 #elif defined(ENABLE_SDL) // OpenGL
+
 #else // DirectX 9
    bool m_useNvidiaApi;
    bool m_INTZ_support;
@@ -335,7 +355,13 @@ public:
 
    unsigned int m_curDrawnTriangles, m_frameDrawnTriangles;
 
-#if defined(ENABLE_SDL) // OpenGL
+#if defined(ENABLE_BGFX) // BGFX
+   bgfx::VertexLayout* m_pVertexTexelDeclaration = nullptr;
+   bgfx::VertexLayout* m_pVertexNormalTexelDeclaration = nullptr;
+   int m_activeViewId = -1;
+   uint64_t m_bgfxState = 0L;
+
+#elif defined(ENABLE_SDL) // OpenGL
    GLuint m_curVAO = 0;
    
 #else // DirectX9

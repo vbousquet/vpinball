@@ -94,7 +94,7 @@ void RenderFrame::Execute(const bool log)
    else
       m_passes.back()->Sort(sortedPasses);
    
-   #ifndef ENABLE_SDL
+   #if !defined(ENABLE_BGFX) && !defined(ENABLE_SDL)
    CHECKD3D(m_rd->GetCoreDevice()->BeginScene());
    #endif
    for (RenderPass* pass : sortedPasses)
@@ -104,7 +104,9 @@ void RenderFrame::Execute(const bool log)
          pass->RecycleCommands(m_commandPool);
       m_passPool.push_back(pass);
    }
-   #ifndef ENABLE_SDL
+   #if defined(ENABLE_BGFX) // BGFX
+   #elif defined(ENABLE_SDL) // OpenGl
+   #else // DirectX 9
    CHECKD3D(m_rd->GetCoreDevice()->EndScene());
    #endif
    m_passes.clear();

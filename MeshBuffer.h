@@ -20,7 +20,8 @@ public:
    const bool m_isVBOffsetApplied; // True if vertex buffer offset is already applied to index buffer
    const string m_name;
 
-#if defined(ENABLE_SDL) // OpenGL
+#if defined(ENABLE_BGFX) // BGFX
+#elif defined(ENABLE_SDL) // OpenGL
 private:
    GLuint m_vao = 0;
    struct SharedVAO

@@ -32,7 +32,15 @@ void RenderCommand::Execute(const bool log)
       m_renderState.Apply(m_rd);
       constexpr D3DVALUE z = 1.0f;
       constexpr DWORD stencil = 0L;
-      #ifdef ENABLE_SDL
+      #if defined(ENABLE_BGFX) // BGFX
+      const uint32_t r = (m_clearARGB & 0x000000ff);
+      const uint32_t g = (m_clearARGB & 0x0000ff00) >> 8;
+      const uint32_t b = (m_clearARGB & 0x00ff0000) >> 16;
+      const uint32_t a = (m_clearARGB & 0xff000000) >> 24;
+      const uint32_t rgba = (r << 24) | (g << 16) | (b << 8) | a;
+      bgfx::setViewClear(m_rd->m_activeViewId, (uint16_t) m_clearFlags, rgba);
+      bgfx::touch(m_rd->m_activeViewId);
+      #elif defined(ENABLE_SDL) // OpenGL
          // Default OpenGL Values
          static GLfloat clear_z = 1.f;
          static GLint clear_s = 0;
@@ -57,7 +65,7 @@ void RenderCommand::Execute(const bool log)
             glClearColor(r, g, b, a);
          }
          glClear(m_clearFlags);
-      #else
+      #else // DirectX 9
       CHECKD3D(m_rd->GetCoreDevice()->Clear(0, nullptr, m_clearFlags, m_clearARGB, z, stencil));
       #endif
       break;
@@ -70,16 +78,15 @@ void RenderCommand::Execute(const bool log)
 
       // Original VPX code state that on DirectX 9 StretchRect must not be called between BeginScene/EndScene.
       // This does not seem to appear in Microsoft's docs and I could not find any glitch.
-      #ifndef ENABLE_SDL
+      #if !defined(ENABLE_BGFX) && !defined(ENABLE_SDL)
       //CHECKD3D(m_rd->GetCoreDevice()->EndScene());
       #endif
       m_copyFrom->CopyTo(m_copyTo, m_copyColor, m_copyDepth,
          (int) m_copySrcRect.x, (int) m_copySrcRect.y, (int) m_copySrcRect.z, (int) m_copySrcRect.w, 
          (int) m_copyDstRect.x, (int) m_copyDstRect.y, (int) m_copyDstRect.z, (int) m_copyDstRect.w);
-      #ifndef ENABLE_SDL
+      #if !defined(ENABLE_BGFX) && !defined(ENABLE_SDL)
       //CHECKD3D(m_rd->GetCoreDevice()->BeginScene());
       #endif
-      
       break;
    }
 
@@ -129,9 +136,9 @@ void RenderCommand::Execute(const bool log)
    case RC_DRAW_QUAD_PNT:
    case RC_DRAW_MESH:
    {
-      m_renderState.Apply(m_rd);
       m_shader->SetTechnique(m_shaderTechnique);
       m_shader->m_state->CopyTo(false, m_shaderState, m_shaderTechnique);
+      m_renderState.Apply(m_rd);
       m_shader->Begin();
       m_rd->m_curDrawCalls++;
       switch (m_command)
@@ -139,14 +146,24 @@ void RenderCommand::Execute(const bool log)
       case RC_DRAW_QUAD_PT:
       {
          m_rd->m_curDrawnTriangles += 2;
-         #ifdef ENABLE_SDL
+
+         #if defined(ENABLE_BGFX) // BGFX
+            bgfx::TransientVertexBuffer tvb; // TODO only allocate one per frame instead of one per render command
+            bgfx::allocTransientVertexBuffer(&tvb, 4, *m_rd->m_pVertexTexelDeclaration);
+            memcpy(tvb.data, m_vertices, 4 * sizeof(Vertex3D_TexelOnly));
+            bgfx::setVertexBuffer(0, &tvb);
+            bgfx::setState(m_rd->m_bgfxState | BGFX_STATE_PT_TRISTRIP);
+            bgfx::submit(m_rd->m_activeViewId, m_shader->GetCore());
+
+         #elif defined(ENABLE_SDL) // OpenGL
             void* bufvb;
             m_rd->m_quadPTDynMeshBuffer->m_vb->lock(0, 0, &bufvb, VertexBuffer::DISCARDCONTENTS);
             memcpy(bufvb, m_vertices, 4 * sizeof(Vertex3D_TexelOnly));
             m_rd->m_quadPTDynMeshBuffer->m_vb->unlock();
             m_rd->m_quadPTDynMeshBuffer->bind();
             glDrawArrays(RenderDevice::PrimitiveTypes::TRIANGLESTRIP, m_rd->m_quadPTDynMeshBuffer->m_vb->GetVertexOffset(), 4);
-         #else
+
+         #else // DirectX 9
             // having a VB and lock/copying stuff each time is slower on DX9 :/ (is it still true ? looks overly complicated for a very marginal benefit)
             if (m_rd->m_currentVertexDeclaration != m_rd->m_pVertexTexelDeclaration)
             {
@@ -163,14 +180,23 @@ void RenderCommand::Execute(const bool log)
       case RC_DRAW_QUAD_PNT:
       {
          m_rd->m_curDrawnTriangles += 2;
-         #ifdef ENABLE_SDL
+         #if defined(ENABLE_BGFX) // BGFX
+         bgfx::TransientVertexBuffer tvb; // TODO only allocate one per frame instead of one per render command
+         bgfx::allocTransientVertexBuffer(&tvb, 4, *m_rd->m_pVertexNormalTexelDeclaration);
+         memcpy(tvb.data, m_vertices, 4 * sizeof(Vertex3D_NoTex2));
+         bgfx::setVertexBuffer(0, &tvb);
+         bgfx::setState(m_rd->m_bgfxState | BGFX_STATE_PT_TRISTRIP);
+         bgfx::submit(m_rd->m_activeViewId, m_shader->GetCore());
+
+         #elif defined(ENABLE_SDL) // OpenGL
          void* bufvb;
          m_rd->m_quadPNTDynMeshBuffer->m_vb->lock(0, 0, &bufvb, VertexBuffer::DISCARDCONTENTS);
          memcpy(bufvb, m_vertices, 4 * sizeof(Vertex3D_NoTex2));
          m_rd->m_quadPNTDynMeshBuffer->m_vb->unlock();
          m_rd->m_quadPNTDynMeshBuffer->bind();
          glDrawArrays(RenderDevice::PrimitiveTypes::TRIANGLESTRIP, m_rd->m_quadPNTDynMeshBuffer->m_vb->GetVertexOffset(), 4);
-         #else
+
+         #else // DirectX 9
          // having a VB and lock/copying stuff each time is slower on DX9 :/ (is it still true ? looks overly complicated for a very marginal benefit)
          if (m_rd->m_currentVertexDeclaration != m_rd->m_pVertexNormalTexelDeclaration)
          {
@@ -201,17 +227,49 @@ void RenderCommand::Execute(const bool log)
 
          m_mb->bind();
 
+         #if defined(ENABLE_BGFX) // BGFX
+         m_mb->m_vb->Upload();
          if (m_mb->m_ib == nullptr)
          {
-            #ifdef ENABLE_SDL
+            if (m_mb->m_vb->m_isStatic)
+               bgfx::setVertexBuffer(0, m_mb->m_vb->GetStaticBuffer(), m_mb->m_vb->GetVertexOffset(), m_indicesCount);
+            else
+               bgfx::setVertexBuffer(0, m_mb->m_vb->GetDynamicBuffer(), m_mb->m_vb->GetVertexOffset(), m_indicesCount);
+         }
+         else
+         {
+            if (m_mb->m_vb->m_isStatic)
+               bgfx::setVertexBuffer(0, m_mb->m_vb->GetStaticBuffer());
+            else
+               bgfx::setVertexBuffer(0, m_mb->m_vb->GetDynamicBuffer());
+            m_mb->m_ib->Upload();
+            if (m_mb->m_ib->m_isStatic)
+               bgfx::setIndexBuffer(m_mb->m_ib->GetStaticBuffer(), m_mb->m_ib->GetIndexOffset() + m_startIndice, m_indicesCount);
+            else
+               bgfx::setIndexBuffer(m_mb->m_ib->GetDynamicBuffer(), m_mb->m_ib->GetIndexOffset() + m_startIndice, m_indicesCount);
+         }
+         if (m_primitiveType == RenderDevice::TRIANGLELIST)
+            bgfx::setState(m_rd->m_bgfxState);
+         else if (m_primitiveType == RenderDevice::TRIANGLESTRIP)
+            bgfx::setState(m_rd->m_bgfxState | BGFX_STATE_PT_TRISTRIP);
+         else
+            assert(false); // Unsupported primitive type
+         bgfx::submit(m_rd->m_activeViewId, m_shader->GetCore());
+
+         #else
+         if (m_mb->m_ib == nullptr)
+         {
+            #if defined(ENABLE_BGFX) // BGFX
+            #elif defined(ENABLE_SDL) // OpenGL
             glDrawArrays(m_primitiveType, m_mb->m_vb->GetVertexOffset(), m_indicesCount);
-            #else
+            #else // DirectX 9
             CHECKD3D(m_rd->GetCoreDevice()->DrawPrimitive((D3DPRIMITIVETYPE)m_primitiveType, m_mb->m_vb->GetVertexOffset(), np));
             #endif
          }
          else
          {
-            #ifdef ENABLE_SDL
+            #if defined(ENABLE_BGFX) // BGFX
+            #elif defined(ENABLE_SDL) // OpenGL
             const int indexOffset = m_mb->m_ib->GetOffset() + m_startIndice * m_mb->m_ib->m_sizePerIndex;
             const GLenum indexType = m_mb->m_ib->m_indexFormat == IndexBuffer::FMT_INDEX16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT;
             if (m_mb->m_isVBOffsetApplied || m_mb->m_vb->GetOffset() == 0)
@@ -233,13 +291,14 @@ void RenderCommand::Execute(const bool log)
                   m_mb->m_vb->GetVertexOffset());
                #endif
             }
-            #else
+            #else // DirectX 9
             CHECKD3D(m_rd->GetCoreDevice()->DrawIndexedPrimitive((D3DPRIMITIVETYPE)m_primitiveType, 
                m_mb->m_isVBOffsetApplied ? 0 : m_mb->m_vb->GetVertexOffset(), 
                0, m_mb->m_vb->m_vertexCount, 
                m_mb->m_ib->GetIndexOffset() + m_startIndice, np));
             #endif
          }
+         #endif
          break;
       }
       }

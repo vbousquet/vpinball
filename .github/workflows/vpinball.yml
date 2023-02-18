@@ -173,9 +173,9 @@ jobs:
           cmake --build build --config ${{ matrix.config }}
       - run: |
           mkdir tmp
-          cp build/${{ matrix.config }}/VPinballX_GL.exe tmp
+          cp build/${{ matrix.config }}/VPinballX_BGFX.exe tmp
           cp build/${{ matrix.config }}/*.dll tmp
-          cp -r build/${{ matrix.config }}/shader tmp
+          cp -r build/${{ matrix.config }}/shaders-bgfx tmp
           cp -r build/${{ matrix.config }}/scripts tmp
           cp -r build/${{ matrix.config }}/tables tmp
           cp -r build/${{ matrix.config }}/docs tmp

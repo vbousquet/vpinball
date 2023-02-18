@@ -44,7 +44,14 @@ private:
       bool isStatic;
    };
 
-   bool IsCreated() const { return m_vb; }
+   bool IsCreated() const
+   {
+#if defined(ENABLE_BGFX)
+      return m_isStatic ? bgfx::isValid(m_vb) : bgfx::isValid(m_dvb);
+#else
+      return m_vb;
+#endif
+   }
 
    SharedBuffer* m_sharedBuffer = nullptr;
    unsigned int m_offset = 0; // Offset in bytes of the data inside the native GPU array
@@ -58,12 +65,21 @@ private:
       unsigned int offset;
       unsigned int size;
       BYTE* data;
+      #ifdef ENABLE_BGFX
+      const bgfx::Memory* buffer = nullptr;
+      #endif
    };
    vector<PendingUpload> m_pendingUploads;
    PendingUpload m_lock = { 0, 0, nullptr };
 
 #if defined(ENABLE_BGFX) // BGFX
+   int* m_sharedBufferRefCount = nullptr;
    bgfx::VertexBufferHandle m_vb = BGFX_INVALID_HANDLE;
+   bgfx::DynamicVertexBufferHandle m_dvb = BGFX_INVALID_HANDLE;
+
+public:
+   bgfx::VertexBufferHandle GetStaticBuffer() const { return m_vb; }
+   bgfx::DynamicVertexBufferHandle GetDynamicBuffer() const { return m_dvb; }
 
 #elif defined(ENABLE_SDL) // OpenGL
    GLuint m_vb = 0;

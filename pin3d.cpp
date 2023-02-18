@@ -623,9 +623,7 @@ void Pin3D::InitLights()
    emission.y *= g_pplayer->m_ptable->m_lightEmissionScale*g_pplayer->m_globalEmissionScale;
    emission.z *= g_pplayer->m_ptable->m_lightEmissionScale*g_pplayer->m_globalEmissionScale;
 
-#if defined(ENABLE_BGFX) // BGFX
-
-#elif defined(ENABLE_SDL) // OpenGL
+#if defined(ENABLE_SDL) || defined(ENABLE_BGFX)
    float lightPos[MAX_LIGHT_SOURCES][4] = { 0.f };
    float lightEmission[MAX_LIGHT_SOURCES][4] = { 0.f };
 

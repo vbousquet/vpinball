@@ -23,7 +23,7 @@ VertexBuffer::VertexBuffer(RenderDevice* rd, const unsigned int vertexCount, con
    , m_isStatic(!isDynamic)
    , m_size(fvfToSize(fvf) * vertexCount)
 {
-   #ifndef __OPENGLES__
+   #if !defined(__OPENGLES__) && !defined(ENABLE_BGFX)
    // Disabled since OpenGL ES does not support glDrawElementsBaseVertex and we need it unless we remap the indices when creating the index buffer (and we should)
    for (SharedBuffer* block : pendingSharedBuffers)
    {
@@ -60,17 +60,27 @@ VertexBuffer::VertexBuffer(RenderDevice* rd, const unsigned int vertexCount, con
 VertexBuffer::~VertexBuffer()
 {
    for (PendingUpload upload : m_pendingUploads)
-      delete[] upload.data;
+      #ifdef ENABLE_BGFX
+      if (m_isStatic)
+      #endif
+         delete[] upload.data;
    RemoveFromVectorSingle(m_sharedBuffer->buffers, this);
    if (m_sharedBuffer->buffers.empty())
    {
       RemoveFromVectorSingle(pendingSharedBuffers, m_sharedBuffer);
       if (IsCreated())
-      #if defined(ENABLE_SDL) // OpenGL
+      {
+      #if defined(ENABLE_BGFX) // BGFX
+         if (bgfx::isValid(m_vb))
+            bgfx::destroy(m_vb);
+         if (bgfx::isValid(m_dvb))
+            bgfx::destroy(m_dvb);
+      #elif defined(ENABLE_SDL) // OpenGL
          glDeleteBuffers(1, &m_vb);
       #else // DirectX 9
          SAFE_RELEASE(m_vb);
       #endif
+      }
       delete m_sharedBuffer;
    }
 }
@@ -83,7 +93,20 @@ void VertexBuffer::lock(const unsigned int offsetToLock, const unsigned int size
    m_lock.offset = offsetToLock;
    m_lock.size = sizeToLock == 0 ? m_size : sizeToLock;
    assert(m_lock.offset + m_lock.size <= m_size);
+   #ifdef ENABLE_BGFX
+   if (m_isStatic)
+   {
+      m_lock.buffer = nullptr; 
+      m_lock.data = new BYTE[m_lock.size];
+   }
+   else
+   {
+      m_lock.buffer = bgfx::alloc(m_lock.size);
+      m_lock.data = m_lock.buffer->data;
+   }
+   #else
    m_lock.data = new BYTE[m_lock.size];
+   #endif
    *dataBuffer = m_lock.data;
 }
 
@@ -100,7 +123,11 @@ void VertexBuffer::CreateSharedBuffer(SharedBuffer* sharedBuffer)
    RemoveFromVectorSingle(pendingSharedBuffers, sharedBuffer);
    unsigned int size = sharedBuffer->count * fvfToSize(sharedBuffer->format);
 
-   #if defined(ENABLE_SDL) // OpenGL
+   #if defined(ENABLE_BGFX) // BGFX
+   const bgfx::Memory* mem = bgfx::alloc(size);
+   UINT8* data = mem->data;
+
+   #elif defined(ENABLE_SDL) // OpenGL
    UINT8* data = (UINT8*)malloc(size);
 
    #else // DirectX 9
@@ -120,12 +147,29 @@ void VertexBuffer::CreateSharedBuffer(SharedBuffer* sharedBuffer)
          assert(buffer->m_offset + upload.offset >= 0);
          assert(buffer->m_offset + upload.offset + upload.size <= sharedBuffer->count * buffer->m_sizePerVertex);
          memcpy(data + buffer->m_offset + upload.offset, upload.data, upload.size);
+         #ifdef ENABLE_BGFX
+         if (sharedBuffer->isStatic)
+         #endif
          delete[] upload.data;
       }
       buffer->m_pendingUploads.clear();
    }
 
-   #if defined(ENABLE_SDL) // OpenGL
+   #if defined(ENABLE_BGFX) // BGFX
+   bgfx::VertexLayout* vd;
+   switch (sharedBuffer->format)
+   {
+   case VF_POS_TEX: vd = sharedBuffer->buffers[0]->m_rd->m_pVertexTexelDeclaration; break;
+   case VF_POS_NORMAL_TEX: vd = sharedBuffer->buffers[0]->m_rd->m_pVertexNormalTexelDeclaration; break;
+   }
+   bgfx::VertexBufferHandle vb = BGFX_INVALID_HANDLE;
+   bgfx::DynamicVertexBufferHandle dvb = BGFX_INVALID_HANDLE;
+   if (sharedBuffer->isStatic)
+      vb = bgfx::createVertexBuffer(mem, *vd, BGFX_BUFFER_NONE);
+   else
+      dvb = bgfx::createDynamicVertexBuffer(mem, *vd, BGFX_BUFFER_NONE);
+
+   #elif defined(ENABLE_SDL) // OpenGL
    GLuint vb = 0;
    #ifndef __OPENGLES__
    if (GLAD_GL_VERSION_4_5)
@@ -153,7 +197,12 @@ void VertexBuffer::CreateSharedBuffer(SharedBuffer* sharedBuffer)
    #endif
 
    for (VertexBuffer* buffer : sharedBuffer->buffers)
+   {
       buffer->m_vb = vb;
+      #ifdef ENABLE_BGFX
+      buffer->m_dvb = dvb;
+      #endif
+   }
 }
 
 void VertexBuffer::Upload()
@@ -164,7 +213,10 @@ void VertexBuffer::Upload()
    {
       for (PendingUpload upload : m_pendingUploads)
       {
-         #if defined(ENABLE_SDL) // OpenGL & OpenGL ES
+         #if defined(ENABLE_BGFX) // BGFX
+         bgfx::update(m_dvb, upload.offset, upload.buffer);
+
+         #elif defined(ENABLE_SDL) // OpenGL & OpenGL ES
          #ifndef __OPENGLES__
          if (GLAD_GL_VERSION_4_5)
             glNamedBufferSubData(m_vb, m_offset + upload.offset, upload.size, upload.data);
@@ -182,7 +234,9 @@ void VertexBuffer::Upload()
          CHECKD3D(m_vb->Unlock());
 
          #endif
+         #ifndef ENABLE_BGFX
          delete[] upload.data;
+         #endif
       }
       m_pendingUploads.clear();
    }

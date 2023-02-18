@@ -35,7 +35,7 @@ static bgfx::VertexLayout g_VertexLayout;
 // Note: If text or lines are blurry when integrating ImGui into your engine,
 // in your Render function, try translating your projection matrix by
 // (0.5f,0.5f) or (0.375f,0.375f)
-void ImGui_Implbgfx_RenderDrawLists(ImDrawData* draw_data)
+void ImGui_Implbgfx_RenderDrawData(ImDrawData* draw_data)
 {
     // Avoid rendering when minimized, scale coordinates for retina displays
     // (screen coordinates != framebuffer coordinates)
@@ -64,6 +64,7 @@ void ImGui_Implbgfx_RenderDrawLists(ImDrawData* draw_data)
         0.0f, caps->homogeneousDepth);
     bgfx::setViewTransform(g_View, NULL, ortho);
     bgfx::setViewRect(g_View, 0, 0, (uint16_t)fb_width, (uint16_t)fb_height);
+    bgfx::setViewName(g_View, "ImGui");
 
     // Render command lists
     for (int n = 0; n < draw_data->CmdListsCount; n++) {
@@ -170,15 +171,22 @@ bool ImGui_Implbgfx_CreateDeviceObjects()
 void ImGui_Implbgfx_InvalidateDeviceObjects()
 {
     if (isValid(g_AttribLocationTex))
+    {
         bgfx::destroy(g_AttribLocationTex);
+        g_AttribLocationTex = BGFX_INVALID_HANDLE;
+    }
 
     if (isValid(g_ShaderHandle))
+    {
         bgfx::destroy(g_ShaderHandle);
+        g_ShaderHandle = BGFX_INVALID_HANDLE;
+    }
 
     if (isValid(g_FontTexture)) {
         bgfx::destroy(g_FontTexture);
         ImGui::GetIO().Fonts->TexID = 0;
         g_FontTexture.idx = bgfx::kInvalidHandle;
+        g_FontTexture = BGFX_INVALID_HANDLE;
     }
 }
 

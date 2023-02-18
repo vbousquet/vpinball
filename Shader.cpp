@@ -6,7 +6,16 @@
 #include <plog/Log.h>
 #include <plog/Initializers/RollingFileInitializer.h>
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+#include "bx/timer.h"
+#include "bx/file.h"
+#include "bx/readerwriter.h"
+#include "bgfx/bgfx.h"
+#include "bgfx/platform.h"
+
+ShaderTechniques Shader::m_boundTechnique = ShaderTechniques::SHADER_TECHNIQUE_INVALID;
+
+#elif defined(ENABLE_SDL) // OpenGL
 #include <windows.h>
 #include <iostream>
 #include <fstream>
@@ -168,7 +177,7 @@ Shader::ShaderUniform Shader::shaderUniformNames[SHADER_UNIFORM_COUNT] {
    SHADER_UNIFORM(SUT_Float4, w_h_height, 1), // Post process & Basic (for screen space reflection/refraction)
 
    // Shared material for Ball, Basic and Classic light shaders
-   #ifdef ENABLE_SDL // OpenGL
+   #if defined(ENABLE_SDL) || defined(ENABLE_BGFX) // OpenGL & BGFX
    SHADER_UNIFORM(SUT_Float4, clip_plane, 1),
    SHADER_UNIFORM(SUT_Float4v, basicLightEmission, 2),
    SHADER_UNIFORM(SUT_Float4v, basicLightPos, 2),
@@ -304,6 +313,7 @@ Shader::Shader(RenderDevice* renderDevice, const std::string& src1, const std::s
    , m_renderDevice(renderDevice)
 {
    currentFlasherColor = vec4(-FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
+   m_shaderCodeName = src1;
 
    #ifdef ENABLE_SDL
    if (renderDevice->m_stereo3D != STEREO_OFF)
@@ -324,6 +334,7 @@ Shader::Shader(RenderDevice* renderDevice, const std::string& src1, const std::s
    
    m_technique = SHADER_TECHNIQUE_INVALID;
    #if defined(ENABLE_BGFX) // BGFX
+   memset(m_techniques, 0, sizeof(ShaderTechnique*)* SHADER_TECHNIQUE_COUNT);
    #elif defined(ENABLE_SDL) // OpenGL
    memset(m_techniques, 0, sizeof(ShaderTechnique*) * SHADER_TECHNIQUE_COUNT);
    #else // DirectX 9
@@ -360,7 +371,7 @@ Shader::Shader(RenderDevice* renderDevice, const std::string& src1, const std::s
          }
    m_state = new ShaderState(this);
    memset(m_state->m_state, 0, m_stateSize);
-   #ifdef ENABLE_SDL // OpenGL
+   #if defined(ENABLE_BGFX) || defined(ENABLE_SDL) // BGFX & OpenGL
    for (int i = 0; i < SHADER_TECHNIQUE_COUNT; i++)
       if (m_techniques[i] != nullptr)
       {
@@ -400,6 +411,15 @@ Shader::~Shader()
 {
    delete m_state;
 #if defined(ENABLE_BGFX) // BGFX
+   for (int j = 0; j < SHADER_TECHNIQUE_COUNT; ++j)
+   {
+      if (m_techniques[j] && bgfx::isValid(m_techniques[j]->program))
+         bgfx::destroy(m_techniques[j]->program);
+      delete m_techniques[j];
+      m_techniques[j] = nullptr;
+   }
+   bgfx::destroy(m_debugProgramHandle);
+   m_debugProgramHandle = BGFX_INVALID_HANDLE; 
 #elif defined(ENABLE_SDL) // OpenGL
    for (int j = 0; j < SHADER_TECHNIQUE_COUNT; ++j)
    {
@@ -420,12 +440,17 @@ void Shader::Begin()
 {
    assert(current_shader == nullptr);
    assert(m_technique != SHADER_TECHNIQUE_INVALID);
+   #if defined(ENABLE_BGFX) // BGFX
+   if (m_techniques[m_technique] != nullptr)
+      m_renderDevice->m_program = m_techniques[m_technique]->program;
+   else
+      m_renderDevice->m_program = m_debugProgramHandle;
+   #endif
    current_shader = this;
    if (m_boundTechnique != m_technique)
    {
       m_renderDevice->m_curTechniqueChanges++;
 #if defined(ENABLE_BGFX) // BGFX
-
 #elif defined(ENABLE_SDL) // OpenGL
       glUseProgram(m_techniques[m_technique]->program);
 #else // DirectX 9
@@ -448,6 +473,7 @@ void Shader::End()
    assert(current_shader == this);
    current_shader = nullptr;
 #if defined(ENABLE_BGFX) // BGFX
+   m_renderDevice->m_program = BGFX_INVALID_HANDLE;
 #elif defined(ENABLE_SDL) // OpenGL
 #else // DirectX 9
    CHECKD3D(m_shader->EndPass());
@@ -593,11 +619,14 @@ void Shader::SetTechniqueMetal(ShaderTechniques technique, const Material& mat, 
    const bool isMetal = mat.m_type == Material::MaterialType::METAL;
    ShaderTechniques tech = technique;
 #ifdef ENABLE_BGFX
+   // FIXME SetVector(SHADER_u_basic_shade_mode, isMetal, doNormalMapping, doReflections, doRefractions);
+
 #elif defined(ENABLE_SDL)
    // For OpenGL doReflections is computed from the reflection factor
    SetBool(SHADER_is_metal, isMetal);
    SetBool(SHADER_doNormalMapping, doNormalMapping);
    SetBool(SHADER_doRefractions, doRefractions);
+
 #else // DirextX 9
    switch (technique)
    {
@@ -653,14 +682,14 @@ void Shader::SetTechnique(ShaderTechniques technique)
 {
    assert(current_shader != this); // Changing the technique of a used shader is not allowed (between Begin/End)
    assert(0 <= technique && technique < SHADER_TECHNIQUE_COUNT);
-#ifdef ENABLE_BGFX
-#elif defined(ENABLE_SDL)
+#if defined(ENABLE_SDL)
    if (m_techniques[technique] == nullptr)
    {
       m_technique = SHADER_TECHNIQUE_INVALID;
       ShowError("Fatal Error: Could not find shader technique " + shaderTechniqueNames[technique]);
       exit(-1);
    }
+
 #endif
    m_technique = technique;
 }
@@ -670,14 +699,15 @@ void Shader::ApplyUniform(const ShaderUniforms uniformName)
    assert(0 <= uniformName && uniformName < SHADER_UNIFORM_COUNT);
    assert(m_stateOffsets[uniformName] != -1);
 
-#ifdef ENABLE_BGFX
-#elif defined(ENABLE_SDL)
+#ifdef ENABLE_BGFX // BGFX
+   ShaderState* boundState = m_boundState[m_technique];
+   UniformDesc desc = m_techniques[m_technique]->uniform_desc[uniformName];
+#elif defined(ENABLE_SDL) // OpenGL
    ShaderState* const __restrict boundState = m_boundState[m_technique];
    // For OpenGL uniform binding state is per technique (i.e. program)
    const UniformDesc& desc = m_techniques[m_technique]->uniform_desc[uniformName];
    assert(desc.location >= 0); // Do not apply to an unused uniform
-   if (desc.location < 0) // FIXME remove
-      return;
+
 #else
    ShaderState* const __restrict boundState = m_boundState;
    const UniformDesc& desc = m_uniform_desc[uniformName];
@@ -756,6 +786,7 @@ void Shader::ApplyUniform(const ShaderUniforms uniformName)
    }
    #endif
 
+   #ifndef ENABLE_BGFX
    if (memcmp(dst, src, m_stateSizes[uniformName]) == 0)
    {
       #ifdef ENABLE_SDL
@@ -767,103 +798,218 @@ void Shader::ApplyUniform(const ShaderUniforms uniformName)
       #endif
       return;
    }
+   #endif
    m_renderDevice->m_curParameterChanges++;
 
    switch (desc.uniform.type)
    {
    case SUT_DataBlock: // Uniform blocks
-      #ifdef ENABLE_SDL
+      #ifdef ENABLE_BGFX // BGFX
+      assert(false); // Unsupported for BGFX
+      #elif defined(ENABLE_SDL) // OpenGL
       glBindBuffer(GL_UNIFORM_BUFFER, desc.blockBuffer);
       glBufferData(GL_UNIFORM_BUFFER, m_stateSizes[uniformName], src, GL_STREAM_DRAW);
       glUniformBlockBinding(m_techniques[m_technique]->program, desc.location, 0);
       glBindBufferRange(GL_UNIFORM_BUFFER, 0, desc.blockBuffer, 0, m_stateSizes[uniformName]);
-      #else
+      #else // DirectX 9
       assert(false); // Unsupported on DX9
       #endif
       break;
    case SUT_Bool:
-      {
-         assert(desc.uniform.count == 1);
-         bool val = *(bool*)src;
-         *(bool*)dst = val;
-         #ifdef ENABLE_SDL
-         glUniform1i(desc.location, val);
-         #else
-         CHECKD3D(m_shader->SetBool(desc.handle, val));
-         #endif
-      }
+   {
+      assert(desc.uniform.count == 1);
+      bool val = *(bool*)src;
+      *(bool*)dst = val;
+      #ifdef ENABLE_BGFX // BGFX
+      vec4 v(val ? 1.f : 0.f, 0.f, 0.f, 0.f);
+      bgfx::setUniform(desc.handle, &v);
+      #elif defined(ENABLE_SDL) // OpenGL
+      glUniform1i(desc.location, val);
+      #else // DirectX 9
+      CHECKD3D(m_shader->SetBool(desc.handle, val));
+      #endif
       break;
+   }
    case SUT_Int:
-      {
-         assert(desc.uniform.count == 1);
-         int val = *(int*)src;
-         *(int*)dst = val;
-         #ifdef ENABLE_SDL
-         glUniform1i(desc.location, val);
-         #else
-         CHECKD3D(m_shader->SetInt(desc.handle, val));
-         #endif
-      }
+   {
+      assert(desc.uniform.count == 1);
+      int val = *(int*)src;
+      *(int*)dst = val;
+      #ifdef ENABLE_BGFX // BGFX
+      vec4 v((float) val, 0.f, 0.f, 0.f);
+      bgfx::setUniform(desc.handle, &v);
+      #elif defined(ENABLE_SDL) // OpenGL
+      glUniform1i(desc.location, val);
+      #else // DirectX 9
+      CHECKD3D(m_shader->SetInt(desc.handle, val));
+      #endif
       break;
+   }
    case SUT_Float:
-      {
-         assert(desc.uniform.count == 1);
-         float val = *(float*)src;
-         *(float*)dst = val;
-         #ifdef ENABLE_SDL
-         glUniform1f(desc.location, val);
-         #else
-         CHECKD3D(m_shader->SetFloat(desc.handle, val));
-         #endif
-      }
+   {
+      assert(desc.uniform.count == 1);
+      float val = *(float*)src;
+      *(float*)dst = val;
+      #ifdef ENABLE_BGFX // BGFX
+      vec4 v(val, 0.f, 0.f, 0.f);
+      bgfx::setUniform(desc.handle, &v);
+      #elif defined(ENABLE_SDL) // OpenGL
+      glUniform1f(desc.location, val);
+      #else // DirectX 9
+      CHECKD3D(m_shader->SetFloat(desc.handle, val));
+      #endif
       break;
+   }
    case SUT_Float2:
+   {
       assert(desc.uniform.count == 1);
       memcpy(dst, src, m_stateSizes[uniformName]);
-      #ifdef ENABLE_SDL
+      #ifdef ENABLE_BGFX // BGFX
+      vec4 v(((float*)src)[0], ((float*)src)[1], 0.f, 0.f);
+      bgfx::setUniform(desc.handle, &v);
+      #elif defined(ENABLE_SDL) // OpenGL
       glUniform2fv(desc.location, 1, (const GLfloat*)src);
-      #else
+      #else // DirectX 9
       CHECKD3D(m_shader->SetVector(desc.handle, (D3DXVECTOR4*)src));
       #endif
       break;
+   }
    case SUT_Float3:
+   {
       assert(desc.uniform.count == 1);
       memcpy(dst, src, m_stateSizes[uniformName]);
-      #ifdef ENABLE_SDL
+      #ifdef ENABLE_BGFX // BGFX
+      vec4 v(((float*)src)[0], ((float*)src)[1], ((float*)src)[2], 0.f);
+      bgfx::setUniform(desc.handle, &v);
+      #elif defined(ENABLE_SDL) // OpenGL
       glUniform3fv(desc.location, 1, (const GLfloat*)src);
-      #else
+      #else // DirectX 9
       CHECKD3D(m_shader->SetVector(desc.handle, (D3DXVECTOR4*)src));
       #endif
       break;
+   }
    case SUT_Float4:
+   {
       assert(desc.uniform.count == 1);
       memcpy(dst, src, m_stateSizes[uniformName]);
-      #ifdef ENABLE_SDL
+      #ifdef ENABLE_BGFX // BGFX
+      bgfx::setUniform(desc.handle, src);
+      #elif defined(ENABLE_SDL) // OpenGL
       glUniform4fv(desc.location, 1, (const GLfloat*)src);
-      #else
+      #else // DirectX 9
       CHECKD3D(m_shader->SetVector(desc.handle, (D3DXVECTOR4*)src));
       #endif
       break;
+   }
    case SUT_Float4v:
+   {
       memcpy(dst, src, m_stateSizes[uniformName]);
-      #ifdef ENABLE_SDL
+      #ifdef ENABLE_BGFX // BGFX
+      bgfx::setUniform(desc.handle, src, desc.uniform.count);
+      #elif defined(ENABLE_SDL) // OpenGL
       glUniform4fv(desc.location, desc.uniform.count, (const GLfloat*)src);
-      #else
+      #else // DirectX 9
       CHECKD3D(m_shader->SetFloatArray(desc.handle, (float*) src, desc.uniform.count * 4));
       #endif
       break;
+   }
    case SUT_Float3x4:
    case SUT_Float4x3:
    case SUT_Float4x4:
       memcpy(dst, src, m_stateSizes[uniformName]);
-      #ifdef ENABLE_SDL
+      #ifdef ENABLE_BGFX // BGFX
+      bgfx::setUniform(desc.handle, src, desc.uniform.count);
+      #elif defined(ENABLE_SDL) // OpenGL
       glUniformMatrix4fv(desc.location, desc.uniform.count, GL_FALSE, (const GLfloat*)src);
-      #else
+      #else // DirectX 9
       assert(desc.uniform.count == 1);
       /*CHECKD3D(*/ m_shader->SetMatrix(desc.handle, (D3DXMATRIX*) src) /*)*/; // leads to invalid calls when setting some of the matrices (as hlsl compiler optimizes some down to less than 4x4)
       #endif
       break;
-#ifndef ENABLE_SDL
+#ifdef ENABLE_BGFX // BGFX
+   case SUT_Sampler:
+   {
+      Sampler* texel = *(Sampler**)src;
+      if (texel && bgfx::isValid(texel->GetCoreTexture()))
+      {
+         SamplerFilter filter = texel->GetFilter();
+         SamplerAddressMode clampu = texel->GetClampU();
+         SamplerAddressMode clampv = texel->GetClampV();
+         if (filter == SF_UNDEFINED)
+         {
+            filter = shaderUniformNames[uniformName].default_filter;
+            if (filter == SF_UNDEFINED)
+               filter = SF_NONE;
+         }
+         if (clampu == SA_UNDEFINED)
+         {
+            clampu = shaderUniformNames[uniformName].default_clampu;
+            if (clampu == SA_UNDEFINED)
+               clampu = SA_CLAMP;
+         }
+         if (clampv == SA_UNDEFINED)
+         {
+            clampv = shaderUniformNames[uniformName].default_clampv;
+            if (clampv == SA_UNDEFINED)
+               clampv = SA_CLAMP;
+         }
+         uint32_t flags = 0;
+         switch (filter)
+         {
+         case SF_NONE:
+            flags |= BGFX_SAMPLER_MIN_POINT;
+            flags |= BGFX_SAMPLER_MAG_POINT;
+            break;
+         case SF_POINT:
+            flags |= BGFX_SAMPLER_MIN_POINT;
+            flags |= BGFX_SAMPLER_MAG_POINT;
+            break;
+         case SF_BILINEAR:
+            /* Default is linear. No flag to set. */
+            break;
+         case SF_TRILINEAR:
+            /* Default is linear. No flag to set. */
+            break;
+         case SF_ANISOTROPIC:
+            // flags |= BGFX_SAMPLER_MIN_ANISOTROPIC;
+            // flags |= BGFX_SAMPLER_MAG_ANISOTROPIC;
+            break;
+         }
+         switch (clampu)
+         {
+         case SA_CLAMP: flags |= BGFX_SAMPLER_U_CLAMP; break;
+         case SA_MIRROR: flags |= BGFX_SAMPLER_U_MIRROR; break;
+         case SA_REPEAT: /* Default mode, no flag to set */ break;
+         }
+         switch (clampv)
+         {
+         case SA_CLAMP: flags |= BGFX_SAMPLER_V_CLAMP; break;
+         case SA_MIRROR: flags |= BGFX_SAMPLER_V_MIRROR; break;
+         case SA_REPEAT: /* Default mode, no flag to set */ break;
+         }
+         auto tex_name = shaderUniformNames[uniformName].tex_name;
+         if (std::string(tex_name).rfind("Texture"s, 0) == 0)
+         {
+            int unit = tex_name[tex_name.length() - 1] - '0';
+            bgfx::setTexture(unit, desc.handle, texel->GetCoreTexture(), flags);
+         }
+      }
+      else
+      {
+         auto tex_name = shaderUniformNames[uniformName].tex_name;
+         if (std::string(tex_name).rfind("Texture"s, 0) == 0)
+         {
+            int unit = tex_name[tex_name.length() - 1] - '0';
+            bgfx::setTexture(unit, desc.handle, m_renderDevice->m_nullTexture->GetCoreTexture());
+         }
+      }
+      break;
+   }
+
+#elif defined(ENABLE_SDL) // OpenGL
+      // Already performed
+
+#else // DirectX 9
    case SUT_Sampler:
       {
          // A sampler bind performs 3 things:
@@ -922,9 +1068,211 @@ void Shader::ApplyUniform(const ShaderUniforms uniformName)
 ///////////////////////////////////////////////////////////////////////////////
 // BGFX specific implementation
 
+static const bgfx::Memory* loadMem(bx::FileReaderI* _reader, const char* _filePath)
+{
+   if (bx::open(_reader, _filePath))
+   {
+       uint32_t size = (uint32_t)bx::getSize(_reader);
+       const bgfx::Memory *mem = bgfx::alloc(size + 1);
+       bx::read(_reader, mem->data, size, bx::ErrorAssert {});
+       bx::close(_reader);
+       mem->data[mem->size - 1] = '\0';
+       return mem;
+   }
+
+   PLOGD << "Failed to load " << _filePath;
+   return NULL;
+}
+
+static bgfx::ShaderHandle loadShader(bx::FileReaderI *reader, const char *name)
+{
+   const char* shaderPath = "";
+   switch (bgfx::getRendererType())
+   {
+   case bgfx::RendererType::Noop:
+   case bgfx::RendererType::Direct3D9: shaderPath = "shaders-bgfx/dx9/"; break;
+   case bgfx::RendererType::Direct3D11:
+   case bgfx::RendererType::Direct3D12: shaderPath = "shaders-bgfx/dx11/"; break;
+   case bgfx::RendererType::Agc:
+   case bgfx::RendererType::Gnm: shaderPath = "shaders-bgfx/pssl/"; break;
+   case bgfx::RendererType::Metal: shaderPath = "shaders-bgfx/metal/"; break;
+   case bgfx::RendererType::Nvn: shaderPath = "shaders-bgfx/nvn/"; break;
+   case bgfx::RendererType::OpenGL: shaderPath = "shaders-bgfx/glsl/"; break;
+   case bgfx::RendererType::OpenGLES: shaderPath = "shaders-bgfx/essl/"; break;
+   case bgfx::RendererType::Vulkan: shaderPath = "shaders-bgfx/spirv/"; break;
+   case bgfx::RendererType::WebGPU: shaderPath = "shaders-bgfx/spirv/"; break;
+   case bgfx::RendererType::Count: BX_ASSERT(false, "You should not be here!"); break;
+   }
+
+   char fileName[512];
+   bx::strCopy(fileName, BX_COUNTOF(fileName), name);
+   bx::strCat(fileName, BX_COUNTOF(fileName), ".bin");
+
+   char basePath[MAX_PATH];
+   /*DWORD length =*/GetModuleFileName(nullptr, basePath, MAX_PATH);
+   bx::FilePath path(bx::FilePath(basePath).getPath());
+   path.join(bx::FilePath(shaderPath));
+   path.join(bx::FilePath(fileName));
+
+   bgfx::ShaderHandle handle = bgfx::createShader(loadMem(reader, path.getCPtr()));
+   bgfx::setName(handle, name);
+
+   return handle;
+}
+
+void Shader::loadProgram(bx::FileReaderI* reader, ShaderTechniques technique, const char* vsName, const char* fsName)
+{
+   assert(m_techniques[technique] == nullptr);
+   /* static bool initUniforms = false;
+   if (!initUniforms)
+   {
+       initUniforms = true;
+       for (int i = 0; i < SHADER_UNIFORM_COUNT; i++)
+       {
+         ShaderUniform u = shaderUniformNames[i];
+         bgfx::UniformType::Enum type = bgfx::UniformType::Vec4;
+         uint16_t n = 1;
+         switch (u.type)
+         {
+         case SUT_Float4v: continue;  break;
+         case SUT_Float3x4: type = bgfx::UniformType::Mat4; break;
+         case SUT_Float4x3: type = bgfx::UniformType::Mat4; break;
+         case SUT_Float4x4: type = bgfx::UniformType::Mat4; break;
+         case SUT_Sampler: type = bgfx::UniformType::Sampler; break;
+         }
+         bgfx::createUniform(u.name.c_str(), type, n);
+       }
+   }*/
+   
+   m_techniques[technique] = new ShaderTechnique { };
+   bgfx::ShaderHandle vsh = loadShader(reader, vsName);
+   bgfx::ShaderHandle fsh = loadShader(reader, fsName);
+   m_techniques[technique]->program = bgfx::createProgram(vsh, fsh, true /* destroy shaders when program is destroyed */);
+   bgfx::UniformHandle uniforms[SHADER_UNIFORM_COUNT];
+   for (int j = 0; j < 2; j++)
+   {
+      uint16_t n_uniforms = bgfx::getShaderUniforms(j == 0 ? vsh : fsh, uniforms, SHADER_UNIFORM_COUNT);
+      for (int i = 0; i < n_uniforms; i++)
+      {
+         bgfx::UniformInfo info;
+         bgfx::getUniformInfo(uniforms[i], info);
+         auto uniformIndex = getUniformByName(info.name);
+         if (uniformIndex < SHADER_UNIFORM_COUNT && std::find(m_uniforms[technique].begin(), m_uniforms[technique].end(), uniformIndex) == m_uniforms[technique].end())
+         {
+            assert(info.num == shaderUniformNames[uniformIndex].count);
+            m_uniforms[technique].push_back(uniformIndex);
+            m_techniques[technique]->uniform_desc[uniformIndex].uniform = shaderUniformNames[uniformIndex];
+            m_techniques[technique]->uniform_desc[uniformIndex].handle = uniforms[i];
+         }
+      }
+   }
+}
+
 bool Shader::Load(const std::string& name, const BYTE* code, unsigned int codeSize)
 {
-   return true;   
+   bx::FileReader* reader = new bx::FileReader();
+   bgfx::ShaderHandle vsh = loadShader(reader, "vs_debug");
+   bgfx::ShaderHandle fsh = loadShader(reader, "fs_debug");
+   m_debugProgramHandle = bgfx::createProgram(vsh, fsh, true /* destroy shaders when program is destroyed */);
+   if (name == "BasicShader"s)
+   {
+      loadProgram(reader, SHADER_TECHNIQUE_basic_with_texture, "vs_basic_tex", "fs_basic_tex_norefl");
+      loadProgram(reader, SHADER_TECHNIQUE_basic_without_texture, "vs_basic_notex", "fs_basic_notex_norefl");
+      loadProgram(reader, SHADER_TECHNIQUE_basic_refl_only_with_texture, "vs_basic_tex", "fs_basic_tex_refl");
+      loadProgram(reader, SHADER_TECHNIQUE_basic_refl_only_without_texture, "vs_basic_notex", "fs_basic_notex_refl");
+      loadProgram(reader, SHADER_TECHNIQUE_light_with_texture, "vs_classic_light_tex_noshadow", "fs_classic_light_tex_noshadow");
+      loadProgram(reader, SHADER_TECHNIQUE_light_with_texture_isMetal, "vs_classic_light_tex_noshadow", "fs_classic_light_tex_noshadow");
+      loadProgram(reader, SHADER_TECHNIQUE_light_without_texture, "vs_classic_light_notex_noshadow", "fs_classic_light_notex_noshadow");
+      loadProgram(reader, SHADER_TECHNIQUE_light_without_texture_isMetal, "vs_classic_light_notex_noshadow", "fs_classic_light_notex_noshadow");
+      //loadProgram(reader, SHADER_TECHNIQUE_bg_decal_without_texture, "", "");
+      //loadProgram(reader, SHADER_TECHNIQUE_bg_decal_with_texture, "", "");
+      //loadProgram(reader, SHADER_TECHNIQUE_kickerBoolean, "", "");
+      //loadProgram(reader, SHADER_TECHNIQUE_kickerBoolean_isMetal, "", "");
+   }
+   else if (name == "BallShader"s)
+   {
+      loadProgram(reader, SHADER_TECHNIQUE_RenderBall, "vs_ball_nodecal_nocab", "fs_ball_nodecal_nocab");
+      loadProgram(reader, SHADER_TECHNIQUE_RenderBall_DecalMode, "vs_ball_decal_nocab", "fs_ball_decal_nocab");
+      //loadProgram(reader, SHADER_TECHNIQUE_RenderBallTrail, "", "");
+   }
+   else if (name == "LightShader"s)
+   {
+      loadProgram(reader, SHADER_TECHNIQUE_bulb_light, "vs_light_noshadow", "fs_light_noshadow");
+      loadProgram(reader, SHADER_TECHNIQUE_bulb_light_with_ball_shadows, "vs_light_ballshadow", "fs_light_ballshadow");
+   }
+   else if (name == "FBShader"s)
+   {
+      loadProgram(reader, SHADER_TECHNIQUE_AO, "vs_postprocess", "fs_pp_ssao");
+      loadProgram(reader, SHADER_TECHNIQUE_SSReflection, "vs_postprocess", "fs_pp_ssr");
+      loadProgram(reader, SHADER_TECHNIQUE_CAS, "vs_postprocess", "fs_pp_cas");
+      loadProgram(reader, SHADER_TECHNIQUE_BilateralSharp_CAS, "vs_postprocess", "fs_pp_bilateral_cas");
+      loadProgram(reader, SHADER_TECHNIQUE_FXAA1, "vs_postprocess", "fs_pp_fxaa1");
+      loadProgram(reader, SHADER_TECHNIQUE_FXAA2, "vs_postprocess", "fs_pp_fxaa2");
+      loadProgram(reader, SHADER_TECHNIQUE_FXAA3, "vs_postprocess", "fs_pp_fxaa3");
+      loadProgram(reader, SHADER_TECHNIQUE_NFAA, "vs_postprocess", "fs_pp_nfaa");
+      //loadProgram(reader, SHADER_TECHNIQUE_DLAA_edge, "vs_postprocess", "");
+      //loadProgram(reader, SHADER_TECHNIQUE_DLAA, "vs_postprocess", "");
+      //loadProgram(reader, SHADER_TECHNIQUE_SMAA_ColorEdgeDetection, "vs_postprocess", "");
+      //loadProgram(reader, SHADER_TECHNIQUE_SMAA_BlendWeightCalculation, "vs_postprocess", "");
+      //loadProgram(reader, SHADER_TECHNIQUE_SMAA_NeighborhoodBlending, "vs_postprocess", "");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_mirror, "vs_postprocess", "fs_pp_mirror");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_bloom, "vs_postprocess", "fs_pp_bloom");
+      // loadProgram(reader, SHADER_TECHNIQUE_fb_AO, "vs_postprocess", "");
+      // loadProgram(reader, SHADER_TECHNIQUE_fb_tonemap, "vs_postprocess", "");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_tonemap_AO, "vs_postprocess", "fs_pp_tonemap_ao_filter_rgb");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_tonemap_AO_static, "vs_postprocess", "fs_pp_notonemap_ao_filter_rgb");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_tonemap_no_filterRGB, "vs_postprocess", "fs_pp_tonemap_noao_nofilter_rgb");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_tonemap_no_filterRG, "vs_postprocess", "fs_pp_tonemap_noao_nofilter_bw");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_tonemap_no_filterR, "vs_postprocess", "fs_pp_tonemap_noao_nofilter_gray");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_tonemap_AO_no_filter, "vs_postprocess", "fs_pp_tonemap_ao_nofilter_rgb");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_tonemap_AO_no_filter_static, "vs_postprocess", "fs_pp_notonemap_ao_nofilter_rgb");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_blur_horiz7x7, "vs_postprocess", "fs_blur_7_h");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_blur_vert7x7, "vs_postprocess", "fs_blur_7_v");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_blur_horiz9x9, "vs_postprocess", "fs_blur_9_h");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_blur_vert9x9, "vs_postprocess", "fs_blur_9_v");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_blur_horiz11x11, "vs_postprocess", "fs_blur_11_h");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_blur_vert11x11, "vs_postprocess", "fs_blur_11_v");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_blur_horiz13x13, "vs_postprocess", "fs_blur_13_h");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_blur_vert13x13, "vs_postprocess", "fs_blur_13_v");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_blur_horiz15x15, "vs_postprocess", "fs_blur_15_h");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_blur_vert15x15, "vs_postprocess", "fs_blur_15_v");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_blur_horiz19x19, "vs_postprocess", "fs_blur_19_h");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_blur_vert19x19, "vs_postprocess", "fs_blur_19_v");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_blur_horiz23x23, "vs_postprocess", "fs_blur_23_h");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_blur_vert23x23, "vs_postprocess", "fs_blur_23_v");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_blur_horiz27x27, "vs_postprocess", "fs_blur_27_h");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_blur_vert27x27, "vs_postprocess", "fs_blur_27_v");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_blur_horiz39x39, "vs_postprocess", "fs_blur_39_h");
+      loadProgram(reader, SHADER_TECHNIQUE_fb_blur_vert39x39, "vs_postprocess", "fs_blur_39_v");
+      //loadProgram(reader, SHADER_TECHNIQUE_stereo, "vs_postprocess", "");
+      //loadProgram(reader, SHADER_TECHNIQUE_stereo_Int, "vs_postprocess", "");
+      //loadProgram(reader, SHADER_TECHNIQUE_stereo_Flipped_Int, "vs_postprocess", "");
+      //loadProgram(reader, SHADER_TECHNIQUE_stereo_anaglyph, "vs_postprocess", "");
+      //loadProgram(reader, SHADER_TECHNIQUE_stereo_AMD_DEBUG, "vs_postprocess", "");
+   }
+   else if (name == "FlasherShader"s)
+   {
+      loadProgram(reader, SHADER_TECHNIQUE_basic_noLight, "vs_flasher", "fs_flasher");
+   }
+   else if (name == "DMDShader"s)
+   {
+      /*  
+   SHADER_TECHNIQUE(basic_DMD_ext),
+   SHADER_TECHNIQUE(basic_DMD_world_ext),
+   SHADER_TECHNIQUE(basic_noDMD_notex),*/
+      loadProgram(reader, SHADER_TECHNIQUE_basic_DMD, "vs_basic_dmd_noworld", "fs_basic_dmd");
+      loadProgram(reader, SHADER_TECHNIQUE_basic_DMD_world, "vs_basic_dmd_world", "fs_basic_dmd");
+      loadProgram(reader, SHADER_TECHNIQUE_basic_noDMD, "vs_basic_dmd_noworld", "fs_basic_sprite");
+      loadProgram(reader, SHADER_TECHNIQUE_basic_noDMD_world, "vs_basic_dmd_world", "fs_basic_sprite");
+   }
+   else if (name == "DMDShaderVR"s)
+   {
+   }
+   else if (name == "StereoShader"s)
+   {
+   }
+   delete reader;
+   return true;
 }
 
 #elif defined(ENABLE_SDL) // OpenGL
@@ -1271,7 +1619,7 @@ string Shader::analyzeFunction(const string& shaderCodeName, const string& _tech
 
 bool Shader::Load(const std::string& name, const BYTE* code, unsigned int codeSize)
 {
-   m_shaderCodeName = name;
+   string codename = name + ".glfx"s;
    char glShaderPath[MAX_PATH];
    /*DWORD length =*/ GetModuleFileName(nullptr, glShaderPath, MAX_PATH);
    m_shaderPath = string(glShaderPath);
@@ -1279,11 +1627,11 @@ bool Shader::Load(const std::string& name, const BYTE* code, unsigned int codeSi
    m_shaderPath.append(PATH_SEPARATOR_CHAR + "shader"s + PATH_SEPARATOR_CHAR);
    PLOGI << "Parsing file " << name;
    robin_hood::unordered_map<string, string> values;
-   const bool parsing = parseFile(m_shaderCodeName, m_shaderCodeName, 0, values, "GLOBAL");
+   const bool parsing = parseFile(codename, codename, 0, values, "GLOBAL");
    if (!parsing) {
       PLOGE << "Parsing failed";
       char msg[128];
-      sprintf_s(msg, sizeof(msg), "Fatal Error: Shader parsing of %s failed!", m_shaderCodeName.c_str());
+      sprintf_s(msg, sizeof(msg), "Fatal Error: Shader parsing of %s failed!", codename.c_str());
       ReportError(msg, -1, __FILE__, __LINE__);
       return false;
    }
@@ -1331,18 +1679,18 @@ bool Shader::Load(const std::string& name, const BYTE* code, unsigned int codeSi
                PLOGI << "Compiling technique: " << shaderTechniqueNames[technique];
                string vertexShaderCode = vertex;
                vertexShaderCode.append("\n//").append(_technique).append("\n//").append(element[2]).append("\n");
-               vertexShaderCode.append(analyzeFunction(m_shaderCodeName, _technique, element[2], values)).append("\0");
+               vertexShaderCode.append(analyzeFunction(codename, _technique, element[2], values)).append("\0");
                string geometryShaderCode;
                if (elem == 5 && element[3].length() > 0)
                {
                   geometryShaderCode = geometry;
                   geometryShaderCode.append("\n//").append(_technique).append("\n//").append(element[3]).append("\n");
-                  geometryShaderCode.append(analyzeFunction(m_shaderCodeName, _technique, element[3], values)).append("\0");
+                  geometryShaderCode.append(analyzeFunction(codename, _technique, element[3], values)).append("\0");
                }
                string fragmentShaderCode = fragment;
                fragmentShaderCode.append("\n//").append(_technique).append("\n//").append(element[elem - 1]).append("\n");
-               fragmentShaderCode.append(analyzeFunction(m_shaderCodeName, _technique, element[elem - 1], values)).append("\0");
-               ShaderTechnique* build = compileGLShader(technique, m_shaderCodeName, element[0] /*.append("_").append(element[1])*/, vertexShaderCode, geometryShaderCode, fragmentShaderCode);
+               fragmentShaderCode.append(analyzeFunction(codename, _technique, element[elem - 1], values)).append("\0");
+               ShaderTechnique* build = compileGLShader(technique, codename, element[0] /*.append("_").append(element[1])*/, vertexShaderCode, geometryShaderCode, fragmentShaderCode);
                if (build != nullptr)
                {
                   m_techniques[technique] = build;
@@ -1351,7 +1699,7 @@ bool Shader::Load(const std::string& name, const BYTE* code, unsigned int codeSi
                else
                {
                   char msg[128];
-                  sprintf_s(msg, sizeof(msg), "Fatal Error: Shader compilation failed for %s!", m_shaderCodeName.c_str());
+                  sprintf_s(msg, sizeof(msg), "Fatal Error: Shader compilation failed for %s!", codename.c_str());
                   ReportError(msg, -1, __FILE__, __LINE__);
                   return false;
                }
@@ -1363,7 +1711,7 @@ bool Shader::Load(const std::string& name, const BYTE* code, unsigned int codeSi
    else {
       PLOGE << "No techniques found.";
       char msg[128];
-      sprintf_s(msg, sizeof(msg), "Fatal Error: No shader techniques found in %s!", m_shaderCodeName.c_str());
+      sprintf_s(msg, sizeof(msg), "Fatal Error: No shader techniques found in %s!", codename.c_str());
       ReportError(msg, -1, __FILE__, __LINE__);
       return false;
    }
@@ -1382,7 +1730,6 @@ bool Shader::Load(const std::string& name, const BYTE* code, unsigned int codeSi
 // if fromFile is false the shaderName should be the resource name not the IDC_XX_YY value. Search vpinball_eng.rc for ".fx" to see an example
 bool Shader::Load(const std::string& name, const BYTE* code, unsigned int codeSize)
 {
-   m_shaderCodeName = name;
    LPD3DXBUFFER pBufferErrors;
    constexpr DWORD dwShaderFlags
       = 0; //D3DXSHADER_SKIPVALIDATION // these do not have a measurable effect so far (also if used in the offline fxc step): D3DXSHADER_PARTIALPRECISION, D3DXSHADER_PREFER_FLOW_CONTROL/D3DXSHADER_AVOID_FLOW_CONTROL

@@ -10,6 +10,10 @@
 #define WRITE_SHADER_FILES 1
 #endif
 
+#if defined(ENABLE_BGFX) // BGFX
+#include "bx/readerwriter.h"
+#endif
+
 // Attempt to speed up STL which is very CPU costly, maybe we should look into using EASTL instead? http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2007/n2271.html https://github.com/electronicarts/EASTL
 #ifndef ENABLE_BGFX 
 #define _SECURE_SCL 0
@@ -174,7 +178,7 @@ enum ShaderUniforms
    SHADER_UNIFORM(SUT_Float4, w_h_height, 1), // Post process & Basic (for screen space reflection/refraction)
 
    // Shared material for Ball, Basic and Classic light shaders
-   #ifdef ENABLE_SDL // OpenGL
+   #if defined(ENABLE_SDL) || defined(ENABLE_BGFX) // OpenGL & BGFX
    SHADER_UNIFORM(SUT_Float4, clip_plane, 1),
    SHADER_UNIFORM(SUT_Float4v, basicLightEmission, 2),
    SHADER_UNIFORM(SUT_Float4v, basicLightPos, 2),
@@ -290,7 +294,9 @@ private:
    bool Load(const std::string& name, const BYTE* code, unsigned int codeSize);
    
 public:
-   #ifdef ENABLE_SDL // OpenGL
+   #if defined(ENABLE_BGFX) // BGFX
+   Shader(RenderDevice *renderDevice, const std::string& src1, const std::string& src2 = ""s) : Shader(renderDevice, src1, src2, nullptr, 0) { }
+   #elif defined(ENABLE_SDL) // OpenGL
    Shader(RenderDevice *renderDevice, const std::string& src1, const std::string& src2 = ""s) : Shader(renderDevice, src1, src2, nullptr, 0) { }
    #else // DirectX 9
    Shader(RenderDevice *renderDevice, const std::string& name, const BYTE* code, unsigned int codeSize) : Shader(renderDevice, name, ""s, code, codeSize) { }
@@ -450,8 +456,11 @@ public:
          assert(GetCurrentShader() == nullptr);
          assert(0 <= uniformName && uniformName < SHADER_UNIFORM_COUNT);
          assert(shaderUniformNames[uniformName].type == SUT_Sampler);
-         assert(sampler != nullptr);
-         #ifdef ENABLE_SDL // OpenGL
+         assert(sampler != nullptr); 
+         #if defined(ENABLE_BGFX) // BGFX
+         assert(m_shader->m_stateOffsets[uniformName] != -1);
+         *(Sampler**)(m_state + m_shader->m_stateOffsets[uniformName]) = sampler;
+         #elif defined(ENABLE_SDL) // OpenGL
          assert(m_shader->m_stateOffsets[uniformName] != -1);
          *(Sampler**)(m_state + m_shader->m_stateOffsets[uniformName]) = sampler;
          #else // DirectX 9
@@ -504,6 +513,26 @@ private:
    vec4 currentFlasherColor; // all flasher only-data
 
 #if defined(ENABLE_BGFX) // BGFX
+   ShaderState* m_boundState[SHADER_TECHNIQUE_COUNT]; // The state currently applied to the backend (per technique for OpenGL)
+   static ShaderTechniques m_boundTechnique; // This is global for OpenGL
+   struct UniformDesc
+   {
+      ShaderUniform uniform;
+      bgfx::UniformHandle handle;
+   };
+
+   struct ShaderTechnique
+   {
+      bgfx::ProgramHandle program;
+      UniformDesc uniform_desc[SHADER_UNIFORM_COUNT];
+   };
+   ShaderTechnique* m_techniques[SHADER_TECHNIQUE_COUNT];
+   bgfx::ProgramHandle m_debugProgramHandle = BGFX_INVALID_HANDLE;
+
+   void loadProgram(bx::FileReaderI* reader, ShaderTechniques tech, const char* vsName, const char* fsName);
+
+public:
+   bgfx::ProgramHandle GetCore() const { return m_techniques[m_technique] == nullptr ? m_debugProgramHandle : m_techniques[m_technique]->program; }
 
 #elif defined(ENABLE_SDL) // OpenGL
    ShaderState* m_boundState[SHADER_TECHNIQUE_COUNT]; // The state currently applied to the backend (per technique for OpenGL)

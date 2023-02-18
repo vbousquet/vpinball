@@ -365,7 +365,24 @@ int getDisplayList(vector<DisplayConfig>& displays)
 {
    displays.clear();
 
-#if (defined(ENABLE_SDL) || defined(ENABLE_BGFX)) && defined(WIN32)
+#if defined(ENABLE_BGFX) // BGFX
+   // Get the resolution of all enabled displays as they appear in the Windows settings UI.
+   std::map<string, DisplayConfig> displayMap;
+   EnumDisplayMonitors(nullptr, nullptr, MonitorEnumList, reinterpret_cast<LPARAM>(&displayMap));
+
+   // Apply the same numbering as windows
+   int i = 0;
+   for (std::map<string, DisplayConfig>::iterator display = displayMap.begin(); display != displayMap.end(); ++display)
+   {
+      if (display->second.adapter >= 0)
+      {
+         display->second.display = i;
+         displays.push_back(display->second);
+      }
+      i++;
+   }
+
+#elif defined(ENABLE_SDL) && defined(WIN32)
    // Windows and SDL order of display enumeration do not match, therefore the display identifier will not match between DX and OpenGL version
    // SDL2 display identifier do not match the id of the native Windows settings
    // SDL2 does not offer a way to get the adapter (i.e. Graphics Card) associated with a display (i.e. Monitor) so we use the monitor name for both
@@ -399,7 +416,7 @@ int getDisplayList(vector<DisplayConfig>& displays)
       }
       i++;
    }
-#elif defined(ENABLE_SDL) || defined(ENABLE_BGFX)
+#elif defined(ENABLE_SDL)
    int i = 0;
    for (; i < SDL_GetNumVideoDisplays(); ++i)
    {
@@ -563,6 +580,18 @@ void RenderDevice::CreateDevice(int &refreshrate, UINT adapterIndex)
    bool video10bit = false;
 
    bgfx::Init init;
+   
+   // Untested implementations
+   init.type = bgfx::RendererType::Direct3D12;
+   init.type = bgfx::RendererType::OpenGL;
+   init.type = bgfx::RendererType::Metal; // Unsupported under Windows
+   init.type = bgfx::RendererType::OpenGLES; // Unsupported under Windows
+
+   // Tested & working backends
+   init.type = bgfx::RendererType::Vulkan;
+   init.type = bgfx::RendererType::Direct3D9;
+   init.type = bgfx::RendererType::Direct3D11;
+
 #if BX_PLATFORM_LINUX || BX_PLATFORM_BSD
    init.platformData.ndt = wmInfo.info.x11.display;
    init.platformData.nwh = (void*)(uintptr_t)wmInfo.info.x11.window;
@@ -577,16 +606,20 @@ void RenderDevice::CreateDevice(int &refreshrate, UINT adapterIndex)
    init.platformData.context = NULL;
    init.platformData.backBuffer = NULL;
    init.platformData.backBufferDS = NULL;
-   init.resolution.width = 2560;
-   init.resolution.height = 1440;
-   init.resolution.reset = BGFX_RESET_VSYNC;
+   init.resolution.maxFrameLatency = 1;
+   init.resolution.reset = BGFX_RESET_NONE;
+   init.resolution.width = m_width;
+   init.resolution.height = m_height;
+#ifdef DEBUG
+   init.debug = true;
+#endif
    if (!bgfx::init(init))
    {
       PLOGE << "FAILED";
    }
-   bgfx::setDebug(BGFX_DEBUG_TEXT /*| BGFX_DEBUG_STATS*/);
-   bgfx::setViewClear(0, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x303030ff, 1.0f, 0);
-   bgfx::setViewRect(0, 0, 0, bgfx::BackbufferRatio::Equal);
+
+   //bgfx::setDebug(BGFX_DEBUG_STATS);
+   //bgfx::setDebug(BGFX_DEBUG_STATS | BGFX_DEBUG_WIREFRAME);
 
    // FIXME use desktop or fullscreen backbuffer format
    back_buffer_format = colorFormat::RGB8;
@@ -1103,7 +1136,7 @@ void RenderDevice::CreateDevice(int &refreshrate, UINT adapterIndex)
    VertexBuffer* quadVertexBuffer = new VertexBuffer(this, 4, verts, false, VertexFormat::VF_POS_TEX);
    m_quadMeshBuffer = new MeshBuffer(L"Fullscreen Quad"s, quadVertexBuffer);
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_SDL) || defined(ENABLE_BGFX)
    delete m_quadPNTDynMeshBuffer;
    VertexBuffer* quadPNTDynVertexBuffer = new VertexBuffer(this, 4, nullptr, true, VertexFormat::VF_POS_NORMAL_TEX);
    m_quadPNTDynMeshBuffer = new MeshBuffer(quadPNTDynVertexBuffer);
@@ -1124,15 +1157,14 @@ void RenderDevice::CreateDevice(int &refreshrate, UINT adapterIndex)
 
 bool RenderDevice::LoadShaders()
 {
-#if defined(ENABLE_BGFX) // BGFX
-#elif defined(ENABLE_SDL) // OpenGL 
-   basicShader = new Shader(this, "BasicShader.glfx"s);
-   DMDShader = new Shader(this, m_stereo3D == STEREO_VR ? "DMDShaderVR.glfx"s : "DMDShader.glfx"s);
-   FBShader = new Shader(this, "FBShader.glfx"s, "SMAA.glfx"s);
-   flasherShader = new Shader(this, "FlasherShader.glfx"s);
-   lightShader = new Shader(this, "LightShader.glfx"s);
+#if defined(ENABLE_BGFX) || defined(ENABLE_SDL) // BGFX & OpenGL
+   basicShader = new Shader(this, "BasicShader"s);
+   DMDShader = new Shader(this, m_stereo3D == STEREO_VR ? "DMDShaderVR"s : "DMDShader"s);
+   FBShader = new Shader(this, "FBShader"s, "SMAA"s);
+   flasherShader = new Shader(this, "FlasherShader"s);
+   lightShader = new Shader(this, "LightShader"s);
    if (m_stereo3D != STEREO_OFF)
-      StereoShader = new Shader(this, "StereoShader.glfx"s);
+      StereoShader = new Shader(this, "StereoShader"s);
 #else // DirectX 9
    basicShader = new Shader(this, "BasicShader.hlsl"s, g_basicShaderCode, sizeof(g_basicShaderCode));
    DMDShader = new Shader(this, "DMDShader.hlsl"s, g_dmdShaderCode, sizeof(g_dmdShaderCode));
@@ -1151,9 +1183,11 @@ bool RenderDevice::LoadShaders()
    basicShader->SetVector(SHADER_w_h_height, (float)(1.0 / (double)GetMSAABackBufferTexture()->GetWidth()), (float)(1.0 / (double)GetMSAABackBufferTexture()->GetHeight()), 0.0f, 0.0f);
    basicShader->SetFlasherColorAlpha(vec4(1.0f, 1.0f, 1.0f, 1.0f)); // No tinting
    DMDShader->SetFloat(SHADER_alphaTestValue, 1.0f); // No alpha clipping
+   #ifndef ENABLE_BGFX
+   // FIXME implement SMAA for BGFX
    FBShader->SetTexture(SHADER_areaTex, m_SMAAareaTexture);
    FBShader->SetTexture(SHADER_searchTex, m_SMAAsearchTexture);
-
+   #endif
    return true;
 }
 
@@ -1285,8 +1319,10 @@ void RenderDevice::FreeShader()
       FBShader->SetTextureNull(SHADER_tex_depth);
       FBShader->SetTextureNull(SHADER_tex_color_lut);
       FBShader->SetTextureNull(SHADER_tex_ao_dither);
+      #ifndef ENABLE_BGFX // FIXME remove when SMAA will be implemented
       FBShader->SetTextureNull(SHADER_areaTex);
       FBShader->SetTextureNull(SHADER_searchTex);
+      #endif
       delete FBShader;
       FBShader = nullptr;
    }
@@ -1320,6 +1356,7 @@ RenderDevice::~RenderDevice()
    delete m_nullTexture;
 
 #if defined(ENABLE_BGFX) // BGFX
+
 #elif defined(ENABLE_SDL) // OpenGL
 #else // DirectX 9
    //
@@ -1354,25 +1391,23 @@ RenderDevice::~RenderDevice()
    delete m_SMAAsearchTexture;
 
 #if defined(ENABLE_BGFX) // BGFX
+   bgfx::shutdown();
 
 #elif defined(ENABLE_SDL) // OpenGL
-   MeshBuffer::ClearSharedBuffers();
-   VertexBuffer::ClearSharedBuffers();
-   IndexBuffer::ClearSharedBuffers();
    for (auto binding : m_samplerBindings)
       delete binding;
    m_samplerBindings.clear();
-#ifdef ENABLE_VR
+   #ifdef ENABLE_VR
    if (m_pHMD)
    {
       turnVROff();
-      SaveValueFloat(regKey[RegName::Player], "VRSlope"s, m_slope);
-      SaveValueFloat(regKey[RegName::Player], "VROrientation"s, m_orientation);
-      SaveValueFloat(regKey[RegName::Player], "VRTableX"s, m_tablex);
-      SaveValueFloat(regKey[RegName::Player], "VRTableY"s, m_tabley);
-      SaveValueFloat(regKey[RegName::Player], "VRTableZ"s, m_tablez);
+      SaveValue(regKey[RegName::Player], "VRSlope"s, m_slope);
+      SaveValue(regKey[RegName::Player], "VROrientation"s, m_orientation);
+      SaveValue(regKey[RegName::Player], "VRTableX"s, m_tablex);
+      SaveValue(regKey[RegName::Player], "VRTableY"s, m_tabley);
+      SaveValue(regKey[RegName::Player], "VRTableZ"s, m_tablez);
    }
-#endif
+   #endif
 
    for (size_t i = 0; i < sizeof(m_samplerStateCache) / sizeof(m_samplerStateCache[0]); i++)
    {
@@ -1387,32 +1422,32 @@ RenderDevice::~RenderDevice()
    SDL_DestroyWindow(m_sdl_playfieldHwnd);
 
 #else // DirectX 9
-#ifdef _DEBUG
+   #ifdef _DEBUG
    CheckForD3DLeak(m_pD3DDevice);
-#endif
+   #endif
 
-#ifdef USE_D3D9EX
+   #ifdef USE_D3D9EX
    //!! if (m_pD3DDeviceEx == m_pD3DDevice) m_pD3DDevice = nullptr; //!! needed for Caligula if m_adapter > 0 ?? weird!! BUT MESSES UP FULLSCREEN EXIT (=hangs)
    SAFE_RELEASE_NO_RCC(m_pD3DDeviceEx);
-#endif
-#ifdef DEBUG_REFCOUNT_TRIGGER
+   #endif
+   #ifdef DEBUG_REFCOUNT_TRIGGER
    SAFE_RELEASE(m_pD3DDevice);
-#else
+   #else
    FORCE_RELEASE(m_pD3DDevice); //!! why is this necessary for some setups? is the refcount still off for some settings?
-#endif
-#ifndef DISABLE_FORCE_NVIDIA_OPTIMUS
+   #endif
+   #ifndef DISABLE_FORCE_NVIDIA_OPTIMUS
    if (NVAPIinit) //!! meh
       CHECKNVAPI(NvAPI_Unload());
    NVAPIinit = false;
-#endif
-#ifdef USE_D3D9EX
+   #endif
+   #ifdef USE_D3D9EX
    SAFE_RELEASE_NO_RCC(m_pD3DEx);
-#endif
-#ifdef DEBUG_REFCOUNT_TRIGGER
+   #endif
+   #ifdef DEBUG_REFCOUNT_TRIGGER
    SAFE_RELEASE(m_pD3D);
-#else
+   #else
    FORCE_RELEASE(m_pD3D); //!! why is this necessary for some setups? is the refcount still off for some settings?
-#endif
+   #endif
 
    /*
     * D3D sets the FPU to single precision/round to nearest int mode when it's initialized,
@@ -1422,27 +1457,8 @@ RenderDevice::~RenderDevice()
 
    if (m_dwm_was_enabled)
       mDwmEnableComposition(DWM_EC_ENABLECOMPOSITION);
-#else
-   for (auto binding : m_samplerBindings)
-      delete binding;
-   m_samplerBindings.clear();
-#ifdef ENABLE_VR
-   if (m_pHMD)
-   {
-      turnVROff();
-      SaveValue(regKey[RegName::PlayerVR], "Slope"s, m_slope);
-      SaveValue(regKey[RegName::PlayerVR], "Orientation"s, m_orientation);
-      SaveValue(regKey[RegName::PlayerVR], "TableX"s, m_tablex);
-      SaveValue(regKey[RegName::PlayerVR], "TableY"s, m_tabley);
-      SaveValue(regKey[RegName::PlayerVR], "TableZ"s, m_tablez);
-   }
 #endif
-
-void RenderDevice::BeginScene()
-{
-#if defined(ENABLE_BGFX) // BGFX
-
-#elif defined(ENABLE_SDL) // OpenGL
+}
 
 /*static void FlushGPUCommandBuffer(IDirect3DDevice9* pd3dDevice)
 {
@@ -1477,7 +1493,8 @@ void RenderDevice::Flip(const bool vsync)
 
 #if defined(ENABLE_BGFX)
    // Advance to next frame. Process submitted rendering primitives.
-   bgfx::frame();
+   // This is already done by FlushRenderFrame
+
 #elif defined(ENABLE_SDL)
    SDL_GL_SwapWindow(m_sdl_playfieldHwnd);
 #ifdef ENABLE_VR
@@ -1771,6 +1788,7 @@ void RenderDevice::ApplyRenderStates()
 void RenderDevice::SetClipPlane(const vec4 &plane)
 {
 #if defined(ENABLE_BGFX) // BGFX
+
 #elif defined(ENABLE_SDL) // OpenGL
    DMDShader->SetVector(SHADER_clip_plane, &plane);
    basicShader->SetVector(SHADER_clip_plane, &plane);
@@ -1795,6 +1813,10 @@ void RenderDevice::FlushRenderFrame()
    m_renderFrame.Execute(m_logNextFrame);
    m_currentPass = nullptr;
    m_logNextFrame = false;
+   #ifdef ENABLE_BGFX
+   bgfx::frame();
+   m_activeViewId = -1;
+   #endif
 }
 
 void RenderDevice::SetRenderTarget(const string& name, RenderTarget* rt, bool ignoreStereo)

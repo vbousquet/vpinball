@@ -64,29 +64,53 @@ IndexBuffer::IndexBuffer(RenderDevice* rd, const vector<unsigned int>& indices)
 IndexBuffer::~IndexBuffer()
 {
    for (PendingUpload upload : m_pendingUploads)
+      #ifdef ENABLE_BGFX
+      delete upload.buffer;
+      #else
       delete[] upload.data;
+      #endif
    RemoveFromVectorSingle(m_sharedBuffer->buffers, this);
    if (m_sharedBuffer->buffers.empty())
    {
       RemoveFromVectorSingle(pendingSharedBuffers, m_sharedBuffer);
       if (IsCreated())
-      #if defined(ENABLE_SDL) // OpenGL
+      {
+      #if defined(ENABLE_BGFX) // BGFX
+         if (bgfx::isValid(m_ib))
+            bgfx::destroy(m_ib);
+         if (bgfx::isValid(m_dib))
+            bgfx::destroy(m_dib);
+      #elif defined(ENABLE_SDL) // OpenGL
          glDeleteBuffers(1, &m_ib);
       #else // DirectX 9
          SAFE_RELEASE(m_ib);
       #endif
+      }
       delete m_sharedBuffer;
    }
 }
 
-void IndexBuffer::lock(const unsigned int offsetToLock, const unsigned int sizeToLock, void **dataBuffer, const DWORD flags)
+void IndexBuffer::lock(const unsigned int offsetToLock, const unsigned int sizeToLock, void** dataBuffer, const DWORD flags)
 {
    assert(!m_isStatic || !IsCreated()); // Static buffers can't be locked after first upload
    assert(m_lock.data == nullptr); // Lock is not reentrant
    m_rd->m_curLockCalls++;
    m_lock.offset = offsetToLock;
    m_lock.size = sizeToLock == 0 ? m_size : sizeToLock;
+   #ifdef ENABLE_BGFX
+   if (m_isStatic)
+   {
+      m_lock.buffer = nullptr;
+      m_lock.data = new BYTE[m_lock.size];
+   }
+   else
+   {
+      m_lock.buffer = bgfx::alloc(m_lock.size);
+      m_lock.data = m_lock.buffer->data;
+   }
+   #else
    m_lock.data = new BYTE[m_lock.size];
+   #endif
    *dataBuffer = m_lock.data;
 }
 
@@ -126,7 +150,11 @@ void IndexBuffer::CreateSharedBuffer(SharedBuffer* sharedBuffer)
    RemoveFromVectorSingle(pendingSharedBuffers, sharedBuffer);
    unsigned int size = sharedBuffer->count * (sharedBuffer->format == FMT_INDEX16 ? 2 : 4);
    
-   #if defined(ENABLE_SDL) // OpenGL
+   #if defined(ENABLE_BGFX) // BGFX
+   const bgfx::Memory* mem = bgfx::alloc(size);
+   UINT8* data = mem->data;
+
+   #elif defined(ENABLE_SDL) // OpenGL
    UINT8* data = (UINT8*)malloc(size);
 
    #else // DirectX 9
@@ -148,7 +176,15 @@ void IndexBuffer::CreateSharedBuffer(SharedBuffer* sharedBuffer)
       buffer->m_pendingUploads.clear();
    }
 
-   #if defined(ENABLE_SDL) // OpenGL && OpenGL ES
+   #if defined(ENABLE_BGFX) // BGFX
+   bgfx::IndexBufferHandle ib = BGFX_INVALID_HANDLE;
+   bgfx::DynamicIndexBufferHandle dib = BGFX_INVALID_HANDLE;
+   if (sharedBuffer->isStatic)
+      ib = bgfx::createIndexBuffer(mem, sharedBuffer->format == Format::FMT_INDEX16 ? BGFX_BUFFER_NONE : BGFX_BUFFER_INDEX32);
+   else
+      dib = bgfx::createDynamicIndexBuffer(mem, sharedBuffer->format == Format::FMT_INDEX16 ? BGFX_BUFFER_NONE : BGFX_BUFFER_INDEX32);
+   
+   #elif defined(ENABLE_SDL) // OpenGL && OpenGL ES
    GLuint ib = 0;
    #ifndef __OPENGLES__
    if (GLAD_GL_VERSION_4_5)
@@ -176,7 +212,12 @@ void IndexBuffer::CreateSharedBuffer(SharedBuffer* sharedBuffer)
    #endif
 
    for (IndexBuffer* buffer : sharedBuffer->buffers)
+   {
       buffer->m_ib = ib;
+      #ifdef ENABLE_BGFX
+      buffer->m_dib = dib;
+      #endif
+   }
 }
 
 void IndexBuffer::Upload()
@@ -187,7 +228,10 @@ void IndexBuffer::Upload()
    {
       for (PendingUpload upload : m_pendingUploads)
       {
-         #if defined(ENABLE_SDL) // OpenGL
+         #if defined(ENABLE_BGFX) // BGFX
+         bgfx::update(m_dib, upload.offset, upload.buffer);
+
+         #elif defined(ENABLE_SDL) // OpenGL         
          #ifndef __OPENGLES__
          if (GLAD_GL_VERSION_4_5)
             glNamedBufferSubData(m_ib, m_offset + upload.offset, upload.size, upload.data);
@@ -199,7 +243,6 @@ void IndexBuffer::Upload()
          }
 
          #else // DirectX 9
-         // It would be better to perform a single lock but in fact, I don't think there are situations where more than one update is pending
          UINT8* data;
          CHECKD3D(m_ib->Lock(m_offset + upload.offset, upload.size, (void**)&data, 0));
          memcpy(data, upload.data, upload.size);

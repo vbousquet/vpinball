@@ -36,7 +36,9 @@ RenderTarget::RenderTarget(RenderDevice* const rd, const int width, const int he
 {
    m_color_sampler = nullptr;
    m_depth_sampler = nullptr;
+
 #if defined(ENABLE_BGFX) // BGFX
+   m_framebuffer = BGFX_INVALID_HANDLE; // Invalid handle is back buffer
 
 #elif defined(ENABLE_SDL) // OpenGL
    glGetIntegerv(GL_FRAMEBUFFER_BINDING, (GLint*)&m_framebuffer); // Not sure about this (taken from VPVR original implementation). Doesn't the back buffer always bind to 0 on OpenGL ?
@@ -72,6 +74,48 @@ RenderTarget::RenderTarget(RenderDevice* const rd, const RenderTargetType type, 
    m_depth_sampler = nullptr;
 
 #if defined(ENABLE_BGFX) // BGFX
+   bgfx::TextureFormat::Enum fmt;
+   // FIXME moist render target are not blit destination and are only used as write target (then GPU sampling, no readback)
+   uint64_t flags = BGFX_TEXTURE_NONE | BGFX_SAMPLER_NONE | BGFX_TEXTURE_RT | BGFX_TEXTURE_BLIT_DST;
+   switch (format)
+   {
+   case colorFormat::RED16F: fmt = bgfx::TextureFormat::R16F; break;
+   case colorFormat::RG16F: fmt = bgfx::TextureFormat::RG16F; break;
+   case colorFormat::RGB16F: fmt = bgfx::TextureFormat::RGBA16F; break;
+   case colorFormat::RGB5: fmt = bgfx::TextureFormat::RGB5A1; break;
+   case colorFormat::RGB8: fmt = bgfx::TextureFormat::RGB8; break;
+   case colorFormat::RGB10: fmt = bgfx::TextureFormat::RGB10A2; break;
+   case colorFormat::RGBA8: fmt = bgfx::TextureFormat::RGBA8; break;
+   case colorFormat::RGBA10: fmt = bgfx::TextureFormat::RGB10A2; break;
+   case colorFormat::GREY8: fmt = bgfx::TextureFormat::R8; break;
+   default: assert(false); // Unsupported texture format 
+   }
+   m_color_tex = bgfx::createTexture2D(m_width, m_height, false, 1, fmt, flags);
+   m_color_sampler = new Sampler(m_rd, m_color_tex, m_width, m_height, false, true);
+   m_color_sampler->SetName(name + ".Color"s);
+   if (m_shared_depth)
+   {
+      m_depth_tex = sharedDepth->m_depth_tex;
+      m_depth_sampler = sharedDepth->m_depth_sampler;
+   }
+   else if (with_depth)
+   {
+      m_depth_tex = bgfx::createTexture2D(m_width, m_height, false, 1, bgfx::TextureFormat::D24, flags);
+      m_depth_sampler = new Sampler(m_rd, m_depth_tex, m_width, m_height, false, true);
+      m_depth_sampler->SetName(name + ".Depth"s);
+   }
+
+   if (with_depth)
+   {
+      const bgfx::TextureHandle handles[] = { m_color_tex, m_depth_tex };
+      m_framebuffer = bgfx::createFrameBuffer(2, handles);
+   }
+   else
+   {
+      const bgfx::TextureHandle handles[] = { m_color_tex };
+      m_framebuffer = bgfx::createFrameBuffer(1, handles);
+   }
+   bgfx::setName(m_framebuffer, name.c_str());
 
 #elif defined(ENABLE_SDL) // OpenGL
    const GLuint col_type = ((format == RGBA32F) || (format == RGB32F)) ? GL_FLOAT : ((format == RGBA16F) || (format == RGB16F)) ? GL_HALF_FLOAT : GL_UNSIGNED_BYTE;
@@ -199,8 +243,8 @@ RenderTarget::RenderTarget(RenderDevice* const rd, const RenderTargetType type, 
    if (nMSAASamples == 1)
    {
       m_color_sampler = new Sampler(m_rd, m_color_tex, false, true);
-      m_color_sampler->SetName(name + ".Color");
-      if (with_depth)
+      m_color_sampler->SetName(name + ".Color"s);
+      if (with_depth && !m_shared_depth)
       {
          if (m_shared_depth)
             m_depth_sampler = sharedDepth->GetDepthSampler();
@@ -277,7 +321,17 @@ RenderTarget::~RenderTarget()
    delete m_color_sampler;
    if (!m_shared_depth)
       delete m_depth_sampler;
+   if (current_render_target == this)
+      current_render_target = nullptr;
+
 #if defined(ENABLE_BGFX) // BGFX
+   if (bgfx::isValid(m_framebuffer))
+      bgfx::destroy(m_framebuffer);
+   if (bgfx::isValid(m_color_tex))
+      bgfx::destroy(m_color_tex);
+   if (bgfx::isValid(m_depth_tex))
+      bgfx::destroy(m_depth_tex);
+
 #elif defined(ENABLE_SDL) // OpenGL
    if (m_nMSAASamples > 1)
    {
@@ -292,6 +346,7 @@ RenderTarget::~RenderTarget()
          glDeleteTextures(1, &m_depth_tex);
    }
    glDeleteFramebuffers(1, &m_framebuffer);
+
 #else // DirectX 9
    // Texture share its refcount with surface, it must be decremented, but it won't be 0 until surface is also released
    SAFE_RELEASE_NO_RCC(m_color_tex);
@@ -356,6 +411,19 @@ void RenderTarget::CopyTo(RenderTarget* dest, const bool copyColor, const bool c
    int px2 = x2 == -1 ? 0 : x2, py2 = y2 == -1 ? 0 : y2;
    int pw2 = w2 == -1 ? dest->GetWidth() : w2, ph2 = h2 == -1 ? dest->GetHeight() : h2;
 #if defined(ENABLE_BGFX) // BGFX
+   if (w1 == w2 && h1 == h2)
+   {
+      if (copyColor)
+         bgfx::blit(m_rd->m_activeViewId, dest->m_color_tex, 0, 0, m_color_tex);
+      if (m_has_depth && dest->m_has_depth && copyDepth)
+         bgfx::blit(m_rd->m_activeViewId, dest->m_depth_tex, 0, 0, m_depth_tex);
+      bgfx::touch(m_rd->m_activeViewId);
+   }
+   else
+   {
+      assert(false); // Not yet implemented
+   }
+
 #elif defined(ENABLE_SDL) // OpenGL
    if (w1 == w2 && h1 == h2)
    {
@@ -400,6 +468,7 @@ void RenderTarget::CopyTo(RenderTarget* dest, const bool copyColor, const bool c
          }
       }
    }
+
 #else // DirectX 9
    if (copyColor)
    {
@@ -416,6 +485,8 @@ void RenderTarget::CopyTo(RenderTarget* dest, const bool copyColor, const bool c
 void RenderTarget::Activate(const bool ignoreStereo)
 {
 #if defined(ENABLE_BGFX) // BGFX
+   bgfx::setViewFrameBuffer(m_rd->m_activeViewId, m_framebuffer);
+   bgfx::setViewRect(m_rd->m_activeViewId, 0, 0, m_width, m_height);
 
 #elif defined(ENABLE_SDL) // OpenGL
    if (current_render_target == this && m_current_stereo_mode == (ignoreStereo ? STEREO_OFF : m_stereo))
@@ -451,6 +522,7 @@ void RenderTarget::Activate(const bool ignoreStereo)
       glViewportArrayv(0, 2, viewPorts);
       break;
    }
+
 #else // DirectX 9
    static IDirect3DSurface9* currentColorSurface = nullptr;
    if (currentColorSurface != m_color_surface)
@@ -464,6 +536,7 @@ void RenderTarget::Activate(const bool ignoreStereo)
       currentDepthSurface = m_depth_surface;
       CHECKD3D(m_rd->GetCoreDevice()->SetDepthStencilSurface(m_depth_surface));
    }
+
 #endif
    current_render_target = this;
 }

@@ -39,7 +39,8 @@ class Sampler
 public:
    Sampler(RenderDevice* rd, BaseTexture* const surf, const bool force_linear_rgb, const SamplerAddressMode clampu = SA_UNDEFINED, const SamplerAddressMode clampv = SA_UNDEFINED, const SamplerFilter filter = SF_UNDEFINED);
 #if defined(ENABLE_BGFX) // BGFX
-
+   Sampler(RenderDevice* rd, bgfx::TextureHandle bgfxTexture, int width, int height, bool ownTexture, bool linear_rgb, const SamplerAddressMode clampu = SA_UNDEFINED, const SamplerAddressMode clampv = SA_UNDEFINED, const SamplerFilter filter = SF_UNDEFINED);
+   bgfx::TextureHandle GetCoreTexture() const { return m_texture; }
 #elif defined(ENABLE_SDL) // OpenGL
    Sampler(RenderDevice* rd, GLuint glTexture, bool ownTexture, bool force_linear_rgb, const SamplerAddressMode clampu = SA_UNDEFINED, const SamplerAddressMode clampv = SA_UNDEFINED, const SamplerFilter filter = SF_UNDEFINED);
    GLuint GetCoreTexture() const { return m_texture; }
@@ -76,7 +77,10 @@ private:
    SamplerFilter m_filter;
 
 #if defined(ENABLE_BGFX) // BGFX
-
+   bgfx::TextureHandle m_texture = BGFX_INVALID_HANDLE;
+   bgfx::TextureHandle m_mips_texture = BGFX_INVALID_HANDLE;
+   bgfx::FrameBufferHandle m_mips_framebuffer = BGFX_INVALID_HANDLE;
+   uint32_t m_mips_gpu_frame = 0;
 #elif defined(ENABLE_SDL) // OpenGL
    GLuint m_texture = 0;
    GLuint CreateTexture(unsigned int Width, unsigned int Height, unsigned int Levels, colorFormat Format, void* data, int stereo);

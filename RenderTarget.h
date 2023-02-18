@@ -38,17 +38,19 @@ public:
    bool HasDepth() const { return m_has_depth; }
    colorFormat GetColorFormat() const { return m_format; }
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+   bgfx::FrameBufferHandle GetCoreFrameBuffer() const { return m_framebuffer; }
+#elif defined(ENABLE_SDL) // OpenGL
    GLuint GetCoreFrameBuffer() const { return m_framebuffer; }
-#else
+#else // DirectX 9
    IDirect3DSurface9* GetCoreColorSurface() { return m_color_surface; }
 #endif
 
    const string m_name;
    RenderPass* m_lastRenderPass = nullptr;
+   RenderDevice* const m_rd;
 
 private:
-   RenderDevice* const m_rd;
    int m_width;
    int m_height;
    const RenderTargetType m_type;
@@ -63,12 +65,16 @@ private:
 
    static RenderTarget* current_render_target;
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_BGFX) // BGFX
+   bgfx::FrameBufferHandle m_framebuffer = BGFX_INVALID_HANDLE;
+   bgfx::TextureHandle m_color_tex = BGFX_INVALID_HANDLE;
+   bgfx::TextureHandle m_depth_tex = BGFX_INVALID_HANDLE;
+#elif defined(ENABLE_SDL) // OpenGL
    static int m_current_stereo_mode;
    GLuint m_framebuffer;
    GLuint m_color_tex;
    GLuint m_depth_tex;
-#else
+#else // DirectX 9
    bool m_use_alternate_depth;
    IDirect3DSurface9* m_color_surface;
    IDirect3DTexture9* m_color_tex;

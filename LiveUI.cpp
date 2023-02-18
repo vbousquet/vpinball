@@ -10,9 +10,11 @@
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h" // Needed for FindRenderedTextEnd in HelpSplash (should be adapted when this function will refactored in ImGui)
-#ifdef ENABLE_SDL
+#ifdef ENABLE_SDL // OpenGL
 #include "imgui/imgui_impl_opengl3.h"
-#else
+#elif defined(ENABLE_BGFX) // BGFX
+#include "inc/bgfx-imgui/imgui_impl_bgfx.h"
+#else // DirectX9
 #include "imgui/imgui_impl_dx9.h"
 #endif
 #include "imgui/imgui_impl_win32.h"
@@ -666,8 +668,10 @@ LiveUI::LiveUI(RenderDevice *const rd)
    static constexpr ImWchar icons_ranges[] = { ICON_MIN_FK, ICON_MAX_16_FK, 0 };
    io.Fonts->AddFontFromMemoryCompressedTTF(fork_awesome_compressed_data, fork_awesome_compressed_size, 13.0f * m_dpi, &icons_config, icons_ranges);
 
-#ifdef ENABLE_SDL
+#if defined(ENABLE_SDL) // OpenGL
    ImGui_ImplOpenGL3_Init();
+#elif defined(ENABLE_BGFX) // BGFX
+   ImGui_Implbgfx_Init(255);
 #else
    ImGui_ImplDX9_Init(rd->GetCoreDevice());
 #endif
@@ -677,9 +681,11 @@ LiveUI::~LiveUI()
 {
    if (ImGui::GetCurrentContext())
    {
-#ifdef ENABLE_SDL
+#ifdef ENABLE_SDL // OpenGL
       ImGui_ImplOpenGL3_Shutdown();
-#else
+#elif defined(ENABLE_BGFX) // BGFX
+      ImGui_Implbgfx_Shutdown();
+#else // DirectX 9
       ImGui_ImplDX9_Shutdown();
 #endif
       ImGui_ImplWin32_Shutdown();
@@ -733,7 +739,8 @@ void LiveUI::Render()
             GLuint attribLocationProjMtx = glGetUniformLocation(shaderHandle, "ProjMtx");
             glUniformMatrix4fv(attribLocationProjMtx, 1, GL_FALSE, (float*)&(matProj.m[0]));
             glDisable(GL_SCISSOR_TEST);
-#else
+#elif defined(ENABLE_BGFX) // BGFX
+#else // DirectX 9
             lui->m_rd->GetCoreDevice()->SetTransform(D3DTS_WORLD, (const D3DXMATRIX *)&matTranslate);
             lui->m_rd->GetCoreDevice()->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
 #endif
@@ -748,13 +755,16 @@ void LiveUI::Render()
       draw_data->DisplaySize.x = draw_data->DisplaySize.y;
       draw_data->DisplaySize.y = tmp;
    }
-#ifdef ENABLE_SDL
+#ifdef ENABLE_SDL // OpenGL
    if (GLAD_GL_VERSION_4_3)
       glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, "ImGui");
    ImGui_ImplOpenGL3_RenderDrawData(draw_data);
    if (GLAD_GL_VERSION_4_3)
       glPopDebugGroup();
-#else
+#elif defined(ENABLE_BGFX) // BGFX
+   ImGui_Implbgfx_RenderDrawData(draw_data);
+#else // DirectX 9
+
    ImGui_ImplDX9_RenderDrawData(draw_data);
 #endif
 }
@@ -788,9 +798,11 @@ void LiveUI::Update()
    if (m_player == nullptr || m_player->m_closing != Player::CS_PLAYING)
       return;
    
-#ifdef ENABLE_SDL
+#ifdef ENABLE_SDL // OpenGL
    ImGui_ImplOpenGL3_NewFrame();
-#else
+#elif defined(ENABLE_BGFX) // BGFX
+   ImGui_Implbgfx_NewFrame();
+#else // DirectX 9
    ImGui_ImplDX9_NewFrame();
 #endif
    ImGui_ImplWin32_NewFrame();

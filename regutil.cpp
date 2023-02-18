@@ -2,7 +2,7 @@
 
 // Settings can be stored in an INI file with ENABLE_INI_SETTINGS, or an XML file with ENABLE_XML_SETTINGS, or in the windows registry
 #ifndef ENABLE_INI_SETTINGS
-//#define ENABLE_INI_SETTINGS
+#define ENABLE_INI_SETTINGS
 #endif
 
 #define VP_REGKEY_GENERAL "Software\\Visual Pinball\\"

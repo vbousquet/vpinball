@@ -86,15 +86,6 @@ void RenderPass::Execute(const bool log)
 {
    if (!m_commands.empty())
    {
-      #ifdef ENABLE_SDL
-      if (GLAD_GL_VERSION_4_3)
-      {
-         std::stringstream passName;
-         passName << m_name << " [RT=" << m_rt->m_name << "]";
-         glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, passName.str().c_str());
-      }
-      #endif
-
       /*
       Before 10.8, render command were not buffered and processed in the following order (* is optional static prepass):
 	      - Playfield *
@@ -211,6 +202,22 @@ void RenderPass::Execute(const bool log)
       else
          stable_sort(m_commands.begin(), m_commands.end(), sortFunc);
 
+      #ifdef ENABLE_BGFX
+      m_rt->m_rd->m_activeViewId++;
+      bgfx::resetView(m_rt->m_rd->m_activeViewId);
+      bgfx::setViewName(m_rt->m_rd->m_activeViewId, m_name.c_str());
+      bgfx::setViewClear(m_rt->m_rd->m_activeViewId, BGFX_CLEAR_NONE);
+      bgfx::setViewMode(m_rt->m_rd->m_activeViewId, bgfx::ViewMode::Sequential);
+      
+      #elif defined(ENABLE_SDL)
+      if (GLAD_GL_VERSION_4_3)
+      {
+         std::stringstream passName;
+         passName << m_name << " [RT=" << m_rt->m_name << "]";
+         glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, passName.str().c_str());
+      }
+      #endif
+
       m_rt->Activate(m_ignoreStereo);
 
       for (RenderCommand* cmd : m_commands)
@@ -219,7 +226,7 @@ void RenderPass::Execute(const bool log)
       if (m_depthReadback)
          m_rt->UpdateDepthSampler(true);
 
-      #ifdef ENABLE_SDL
+      #if defined(ENABLE_SDL)
       if (GLAD_GL_VERSION_4_3)
          glPopDebugGroup();
       #endif

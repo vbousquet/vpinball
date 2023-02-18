@@ -1,6 +1,8 @@
 #pragma once
 
+#if !defined(ENABLE_XINPUT)
 #define ENABLE_XINPUT
+#endif
 
 #ifdef ENABLE_XINPUT
 #include <XInput.h>
