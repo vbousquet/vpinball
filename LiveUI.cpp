@@ -963,88 +963,150 @@ void LiveUI::UpdateCameraModeUI()
 
    bool isStereo = m_player->m_stereo3Denabled && m_player->m_stereo3D != STEREO_OFF && m_player->m_stereo3D != STEREO_VR;
    bool isAnaglyph = isStereo && m_player->m_stereo3D >= STEREO_ANAGLYPH_RC && m_player->m_stereo3D <= STEREO_ANAGLYPH_AB;
-   const Player::BackdropSetting *settings = isLegacy ? Player::mLegacyViewSettings : isCamera ? Player::mCameraViewSettings : Player::mWindowViewSettings;
-   int nSettings = (isLegacy ? sizeof(Player::mLegacyViewSettings) : isCamera ? sizeof(Player::mCameraViewSettings) : sizeof(Player::mWindowViewSettings)) / sizeof(Player::BackdropSetting);
+   const Player::BackdropSetting *settings = g_pplayer->m_headTracking ?
+        isLegacy ? Player::mHeadTrackedLegacyViewSettings : isCamera ? Player::mHeadTrackedCameraViewSettings : Player::mHeadTrackedWindowViewSettings
+      : isLegacy ? Player::mLegacyViewSettings : isCamera ? Player::mCameraViewSettings : Player::mWindowViewSettings;
+   int nSettings = g_pplayer->m_headTracking ?
+        (isLegacy ? sizeof(Player::mHeadTrackedLegacyViewSettings) : isCamera ? sizeof(Player::mHeadTrackedCameraViewSettings) : sizeof(Player::mHeadTrackedWindowViewSettings)) / sizeof(Player::BackdropSetting)
+      : (isLegacy ? sizeof(Player::mLegacyViewSettings) : isCamera ? sizeof(Player::mCameraViewSettings) : sizeof(Player::mWindowViewSettings)) / sizeof(Player::BackdropSetting);
    nSettings = isAnaglyph ? nSettings : isStereo ? (nSettings - 2) : (nSettings - 3);
-   if (ImGui::BeginTable("Camera", 3, /* ImGuiTableFlags_Borders */ 0))
+   if (m_player->m_backdropSettingActive < Player::BS_HeadTrackP1X)
    {
-      static float vWidth = 50.f;
-      ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthStretch);
-      ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, vWidth);
-      ImGui::TableSetupColumn("Unit", ImGuiTableColumnFlags_WidthFixed);
-      #define CM_ROW(label, format, value, unit) \
-      { \
-         char buf[1024]; snprintf(buf, 1024, format, value); \
-         ImGui::TableNextColumn(); ImGui::Text(label); ImGui::TableNextColumn(); \
-         float textWidth = ImGui::CalcTextSize(buf).x; \
-         vWidth = max(vWidth, textWidth); \
-         if (textWidth < vWidth) ImGui::SameLine(vWidth - textWidth); \
-         ImGui::Text(buf); ImGui::TableNextColumn(); ImGui::Text(unit); ImGui::TableNextRow();\
-      }
-      #define CM_SKIP_LINE {ImGui::TableNextColumn(); ImGui::Dummy(ImVec2(0.f, m_dpi * 3.f)); ImGui::TableNextRow();}
-      for (int i = 0; i < nSettings; i++)
+      if (ImGui::BeginTable("Camera", 3, /* ImGuiTableFlags_Borders */ 0))
       {
-         if (settings[i] == m_player->m_backdropSettingActive 
-            || (m_player->m_backdropSettingActive == Player::BS_XYScale && (settings[i] == Player::BS_XScale || settings[i] == Player::BS_YScale)))
-            ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 255, 0, 255));
-         switch (settings[i])
-         {
-         case Player::BS_ViewMode: CM_ROW("View Layout Mode:", "%s", isLegacy ? "Legacy" : isCamera ? "Camera" : "Window", ""); CM_SKIP_LINE; break;
-
-         // Viewport
-         case Player::BS_XScale: CM_ROW("Viewport X Stretch", "%.1f", 100.f * viewSetup.mViewportScaleX, "%%"); break;
-         case Player::BS_YScale: CM_ROW("Viewport Y Stretch", "%.1f", 100.f * viewSetup.mViewportScaleY, "%%"); CM_SKIP_LINE; break;
-
-         // Player position
-         case Player::BS_LookAt: 
-            if (isLegacy)
-               { CM_ROW("Inclination", "%.1f", viewSetup.mLookAt, "deg"); }
-            else
-               { CM_ROW("Look at", "%.1f", viewSetup.mLookAt, "%%"); }
-            break;
-         case Player::BS_XOffset: CM_ROW(isLegacy ? "X Offset" : "Player X", "%.1f", VPUTOCM(viewSetup.mViewX), "cm"); break;
-         case Player::BS_YOffset: CM_ROW(isLegacy ? "Y Offset" : "Player Y", "%.1f", VPUTOCM(viewSetup.mViewY), "cm"); break;
-         case Player::BS_ZOffset: CM_ROW(isLegacy ? "Z Offset" : "Player Z", "%.1f", VPUTOCM(viewSetup.mViewZ), "cm"); CM_SKIP_LINE; break;
-
-         // View settings
-         case Player::BS_FOV: CM_ROW("Field Of View (overall scale)", "%.1f", viewSetup.mFOV, "deg"); break;
-         case Player::BS_Layback: CM_ROW("Layback", "%.1f", viewSetup.mLayback, ""); CM_SKIP_LINE; break;
-         case Player::BS_ViewHOfs: CM_ROW("Horizontal Offset", "%.1f", viewSetup.mViewHOfs, ""); break;
-         case Player::BS_ViewVOfs: CM_ROW("Vertical Offset", "%.1f", viewSetup.mViewVOfs, ""); CM_SKIP_LINE; break;
-         case Player::BS_WndTopXOfs: CM_ROW("Window Top X Ofs.", "%.1f", VPUTOCM(viewSetup.mWindowTopXOfs), "cm"); break;
-         case Player::BS_WndTopYOfs: CM_ROW("Window Top Y Ofs.", "%.1f", VPUTOCM(viewSetup.mWindowTopYOfs), "cm"); break;
-         case Player::BS_WndTopZOfs: CM_ROW("Window Top Z Ofs.", "%.1f", VPUTOCM(viewSetup.mWindowTopZOfs), "cm"); break;
-         case Player::BS_WndBottomXOfs: CM_ROW("Window Bottom X Ofs.", "%.1f", VPUTOCM(viewSetup.mWindowBottomXOfs), "cm"); break;
-         case Player::BS_WndBottomYOfs: CM_ROW("Window Bottom Y Ofs.", "%.1f", VPUTOCM(viewSetup.mWindowBottomYOfs), "cm"); break;
-         case Player::BS_WndBottomZOfs: CM_ROW("Window Bottom Z Ofs.", "%.1f", VPUTOCM(viewSetup.mWindowBottomZOfs), "cm"); CM_SKIP_LINE; break;
-
-         // Scene lighting
-         case Player::BS_LightEmissionScale: CM_ROW("Light Emission Scale", "%.0f", table->m_lightEmissionScale, ""); break;
-         case Player::BS_LightRange: CM_ROW("Light Range", "%.0f", VPUTOCM(table->m_lightRange), "cm"); break;
-         case Player::BS_LightHeight: CM_ROW("Light Height", "%.0f", VPUTOCM(table->m_lightHeight), "cm"); CM_SKIP_LINE; break;
-         case Player::BS_EnvEmissionScale: CM_ROW("Environment Emission", "%.1f", 100.f * table->m_envEmissionScale, "%%"); break;
-
-         // Stereo eye and anaglyph setup
-         case Player::BS_EyeSeparation:
-         {
-            CM_SKIP_LINE;
-            #ifdef ENABLE_SDL
-            CM_ROW("Eye distance", "%.0f", LoadValueWithDefault(regKey[RegName::Player], "Stereo3DEyeSeparation"s, 63.0f), "mm");
-            #else
-            CM_ROW(m_table->m_overwriteGlobalStereo3D ? "Max Separation [Table setting]" : "Max Separation [Application setting]", "%.3f", table->GetMaxSeparation(), "");
-            #endif
-            break;
+         static float vWidth = 50.f;
+         ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthStretch);
+         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, vWidth);
+         ImGui::TableSetupColumn("Unit", ImGuiTableColumnFlags_WidthFixed);
+         #define CM_ROW(label, format, value, unit) \
+         { \
+            char buf[1024]; snprintf(buf, 1024, format, value); \
+            ImGui::TableNextColumn(); ImGui::Text(label); ImGui::TableNextColumn(); \
+            float textWidth = ImGui::CalcTextSize(buf).x; \
+            vWidth = max(vWidth, textWidth); \
+            if (textWidth < vWidth) ImGui::SameLine(vWidth - textWidth); \
+            ImGui::Text(buf); ImGui::TableNextColumn(); ImGui::Text(unit); ImGui::TableNextRow();\
          }
-         case Player::BS_AnaglyphDesat: CM_ROW("Anaglyph desaturation", "%.0f", 100.f * m_player->m_global3DDesaturation, "%%"); break;
-         case Player::BS_AnaglyphContrast: CM_ROW("Anaglyph contrast", "%.0f", 100.f * m_player->m_global3DContrast, "%%"); break;
+         #define CM_SKIP_LINE {ImGui::TableNextColumn(); ImGui::Dummy(ImVec2(0.f, m_dpi * 3.f)); ImGui::TableNextRow();}
+         for (int i = 0; i < nSettings; i++)
+         {
+            if (settings[i] == m_player->m_backdropSettingActive 
+               || (m_player->m_backdropSettingActive == Player::BS_XYScale && (settings[i] == Player::BS_XScale || settings[i] == Player::BS_YScale)))
+               ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 255, 0, 255));
+            switch (settings[i])
+            {
+            case Player::BS_ViewMode: CM_ROW("View Layout Mode:", "%s", isLegacy ? "Legacy" : isCamera ? "Camera" : "Window", ""); CM_SKIP_LINE; break;
+
+            // Viewport
+            case Player::BS_XScale: CM_ROW("Viewport X Stretch", "%.1f", 100.f * viewSetup.mViewportScaleX, "%%"); break;
+            case Player::BS_YScale: CM_ROW("Viewport Y Stretch", "%.1f", 100.f * viewSetup.mViewportScaleY, "%%"); CM_SKIP_LINE; break;
+
+            // Player position
+            case Player::BS_LookAt: 
+               if (isLegacy)
+                  { CM_ROW("Inclination", "%.1f", viewSetup.mLookAt, "deg"); }
+               else
+                  { CM_ROW("Look at", "%.1f", viewSetup.mLookAt, "%%"); }
+               break;
+            case Player::BS_XOffset: CM_ROW(isLegacy ? "X Offset" : "Player X", "%.1f", VPUTOCM(viewSetup.mViewX), "cm"); break;
+            case Player::BS_YOffset: CM_ROW(isLegacy ? "Y Offset" : "Player Y", "%.1f", VPUTOCM(viewSetup.mViewY), "cm"); break;
+            case Player::BS_ZOffset: CM_ROW(isLegacy ? "Z Offset" : "Player Z", "%.1f", VPUTOCM(viewSetup.mViewZ), "cm"); CM_SKIP_LINE; break;
+
+            // View settings
+            case Player::BS_FOV: CM_ROW("Field Of View (overall scale)", "%.1f", viewSetup.mFOV, "deg"); break;
+            case Player::BS_Layback: CM_ROW("Layback", "%.1f", viewSetup.mLayback, ""); CM_SKIP_LINE; break;
+            case Player::BS_ViewHOfs: CM_ROW("Horizontal Offset", "%.1f", viewSetup.mViewHOfs, ""); break;
+            case Player::BS_ViewVOfs: CM_ROW("Vertical Offset", "%.1f", viewSetup.mViewVOfs, ""); CM_SKIP_LINE; break;
+            case Player::BS_WndTopXOfs: CM_ROW("Window Top X Ofs.", "%.1f", VPUTOCM(viewSetup.mWindowTopXOfs), "cm"); break;
+            case Player::BS_WndTopYOfs: CM_ROW("Window Top Y Ofs.", "%.1f", VPUTOCM(viewSetup.mWindowTopYOfs), "cm"); break;
+            case Player::BS_WndTopZOfs: CM_ROW("Window Top Z Ofs.", "%.1f", VPUTOCM(viewSetup.mWindowTopZOfs), "cm"); break;
+            case Player::BS_WndBottomXOfs: CM_ROW("Window Bottom X Ofs.", "%.1f", VPUTOCM(viewSetup.mWindowBottomXOfs), "cm"); break;
+            case Player::BS_WndBottomYOfs: CM_ROW("Window Bottom Y Ofs.", "%.1f", VPUTOCM(viewSetup.mWindowBottomYOfs), "cm"); break;
+            case Player::BS_WndBottomZOfs: CM_ROW("Window Bottom Z Ofs.", "%.1f", VPUTOCM(viewSetup.mWindowBottomZOfs), "cm"); CM_SKIP_LINE; break;
+
+            // Scene lighting
+            case Player::BS_LightEmissionScale: CM_ROW("Light Emission Scale", "%.0f", table->m_lightEmissionScale, ""); break;
+            case Player::BS_LightRange: CM_ROW("Light Range", "%.0f", VPUTOCM(table->m_lightRange), "cm"); break;
+            case Player::BS_LightHeight: CM_ROW("Light Height", "%.0f", VPUTOCM(table->m_lightHeight), "cm"); CM_SKIP_LINE; break;
+            case Player::BS_EnvEmissionScale: CM_ROW("Environment Emission", "%.1f", 100.f * table->m_envEmissionScale, "%%"); break;
+
+            // Stereo eye and anaglyph setup
+            case Player::BS_EyeSeparation:
+            {
+               CM_SKIP_LINE;
+               #ifdef ENABLE_SDL
+               CM_ROW("Eye distance", "%.0f", LoadValueWithDefault(regKey[RegName::Player], "Stereo3DEyeSeparation"s, 63.0f), "mm");
+               #else
+               CM_ROW(m_table->m_overwriteGlobalStereo3D ? "Max Separation [Table setting]" : "Max Separation [Application setting]", "%.3f", table->GetMaxSeparation(), "");
+               #endif
+               break;
+            }
+            case Player::BS_AnaglyphDesat: CM_ROW("Anaglyph desaturation", "%.0f", 100.f * m_player->m_global3DDesaturation, "%%"); break;
+            case Player::BS_AnaglyphContrast: CM_ROW("Anaglyph contrast", "%.0f", 100.f * m_player->m_global3DContrast, "%%"); break;
+            }
+            if (settings[i] == m_player->m_backdropSettingActive
+               || (m_player->m_backdropSettingActive == Player::BS_XYScale && (settings[i] == Player::BS_XScale || settings[i] == Player::BS_YScale)))
+               ImGui::PopStyleColor();
          }
-         if (settings[i] == m_player->m_backdropSettingActive
-            || (m_player->m_backdropSettingActive == Player::BS_XYScale && (settings[i] == Player::BS_XScale || settings[i] == Player::BS_YScale)))
-            ImGui::PopStyleColor();
+         #undef CM_ROW
+         #undef CM_SKIP_LINE
+         ImGui::EndTable();
       }
-      #undef CM_ROW
-      #undef CM_SKIP_LINE
-      ImGui::EndTable();
+   }
+   else
+   {
+      HelpTextCentered("Headtracking calibration");
+      ImGui::NewLine();
+      if (ImGui::BeginTable("HeadTracking", 4, ImGuiTableFlags_Borders))
+      {
+         ImGui::TableSetupColumn("Points", ImGuiTableColumnFlags_WidthStretch);
+         ImGui::TableSetupColumn("X", ImGuiTableColumnFlags_WidthFixed);
+         ImGui::TableSetupColumn("Y", ImGuiTableColumnFlags_WidthFixed);
+         ImGui::TableSetupColumn("Z", ImGuiTableColumnFlags_WidthFixed);
+         ImGui::TableHeadersRow();
+         ImGui::TableNextColumn();
+         for (int i = 0; i < nSettings; i++)
+         {
+            vec3 defaults[] = { vec3(CMTOVPU(0), CMTOVPU(30), CMTOVPU(80)), vec3(CMTOVPU(-15), CMTOVPU(10), CMTOVPU(5)), vec3(CMTOVPU(15), CMTOVPU(10), CMTOVPU(5)) };
+            if (settings[i] == Player::BS_HeadTrackP1X || settings[i] == Player::BS_HeadTrackP2X || settings[i] == Player::BS_HeadTrackP3X)
+            {
+               int index = settings[i] == Player::BS_HeadTrackP1X ? 1 : settings[i] == Player::BS_HeadTrackP2X ? 2 : 3;
+               ImGui::Text("Point #%d", index);
+               ImGui::TableNextColumn();
+               ImGui::Text("%6.2f", LoadValueWithDefault(regKey[RegName::Headtracking], "HeadtrackerP"s.append(std::to_string(index)).append("X"s), defaults[i].x));
+               ImGui::TableNextColumn();
+               ImGui::Text("%6.2f", LoadValueWithDefault(regKey[RegName::Headtracking], "HeadtrackerP"s.append(std::to_string(index)).append("Y"s), defaults[i].y));
+               ImGui::TableNextColumn();
+               ImGui::Text("%6.2f", LoadValueWithDefault(regKey[RegName::Headtracking], "HeadtrackerP"s.append(std::to_string(index)).append("Z"s), defaults[i].z));
+               ImGui::TableNextColumn();
+               ImGui::Text(" ");
+               ImGui::TableNextColumn();
+            }
+            if (settings[i] == m_player->m_backdropSettingActive)
+               ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 255, 0, 255));
+            switch (settings[i])
+            {
+            case Player::BS_HeadTrackP1X: ImGui::Text("%5.1f cm", VPUTOCM(LoadValueWithDefault(regKey[RegName::Headtracking], "PlayerP1X"s, defaults[0].x))); ImGui::TableNextColumn(); break;
+            case Player::BS_HeadTrackP1Y: ImGui::Text("%5.1f cm", VPUTOCM(LoadValueWithDefault(regKey[RegName::Headtracking], "PlayerP1Y"s, defaults[0].y))); ImGui::TableNextColumn(); break;
+            case Player::BS_HeadTrackP1Z: ImGui::Text("%5.1f cm", VPUTOCM(LoadValueWithDefault(regKey[RegName::Headtracking], "PlayerP1Z"s, defaults[0].z))); ImGui::TableNextColumn(); break;
+            case Player::BS_HeadTrackP2X: ImGui::Text("%5.1f cm", VPUTOCM(LoadValueWithDefault(regKey[RegName::Headtracking], "PlayerP2X"s, defaults[1].x))); ImGui::TableNextColumn(); break;
+            case Player::BS_HeadTrackP2Y: ImGui::Text("%5.1f cm", VPUTOCM(LoadValueWithDefault(regKey[RegName::Headtracking], "PlayerP2Y"s, defaults[1].y))); ImGui::TableNextColumn(); break;
+            case Player::BS_HeadTrackP2Z: ImGui::Text("%5.1f cm", VPUTOCM(LoadValueWithDefault(regKey[RegName::Headtracking], "PlayerP2Z"s, defaults[1].z))); ImGui::TableNextColumn(); break;
+            case Player::BS_HeadTrackP3X: ImGui::Text("%5.1f cm", VPUTOCM(LoadValueWithDefault(regKey[RegName::Headtracking], "PlayerP3X"s, defaults[2].x))); ImGui::TableNextColumn(); break;
+            case Player::BS_HeadTrackP3Y: ImGui::Text("%5.1f cm", VPUTOCM(LoadValueWithDefault(regKey[RegName::Headtracking], "PlayerP3Y"s, defaults[2].y))); ImGui::TableNextColumn(); break;
+            case Player::BS_HeadTrackP3Z: ImGui::Text("%5.1f cm", VPUTOCM(LoadValueWithDefault(regKey[RegName::Headtracking], "PlayerP3Z"s, defaults[2].z))); ImGui::TableNextColumn(); break;
+            }
+            if (settings[i] == m_player->m_backdropSettingActive)
+               ImGui::PopStyleColor();
+         }
+         ImGui::EndTable();
+         vec3 live, head;
+         m_player->m_pin3d.m_headTracker.Update(head);
+         m_player->m_pin3d.m_headTracker.GetLastAcquired(live);
+         ImGui::Text("Live at    X: %7.2f  Y: %7.2f  Z: %7.2f ", live.x, live.y, live.z);
+         ImGui::Text("Head at    X: %4.0f cm Y: %4.0f cm Z: %4.0f cm", head.x, head.y, head.z);
+         ImGui::NewLine();
+      }
    }
 
    if (isLegacy)
@@ -1054,7 +1116,7 @@ void LiveUI::UpdateCameraModeUI()
       view.Invert();
       vec3 pos = view.GetOrthoNormalPos();
       ImGui::NewLine();
-      ImGui::Text("Camera at X: %.0f Y: %.0f Z: %.0f (cm), Rotation: %.2f", 
+      ImGui::Text("Camera at X: %.0f cm Y: %.0f cm Z: %.0f cm, Rotation: %.2f", 
          VPUTOCM(pos.x - 0.5f * g_pplayer->m_ptable->m_right), 
          VPUTOCM(pos.y - g_pplayer->m_ptable->m_bottom), 
          VPUTOCM(pos.z), viewSetup.mViewportRotation);
@@ -1062,7 +1124,10 @@ void LiveUI::UpdateCameraModeUI()
 
    ImGui::NewLine();
    vector<string> infos;
-   infos.push_back("Plunger Key:   Reset POV to defaults"s);
+   if (m_player->m_backdropSettingActive < Player::BS_HeadTrackP1X)
+      infos.push_back("Plunger Key:   Reset POV to defaults"s);
+   else
+      infos.push_back("Plunger Key:   Acquire calibration point"s);
    if (m_app->m_povEdit)
    {
       infos.push_back("Start Key:   Export POV file and quit"s);

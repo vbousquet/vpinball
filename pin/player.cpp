@@ -3762,6 +3762,7 @@ void Player::UpdateBackdropSettings(const bool up)
 {
    const float thesign = !up ? -0.2f : 0.2f;
    ViewSetup &viewSetup = m_ptable->mViewSetups[m_ptable->m_BG_current_set];
+   vec3 defaults[] = { vec3(CMTOVPU(0), CMTOVPU(30), CMTOVPU(80)), vec3(CMTOVPU(-15), CMTOVPU(10), CMTOVPU(5)), vec3(CMTOVPU(15), CMTOVPU(10), CMTOVPU(5)) };
    switch (m_backdropSettingActive)
    {
    // View setup settings
@@ -3788,6 +3789,18 @@ void Player::UpdateBackdropSettings(const bool up)
    case BS_WndBottomXOfs: viewSetup.mWindowBottomXOfs += 5.f * thesign; break;
    case BS_WndBottomYOfs: viewSetup.mWindowBottomYOfs += 5.f * thesign; break;
    case BS_WndBottomZOfs: viewSetup.mWindowBottomZOfs += 5.f * thesign; break;
+
+   case BS_HeadTrackP1X: SaveValue(regKey[RegName::Headtracking], "PlayerP1X"s, LoadValueWithDefault(regKey[RegName::Headtracking], "PlayerP1X"s, defaults[0].x) + 5.f * thesign); break;
+   case BS_HeadTrackP1Y: SaveValue(regKey[RegName::Headtracking], "PlayerP1Y"s, LoadValueWithDefault(regKey[RegName::Headtracking], "PlayerP1Y"s, defaults[0].y) + 5.f * thesign); break;
+   case BS_HeadTrackP1Z: SaveValue(regKey[RegName::Headtracking], "PlayerP1Z"s, LoadValueWithDefault(regKey[RegName::Headtracking], "PlayerP1Z"s, defaults[0].z) + 5.f * thesign); break;
+
+   case BS_HeadTrackP2X: SaveValue(regKey[RegName::Headtracking], "PlayerP2X"s, LoadValueWithDefault(regKey[RegName::Headtracking], "PlayerP2X"s, defaults[1].x) + 5.f * thesign); break;
+   case BS_HeadTrackP2Y: SaveValue(regKey[RegName::Headtracking], "PlayerP2Y"s, LoadValueWithDefault(regKey[RegName::Headtracking], "PlayerP2Y"s, defaults[1].y) + 5.f * thesign); break;
+   case BS_HeadTrackP2Z: SaveValue(regKey[RegName::Headtracking], "PlayerP2Z"s, LoadValueWithDefault(regKey[RegName::Headtracking], "PlayerP2Z"s, defaults[1].z) + 5.f * thesign); break;
+
+   case BS_HeadTrackP3X: SaveValue(regKey[RegName::Headtracking], "PlayerP3X"s, LoadValueWithDefault(regKey[RegName::Headtracking], "PlayerP3X"s, defaults[2].x) + 5.f * thesign); break;
+   case BS_HeadTrackP3Y: SaveValue(regKey[RegName::Headtracking], "PlayerP3Y"s, LoadValueWithDefault(regKey[RegName::Headtracking], "PlayerP3Y"s, defaults[2].y) + 5.f * thesign); break;
+   case BS_HeadTrackP3Z: SaveValue(regKey[RegName::Headtracking], "PlayerP3Z"s, LoadValueWithDefault(regKey[RegName::Headtracking], "PlayerP3Z"s, defaults[2].z) + 5.f * thesign); break;
 
    // Stereo view settings
    case BS_EyeSeparation:
@@ -3866,6 +3879,8 @@ void Player::UpdateBackdropSettings(const bool up)
       assert(!"UpdateBackdropSettings unhandled case");
       break;
    }
+   if (m_backdropSettingActive >= Player::BS_HeadTrackP1X && m_backdropSettingActive <= Player::BS_HeadTrackP3Z)
+      m_pin3d.m_headTracker.UpdateCalibration();
 }
 
 void Player::LockForegroundWindow(const bool enable)
@@ -4013,7 +4028,8 @@ void Player::Render()
    #endif
    if (m_headTracking)
       // #ravarcade: UpdateBAMHeadTracking will set proj/view matrix to add BAM view and head tracking
-      m_pin3d.UpdateBAMHeadTracking();
+      //m_pin3d.UpdateBAMHeadTracking();
+      m_pin3d.UpdateView();
    else if (m_cameraMode)
       m_pin3d.InitLayout();
 

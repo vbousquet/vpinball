@@ -677,6 +677,24 @@ Matrix3D ComputeLaybackTransform(const float layback)
    return matTrans;
 }
 
+void Pin3D::UpdateView()
+{
+   vec3 position;
+   if (m_headTracker.Update(position))
+   {
+      ViewSetup viewSetup = g_pplayer->m_ptable->mViewSetups[g_pplayer->m_ptable->m_BG_current_set];
+      #ifdef ENABLE_SDL
+      bool stereo = m_stereo3D != STEREO_OFF;
+      #else
+      bool stereo = false;
+      #endif
+      viewSetup.mViewX = position.x;
+      viewSetup.mViewY = position.y;
+      viewSetup.mViewZ = position.z;
+      viewSetup.ComputeMVP(g_pplayer->m_ptable, m_viewPort.Width, m_viewPort.Height, stereo, *m_mvp);
+      InitLights();
+   }
+}
 
 // Setup the tables camera / rotation / scale.
 // 

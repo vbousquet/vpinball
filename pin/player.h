@@ -424,6 +424,7 @@ public:
       BS_ViewMode, BS_LookAt, BS_FOV, BS_Layback, BS_ViewHOfs, BS_ViewVOfs, BS_XYScale, BS_XScale, BS_YScale, BS_XOffset, BS_YOffset, BS_ZOffset,
       BS_WndTopXOfs, BS_WndTopYOfs, BS_WndTopZOfs, BS_WndBottomXOfs, BS_WndBottomYOfs, BS_WndBottomZOfs,
       BS_LightEmissionScale, BS_LightRange, BS_LightHeight, BS_EnvEmissionScale, BS_EyeSeparation, BS_AnaglyphDesat, BS_AnaglyphContrast,
+      BS_HeadTrackP1X, BS_HeadTrackP1Y, BS_HeadTrackP1Z, BS_HeadTrackP2X, BS_HeadTrackP2Y, BS_HeadTrackP2Z, BS_HeadTrackP3X, BS_HeadTrackP3Y, BS_HeadTrackP3Z,
    };
    static constexpr Player::BackdropSetting mLegacyViewSettings[] = {
       BS_ViewMode, BS_LookAt, BS_FOV, BS_Layback, BS_XYScale, BS_XScale, BS_YScale, BS_XOffset, BS_YOffset, BS_ZOffset,
@@ -434,6 +435,22 @@ public:
       BS_LightEmissionScale, BS_LightRange, BS_LightHeight, BS_EnvEmissionScale, BS_EyeSeparation, BS_AnaglyphDesat, BS_AnaglyphContrast,
    };
    static constexpr Player::BackdropSetting mWindowViewSettings[] = {
+      BS_ViewMode, BS_ViewHOfs, BS_ViewVOfs, BS_XYScale, BS_XScale, BS_YScale, BS_XOffset, BS_YOffset, BS_ZOffset, 
+      BS_WndTopXOfs, BS_WndTopYOfs, BS_WndTopZOfs, BS_WndBottomXOfs, BS_WndBottomYOfs, BS_WndBottomZOfs,
+      BS_LightEmissionScale, BS_LightRange, BS_LightHeight, BS_EnvEmissionScale, BS_EyeSeparation, BS_AnaglyphDesat, BS_AnaglyphContrast,
+   };
+   static constexpr Player::BackdropSetting mHeadTrackedLegacyViewSettings[] = {
+      BS_HeadTrackP1X, BS_HeadTrackP1Y, BS_HeadTrackP1Z, BS_HeadTrackP2X, BS_HeadTrackP2Y, BS_HeadTrackP2Z, BS_HeadTrackP3X, BS_HeadTrackP3Y, BS_HeadTrackP3Z,
+      BS_ViewMode, BS_LookAt, BS_FOV, BS_Layback, BS_XYScale, BS_XScale, BS_YScale, BS_XOffset, BS_YOffset, BS_ZOffset,
+      BS_LightEmissionScale, BS_LightRange, BS_LightHeight, BS_EnvEmissionScale, BS_EyeSeparation, BS_AnaglyphDesat, BS_AnaglyphContrast,
+   };
+   static constexpr Player::BackdropSetting mHeadTrackedCameraViewSettings[] = {
+      BS_HeadTrackP1X, BS_HeadTrackP1Y, BS_HeadTrackP1Z, BS_HeadTrackP2X, BS_HeadTrackP2Y, BS_HeadTrackP2Z, BS_HeadTrackP3X, BS_HeadTrackP3Y, BS_HeadTrackP3Z,
+      BS_ViewMode, BS_FOV, BS_ViewHOfs, BS_ViewVOfs, BS_XYScale, BS_XScale, BS_YScale, BS_LookAt, BS_XOffset, BS_YOffset, BS_ZOffset,
+      BS_LightEmissionScale, BS_LightRange, BS_LightHeight, BS_EnvEmissionScale, BS_EyeSeparation, BS_AnaglyphDesat, BS_AnaglyphContrast,
+   };
+   static constexpr Player::BackdropSetting mHeadTrackedWindowViewSettings[] = {
+      BS_HeadTrackP1X, BS_HeadTrackP1Y, BS_HeadTrackP1Z, BS_HeadTrackP2X, BS_HeadTrackP2Y, BS_HeadTrackP2Z, BS_HeadTrackP3X, BS_HeadTrackP3Y, BS_HeadTrackP3Z,
       BS_ViewMode, BS_ViewHOfs, BS_ViewVOfs, BS_XYScale, BS_XScale, BS_YScale, BS_XOffset, BS_YOffset, BS_ZOffset, 
       BS_WndTopXOfs, BS_WndTopYOfs, BS_WndTopZOfs, BS_WndBottomXOfs, BS_WndBottomYOfs, BS_WndBottomZOfs,
       BS_LightEmissionScale, BS_LightRange, BS_LightHeight, BS_EnvEmissionScale, BS_EyeSeparation, BS_AnaglyphDesat, BS_AnaglyphContrast,

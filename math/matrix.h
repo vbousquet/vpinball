@@ -41,6 +41,15 @@ public:
       _21 = __21; _22 = __22; _23 = __23;
       _31 = __31; _32 = __32; _33 = __33;
    }
+   string ToString() const
+   {
+      std::stringstream ss;
+      ss << std::fixed << std::setprecision(2);
+      ss << "[ " << std::setw(8) << _11 << " " << std::setw(8) << _12 << " " << std::setw(8) << _13 << "\n"
+         << "  " << std::setw(8) << _21 << " " << std::setw(8) << _22 << " " << std::setw(8) << _23 << "\n"
+         << "  " << std::setw(8) << _31 << " " << std::setw(8) << _32 << " " << std::setw(8) << _33 << "\n";
+      return ss.str();
+   }
 
    void scaleX(const float factor)
    {
@@ -175,15 +184,17 @@ public:
       m_d[2][0] = vX.z; m_d[2][1] = vY.z; m_d[2][2] = vZ.z;
    }
 
-   /*void Transpose(Matrix3 * const pmatOut) const
+   void Transpose()
    {
+      Matrix3 trans;
       for (int i = 0; i < 3; ++i)
       {
-         pmatOut->m_d[0][i] = m_d[i][0];
-         pmatOut->m_d[1][i] = m_d[i][1];
-         pmatOut->m_d[2][i] = m_d[i][2];
+         trans.m_d[0][i] = m_d[i][0];
+         trans.m_d[1][i] = m_d[i][1];
+         trans.m_d[2][i] = m_d[i][2];
       }
-   }*/
+      (*this) = trans;
+   }
 
    void Identity(const float value = 1.0f)
    {
@@ -245,6 +256,7 @@ public:
          float _31, _32, _33;
       };
       float m_d[3][3];
+      float m[9];
    };
 };
 
@@ -268,11 +280,11 @@ public:
    string ToString() const
    {
       std::stringstream ss;
-      ss << std::fixed << std::setw(8) << std::setprecision(2);
-      ss << "[ " << _11 << " " << _12 << " " << _13 << " " << _14 << "\n"
-         << "  " << _21 << " " << _22 << " " << _23 << " " << _24 << "\n"
-         << "  " << _31 << " " << _32 << " " << _33 << " " << _34 << "\n"
-         << "  " << _41 << " " << _42 << " " << _43 << " " << _44 << "]\n";
+      ss << std::fixed << std::setprecision(2);
+      ss << "[ " << std::setw(8) << _11 << " " << std::setw(8) << _12 << " " << std::setw(8) << _13 << " " << std::setw(8) << _14 << "\n"
+         << "  " << std::setw(8) << _21 << " " << std::setw(8) << _22 << " " << std::setw(8) << _23 << " " << std::setw(8) << _24 << "\n"
+         << "  " << std::setw(8) << _31 << " " << std::setw(8) << _32 << " " << std::setw(8) << _33 << " " << std::setw(8) << _34 << "\n"
+         << "  " << std::setw(8) << _41 << " " << std::setw(8) << _42 << " " << std::setw(8) << _43 << " " << std::setw(8) << _44 << "]\n";
       return ss.str();
    }
 

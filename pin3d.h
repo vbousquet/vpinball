@@ -3,6 +3,7 @@
 #include "inc/gpuprofiler.h"
 #include "RenderDevice.h"
 #include "Texture.h"
+#include "HeadTracker.h"
 #include "backGlass.h"
 
 class ModelViewProj
@@ -99,6 +100,8 @@ public:
    HRESULT InitPin3D(const bool fullScreen, const int width, const int height, const int colordepth, int &refreshrate, const int VSync, const float AAfactor, const StereoMode stereo3D, const unsigned int FXAA, const bool sharpen, const bool ss_refl);
 
    void InitLayout(const float xpixoff = 0.f, const float ypixoff = 0.f);
+   void UpdateBAMHeadTracking(); // #ravarcade: UpdateBAMHeadTracking will set proj/view matrix to add BAM view and head tracking
+   void UpdateView();
 
    void TransformVertices(const Vertex3D_NoTex2 * const __restrict rgv, const WORD * const __restrict rgi, const int count, Vertex2D * const __restrict rgvout) const;
    void TransformVertices(const Vertex3Ds* const __restrict rgv, const WORD* const __restrict rgi, const int count, Vertex2D* const __restrict rgvout) const;
@@ -117,6 +120,8 @@ public:
 
    BackGlass* m_backGlass;
 
+   HeadTracker m_headTracker;
+
 private:
    void InitRenderState(RenderDevice * const pd3dDevice);
    void InitPrimaryRenderState();
@@ -124,7 +129,6 @@ private:
    HRESULT InitPrimary(const bool fullScreen, const int colordepth, int &refreshrate, const int VSync, const float AAfactor, const StereoMode stereo3D, const unsigned int FXAA, const bool sharpen, const bool ss_refl);
 
    StereoMode m_stereo3D;
-
    ModelViewProj* m_mvp = nullptr; // Store the active Model / View / Projection
 
    #ifdef ENABLE_SDL
@@ -154,6 +158,4 @@ public:
 
    ViewPort m_viewPort; // Viewport of the screen output (different from render size for VR, anaglyph, superscaling,...)
    float m_AAfactor;
-
-   void UpdateBAMHeadTracking();                 // #ravarcade: UpdateBAMHeadTracking will set proj/view matrix to add BAM view and head tracking
 };

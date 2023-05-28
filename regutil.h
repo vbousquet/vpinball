@@ -15,6 +15,7 @@ public:
    static constexpr unsigned int RecentDir = 4;
    static constexpr unsigned int Version = 5;
    static constexpr unsigned int CVEdit = 6;
+   static constexpr unsigned int Headtracking = 28;
 
    // Optional user defaults for each element
    static constexpr unsigned int DefaultPropsBumper = 7;
@@ -40,7 +41,7 @@ public:
 
    static constexpr unsigned int DefaultCamera = 27;
 
-   static constexpr unsigned int Num = 28;
+   static constexpr unsigned int Num = 29;
 };
 
 static const string regKey[RegName::Num] =
@@ -49,8 +50,8 @@ static const string regKey[RegName::Num] =
       "DefaultProps\\Bumper"s, "DefaultProps\\Decal"s, "DefaultProps\\EMReel"s, "DefaultProps\\Flasher"s, "DefaultProps\\Flipper"s,
       "DefaultProps\\Gate"s, "DefaultProps\\HitTarget"s, "DefaultProps\\Kicker"s, "DefaultProps\\Light"s, "DefaultProps\\LightSequence"s,
       "DefaultProps\\Plunger"s, "DefaultProps\\Primitive"s, "DefaultProps\\Ramp"s, "DefaultProps\\Rubber"s, "DefaultProps\\Spinner"s,
-      "DefaultProps\\Wall"s, "DefaultProps\\Target"s, "DefaultProps\\TextBox"s, "DefaultProps\\Timer"s, "DefaultProps\\Trigger"s,
-      "Defaults\\Camera"s
+      "DefaultProps\\Wall"s, "DefaultProps\\Target"s, "DefaultProps\\TextBox"s, "DefaultProps\\Timer"s, "DefaultProps\\Trigger"s, "Defaults\\Camera"s, 
+      "HeadTracking"s
    };
 
 

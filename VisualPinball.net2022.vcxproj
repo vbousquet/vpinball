@@ -811,6 +811,7 @@ copy "$(TargetPath)" "%25VPIN_DIR%25"
     <ClCompile Include="dialogs\VideoOptionsDialog.cpp" />
     <ClCompile Include="dialogs\VROptionsDialog.cpp" />
     <ClCompile Include="flasher.cpp" />
+    <ClCompile Include="HeadTracker.cpp" />
     <ClCompile Include="imgui\ImGuizmo.cpp" />
     <ClCompile Include="imgui\imgui_stdlib.cpp" />
     <ClCompile Include="inc\BAM\BAMView.cpp" />
@@ -1213,6 +1214,7 @@ copy "$(TargetPath)" "%25VPIN_DIR%25"
     <ClInclude Include="flipper.h" />
     <ClInclude Include="gate.h" />
     <ClInclude Include="hash.h" />
+    <ClInclude Include="HeadTracker.h" />
     <ClInclude Include="helpers.h" />
     <ClInclude Include="hid.h" />
     <ClInclude Include="hitrectsur.h" />

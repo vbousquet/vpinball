@@ -1028,61 +1028,76 @@ void PinInput::FireKeyEvent(const int dispid, int keycode)
       }
       else if (keycode == g_pplayer->m_rgKeys[ePlungerKey])
       {
-         // Reset to default values
          PinTable* const table = g_pplayer->m_ptable;
          ViewSetupID id = table->m_BG_current_set;
          ViewSetup &viewSetup = table->mViewSetups[id];
-         // Default player position (90cm above, 30 cm away)
-         table->m_BG_scalez[id] = 1.f;
-         if (viewSetup.mViewportRotation != 0.f && viewSetup.mViewportRotation != 90.f && viewSetup.mViewportRotation != 180.f && viewSetup.mViewportRotation != 270.f)
-            viewSetup.mViewportRotation = 0.f;
-         const bool portrait = g_pplayer->m_wnd_width < g_pplayer->m_wnd_height;
-         switch (id)
+         if (g_pplayer->m_backdropSettingActive >= Player::BS_HeadTrackP1X && g_pplayer->m_backdropSettingActive <= Player::BS_HeadTrackP3Z)
          {
-         case BG_DESKTOP:
-         case BG_FSS:
-            viewSetup.mViewportRotation = 0.f;
-            if (id == BG_DESKTOP && !portrait)
-            { // Desktop
-               viewSetup.mMode = (ViewLayoutMode)LoadValueWithDefault(regKey[RegName::DefaultCamera], "DesktopMode"s, VLM_CAMERA);
-               viewSetup.mViewX = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "DesktopCamX"s, 0.f));
-               viewSetup.mViewY = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "DesktopCamY"s, 20.f));
-               viewSetup.mViewZ = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "DesktopCamZ"s, 70.f));
-               viewSetup.mViewportScaleX = LoadValueWithDefault(regKey[RegName::DefaultCamera], "DesktopScaleX"s, 1.f);
-               viewSetup.mViewportScaleY = LoadValueWithDefault(regKey[RegName::DefaultCamera], "DesktopScaleY"s, 1.f);
-               viewSetup.mFOV = LoadValueWithDefault(regKey[RegName::DefaultCamera], "DesktopFov"s, 50.f);
-               viewSetup.mLookAt = LoadValueWithDefault(regKey[RegName::DefaultCamera], "DesktopLookAt"s, 25.0f);
-               viewSetup.mViewVOfs = LoadValueWithDefault(regKey[RegName::DefaultCamera], "DesktopViewVOfs"s, 14.f);
-            }
-            else
-            { // FSS
-               viewSetup.mMode = (ViewLayoutMode)LoadValueWithDefault(regKey[RegName::DefaultCamera], "FSSMode"s, VLM_CAMERA);
-               viewSetup.mViewX = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "FSSCamX"s, 0.f));
-               viewSetup.mViewY = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "FSSCamY"s, 20.f));
-               viewSetup.mViewZ = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "FSSCamZ"s, 70.f));
-               viewSetup.mViewportScaleX = LoadValueWithDefault(regKey[RegName::DefaultCamera], "FSSScaleX"s, 1.f);
-               viewSetup.mViewportScaleY = LoadValueWithDefault(regKey[RegName::DefaultCamera], "FSSScaleY"s, 1.f);
-               viewSetup.mFOV = LoadValueWithDefault(regKey[RegName::DefaultCamera], "FSSFov"s, 77.f);
-               viewSetup.mLookAt = LoadValueWithDefault(regKey[RegName::DefaultCamera], "FSSLookAt"s, 50.0f);
-               viewSetup.mViewVOfs = LoadValueWithDefault(regKey[RegName::DefaultCamera], "FSSViewVOfs"s, 22.f);
-            }
-            break;
-         case BG_FULLSCREEN:
-            viewSetup.mViewportRotation = portrait ? 0.f : 270.f;
-            viewSetup.mMode = (ViewLayoutMode) LoadValueWithDefault(regKey[RegName::DefaultCamera], "CabinetMode"s, VLM_WINDOW);
-            viewSetup.mViewX = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "CabinetCamX"s, 0.f));
-            viewSetup.mViewY = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "CabinetCamY"s, 20.f));
-            viewSetup.mViewZ = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "CabinetCamZ"s, 80.f));
-            viewSetup.mViewportScaleX = LoadValueWithDefault(regKey[RegName::DefaultCamera], "CabinetScaleX"s, 1.2f);
-            viewSetup.mViewportScaleY = LoadValueWithDefault(regKey[RegName::DefaultCamera], "CabinetScaleY"s, 1.2f);
-            viewSetup.mFOV = LoadValueWithDefault(regKey[RegName::DefaultCamera], "CabinetFov"s, 77.f);
-            viewSetup.mLookAt = LoadValueWithDefault(regKey[RegName::DefaultCamera], "CabinetLookAt"s, 25.0f);
-            viewSetup.mViewVOfs = LoadValueWithDefault(regKey[RegName::DefaultCamera], "CabinetViewVOfs"s, 0.f);
-            break;
+            // For headtracking calibration, acquire position
+            vec3 pos;
+            g_pplayer->m_pin3d.m_headTracker.Update(pos);
+            g_pplayer->m_pin3d.m_headTracker.GetLastAcquired(pos);
+            int index = g_pplayer->m_backdropSettingActive <= Player::BS_HeadTrackP1Z ? 1 : g_pplayer->m_backdropSettingActive <= Player::BS_HeadTrackP2Z ? 2 : 3;
+            SaveValue(regKey[RegName::Headtracking], "HeadtrackerP"s.append(std::to_string(index)).append("X"s), pos.x);
+            SaveValue(regKey[RegName::Headtracking], "HeadtrackerP"s.append(std::to_string(index)).append("Y"s), pos.y);
+            SaveValue(regKey[RegName::Headtracking], "HeadtrackerP"s.append(std::to_string(index)).append("Z"s), pos.z);
+            g_pplayer->m_pin3d.m_headTracker.UpdateCalibration();
          }
-         g_pplayer->m_pin3d.m_cam.x = 0.f;
-         g_pplayer->m_pin3d.m_cam.y = 0.f;
-         g_pplayer->m_pin3d.m_cam.z = 0.f;
+         else
+         {
+            // Reset to default values
+            // Default player position (90cm above, 30 cm away)
+            table->m_BG_scalez[id] = 1.f;
+            if (viewSetup.mViewportRotation != 0.f && viewSetup.mViewportRotation != 90.f && viewSetup.mViewportRotation != 180.f && viewSetup.mViewportRotation != 270.f)
+               viewSetup.mViewportRotation = 0.f;
+            const bool portrait = g_pplayer->m_wnd_width < g_pplayer->m_wnd_height;
+            switch (id)
+            {
+            case BG_DESKTOP:
+            case BG_FSS:
+               viewSetup.mViewportRotation = 0.f;
+               if (id == BG_DESKTOP && !portrait)
+               { // Desktop
+                  viewSetup.mMode = (ViewLayoutMode)LoadValueWithDefault(regKey[RegName::DefaultCamera], "DesktopMode"s, VLM_CAMERA);
+                  viewSetup.mViewX = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "DesktopCamX"s, 0.f));
+                  viewSetup.mViewY = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "DesktopCamY"s, 20.f));
+                  viewSetup.mViewZ = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "DesktopCamZ"s, 70.f));
+                  viewSetup.mViewportScaleX = LoadValueWithDefault(regKey[RegName::DefaultCamera], "DesktopScaleX"s, 1.f);
+                  viewSetup.mViewportScaleY = LoadValueWithDefault(regKey[RegName::DefaultCamera], "DesktopScaleY"s, 1.f);
+                  viewSetup.mFOV = LoadValueWithDefault(regKey[RegName::DefaultCamera], "DesktopFov"s, 50.f);
+                  viewSetup.mLookAt = LoadValueWithDefault(regKey[RegName::DefaultCamera], "DesktopLookAt"s, 25.0f);
+                  viewSetup.mViewVOfs = LoadValueWithDefault(regKey[RegName::DefaultCamera], "DesktopViewVOfs"s, 14.f);
+               }
+               else
+               { // FSS
+                  viewSetup.mMode = (ViewLayoutMode)LoadValueWithDefault(regKey[RegName::DefaultCamera], "FSSMode"s, VLM_CAMERA);
+                  viewSetup.mViewX = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "FSSCamX"s, 0.f));
+                  viewSetup.mViewY = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "FSSCamY"s, 20.f));
+                  viewSetup.mViewZ = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "FSSCamZ"s, 70.f));
+                  viewSetup.mViewportScaleX = LoadValueWithDefault(regKey[RegName::DefaultCamera], "FSSScaleX"s, 1.f);
+                  viewSetup.mViewportScaleY = LoadValueWithDefault(regKey[RegName::DefaultCamera], "FSSScaleY"s, 1.f);
+                  viewSetup.mFOV = LoadValueWithDefault(regKey[RegName::DefaultCamera], "FSSFov"s, 77.f);
+                  viewSetup.mLookAt = LoadValueWithDefault(regKey[RegName::DefaultCamera], "FSSLookAt"s, 50.0f);
+                  viewSetup.mViewVOfs = LoadValueWithDefault(regKey[RegName::DefaultCamera], "FSSViewVOfs"s, 22.f);
+               }
+               break;
+            case BG_FULLSCREEN:
+               viewSetup.mViewportRotation = portrait ? 0.f : 270.f;
+               viewSetup.mMode = (ViewLayoutMode)LoadValueWithDefault(regKey[RegName::DefaultCamera], "CabinetMode"s, VLM_WINDOW);
+               viewSetup.mViewX = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "CabinetCamX"s, 0.f));
+               viewSetup.mViewY = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "CabinetCamY"s, 20.f));
+               viewSetup.mViewZ = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "CabinetCamZ"s, 80.f));
+               viewSetup.mViewportScaleX = LoadValueWithDefault(regKey[RegName::DefaultCamera], "CabinetScaleX"s, 1.2f);
+               viewSetup.mViewportScaleY = LoadValueWithDefault(regKey[RegName::DefaultCamera], "CabinetScaleY"s, 1.2f);
+               viewSetup.mFOV = LoadValueWithDefault(regKey[RegName::DefaultCamera], "CabinetFov"s, 77.f);
+               viewSetup.mLookAt = LoadValueWithDefault(regKey[RegName::DefaultCamera], "CabinetLookAt"s, 25.0f);
+               viewSetup.mViewVOfs = LoadValueWithDefault(regKey[RegName::DefaultCamera], "CabinetViewVOfs"s, 0.f);
+               break;
+            }
+            g_pplayer->m_pin3d.m_cam.x = 0.f;
+            g_pplayer->m_pin3d.m_cam.y = 0.f;
+            g_pplayer->m_pin3d.m_cam.z = 0.f;
+         }
       }
       else if (keycode == g_pplayer->m_rgKeys[eAddCreditKey])
       {
@@ -1111,12 +1126,15 @@ void PinInput::FireKeyEvent(const int dispid, int keycode)
          ViewSetup& viewSetup = g_pplayer->m_ptable->mViewSetups[g_pplayer->m_ptable->m_BG_current_set];
          bool isStereo = g_pplayer->m_stereo3Denabled && g_pplayer->m_stereo3D != STEREO_OFF && g_pplayer->m_stereo3D != STEREO_VR;
          bool isAnaglyph = isStereo && g_pplayer->m_stereo3D >= STEREO_ANAGLYPH_RC && g_pplayer->m_stereo3D <= STEREO_ANAGLYPH_AB;
-         const Player::BackdropSetting *settings = viewSetup.mMode == VLM_LEGACY ? Player::mLegacyViewSettings
-                                                 : viewSetup.mMode == VLM_CAMERA ? Player::mCameraViewSettings
-                                                                                 : Player::mWindowViewSettings; 
-         int nSettings = (viewSetup.mMode == VLM_LEGACY        ? sizeof(Player::mLegacyViewSettings)
-                               : viewSetup.mMode == VLM_CAMERA ? sizeof(Player::mCameraViewSettings)
-                                                               : sizeof(Player::mWindowViewSettings))/ sizeof(Player::BackdropSetting);
+         bool isLegacy = viewSetup.mMode == VLM_LEGACY;
+         bool isCamera = viewSetup.mMode == VLM_CAMERA;
+         bool isWindow = viewSetup.mMode == VLM_WINDOW;
+         const Player::BackdropSetting *settings = g_pplayer->m_headTracking ?
+              isLegacy ? Player::mHeadTrackedLegacyViewSettings : isCamera ? Player::mHeadTrackedCameraViewSettings : Player::mHeadTrackedWindowViewSettings
+            : isLegacy ? Player::mLegacyViewSettings : isCamera ? Player::mCameraViewSettings : Player::mWindowViewSettings;
+         int nSettings = g_pplayer->m_headTracking ?
+              (isLegacy ? sizeof(Player::mHeadTrackedLegacyViewSettings) : isCamera ? sizeof(Player::mHeadTrackedCameraViewSettings) : sizeof(Player::mHeadTrackedWindowViewSettings)) / sizeof(Player::BackdropSetting)
+            : (isLegacy ? sizeof(Player::mLegacyViewSettings) : isCamera ? sizeof(Player::mCameraViewSettings) : sizeof(Player::mWindowViewSettings)) / sizeof(Player::BackdropSetting);
          nSettings = isAnaglyph ? nSettings : isStereo ? (nSettings - 2) : (nSettings - 3);
          for (int i = 0; i < nSettings; i++)
             if (settings[i] == g_pplayer->m_backdropSettingActive)
