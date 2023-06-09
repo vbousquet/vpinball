@@ -8,7 +8,7 @@ uniform vec4 balls[NUM_BALLS];
 const float4 balls[NUM_BALLS];
 #endif
 
-// Raytraced ball shadows
+// Raytraced ball shadows for point lights
 float get_light_ball_shadow(const float3 light_pos, const float3 light_dir, const float light_dist)
 {
 	float result = 1.0;
@@ -30,6 +30,39 @@ float get_light_ball_shadow(const float3 light_pos, const float3 light_dir, cons
 			const float light_inside_ball_sqr = saturate((light_ball_ray.x*light_ball_ray.x + light_ball_ray.y*light_ball_ray.y)/(ball_r*ball_r)); // fade to 1 if light inside ball
 			result *= 1.0 + light_inside_ball_sqr*(-1.0 + 0.1 + 0.9 * smoothstep(ball_r-smoothness, ball_r+smoothness, d2));
 		}
+	}
+	return result;
+}
+
+
+// Raytraced ball shadows for environment lighting (IBL)
+float get_env_ball_shadow(const float3 table_pos, const float3 N)
+{
+	float result = 1.0;
+	for (int i = 0; i < NUM_BALLS; i++)
+	{
+		const float ball_r = balls[i].w;
+		BRANCH if (ball_r == 0.0) // early out as soon as first 'invalid' ball is detected
+			return result;
+		const float3 ball_pos = balls[i].xyz;
+		const float3 ball_ray = ball_pos - table_pos;
+		const float ball_dist = length(ball_ray);
+		
+		// If point is inside ball, then it is completely shadowed
+		if (ball_dist < ball_r)
+			return 0.0;
+		
+		// Evaluate (Half) solid angle of ball from the table point
+		const float solid_angle = asin(ball_r / ball_dist);
+		
+		// Opacify based on the rate between ball solid angle (occluded) and PI (full unoccluded)
+		//result *= 1.0 - 2.0 * (2.0 * solid_angle / PI);
+
+		// Limit occlusion to the part of the solid angle in front of the object
+		const float opacity_angle = acos(dot(N, ball_ray / ball_dist));
+		const float min_angle = clamp(opacity_angle - solid_angle, -0.5*PI, 0.5*PI);
+		const float max_angle = clamp(opacity_angle + solid_angle, -0.5*PI, 0.5*PI);
+		result *= 1.0 - 2.0 * (max_angle - min_angle) / PI;
 	}
 	return result;
 }

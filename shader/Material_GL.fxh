@@ -38,6 +38,8 @@ static const CLight lights[iLightPointBallsNum] = (CLight[iLightPointBallsNum])b
 #endif
 #endif
 
+#include "BallShadows.fxh"
+
 uniform float4 cAmbient_LightRange; //!! remove completely, just rely on envmap/IBL?
 
 uniform float2 fenvEmissionScale_TexWidth;
@@ -147,7 +149,7 @@ float3 DoEnvmap2ndLayer(const float3 color1stLayer, const float3 pos, const floa
    return lerp(color1stLayer, env*fenvEmissionScale_TexWidth.x, w); // weight (optional) lower diffuse/glossy layer with clearcoat/specular
 }
 
-float3 lightLoop(const float3 pos, float3 N, const float3 V, float3 diffuse, float3 glossy, const float3 specular, const float edge, const bool fix_normal_orientation, const bool is_metal) // input vectors (N,V) are normalized for BRDF evals
+float3 lightLoop(const float3 tablePos, const float3 pos, float3 N, const float3 V, float3 diffuse, float3 glossy, const float3 specular, const float edge, const bool fix_normal_orientation, const bool is_metal) // input vectors (N,V) are normalized for BRDF evals
 {
    // normalize BRDF layer inputs //!! use diffuse = (1-glossy)*diffuse instead?
    const float diffuseMax = max(diffuse.x,max(diffuse.y,diffuse.z));
@@ -181,26 +183,30 @@ float3 lightLoop(const float3 pos, float3 N, const float3 V, float3 diffuse, flo
    }
 
    BRANCH if (!is_metal && (diffuseMax > 0.0))
+   {
 	  // trafo back to world for lookup into world space envmap // actually: mul(float4(N,0.0), matViewInverseInverseTranspose), but optimized to save one matrix
 	  // matView is always an orthonormal matrix, so no need to normalize after transform
-      color += DoEnvmapDiffuse(/*normalize*/((float4(N,0.0) * matView).xyz), diffuse); // trafo back to world for lookup into world space envmap // actually: mul(vec4(N,0.0), matViewInverseInverseTranspose), but optimized to save one matrix
+      float3 tableN = /*normalize*/((float4(N,0.0) * matView).xyz);
+      color += DoEnvmapDiffuse(tableN, diffuse) * get_env_ball_shadow(tablePos, tableN);
+   }
 
    BRANCH if ((glossyMax > 0.0) || (specularMax > 0.0))
    {
 	   float3 R = (2.0*NdotV)*N - V; // reflect(-V,n);
 	   // trafo back to world for lookup into world space envmap // actually: mul(float4(R,0.0), matViewInverseInverseTranspose), but optimized to save one matrix
 	   // matView is always an orthonormal matrix, so no need to normalize after transform
-	   R = /*normalize*/((float4(R,0.0) * matView).xyz); // trafo back to world for lookup into world space envmap // actually: mul(vec4(R,0.0), matViewInverseInverseTranspose), but optimized to save one matrix
+	   R = /*normalize*/((float4(R,0.0) * matView).xyz);
 
 	   const float2 Ruv = ray_to_equirectangular_uv(R);
+	   const float occlusion = get_env_ball_shadow(tablePos, R);
 
 #if !ENABLE_VR
 	   if (glossyMax > 0.0)
-		  color += DoEnvmapGlossy(N, V, Ruv, glossy, Roughness_WrapL_Edge_Thickness.x);
+		  color += DoEnvmapGlossy(N, V, Ruv, glossy, Roughness_WrapL_Edge_Thickness.x) * occlusion;
 
 	   // 2nd Layer
 	   if (specularMax > 0.0)
-		  color = DoEnvmap2ndLayer(color, pos, N, V, NdotV, Ruv, specular);
+		  color = DoEnvmap2ndLayer(color, pos, N, V, NdotV, Ruv, specular) * occlusion;
 #else
       // Abuse mipmaps to reduce shimmering in VR
       float4 colorMip;
