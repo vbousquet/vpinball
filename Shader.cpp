@@ -221,6 +221,7 @@ Shader::ShaderUniform Shader::shaderUniformNames[SHADER_UNIFORM_COUNT] {
    SHADER_SAMPLER(tex_ball_color, Texture0, SA_REPEAT, SA_REPEAT, SF_TRILINEAR), // base texture
    SHADER_SAMPLER(tex_ball_playfield, Texture4, SA_CLAMP, SA_CLAMP, SF_TRILINEAR), // playfield
    SHADER_SAMPLER(tex_ball_decal, Texture3, SA_REPEAT, SA_REPEAT, SF_TRILINEAR), // ball decal
+   SHADER_SAMPLER(brdfLUT, Texture5, SA_CLAMP, SA_CLAMP, SF_BILINEAR), // Precomputed environment BRDF
 
    // Light Shader
    SHADER_UNIFORM(SUT_Float, blend_modulate_vs_add, 1),

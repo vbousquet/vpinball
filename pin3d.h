@@ -143,6 +143,7 @@ public:
 
    RenderTarget* m_pddsStatic;
 
+   Texture m_brdfLutTexture; // loaded from Resources
    Texture m_pinballEnvTexture; // loaded from Resources
    Texture m_builtinEnvTexture; // loaded from Resources
    Texture m_aoDitherTexture;   // loaded from Resources

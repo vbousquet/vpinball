@@ -1369,13 +1369,7 @@ void Player::InitBallShader()
    m_pin3d.m_pd3dPrimaryDevice->m_ballShader->SetVector(SHADER_fenvEmissionScale_TexWidth, &st);
    //m_pin3d.m_pd3dPrimaryDevice->m_ballShader->SetInt("iLightPointNum",MAX_LIGHT_SOURCES);
 
-   constexpr float Roughness = 0.8f;
-   const vec4 rwem(exp2f(10.0f * Roughness + 1.0f), 0.f, 1.f, 0.05f);
-   m_pin3d.m_pd3dPrimaryDevice->m_ballShader->SetVector(SHADER_Roughness_WrapL_Edge_Thickness, &rwem);
-
-   /*Texture * const playfield = m_ptable->GetImage(m_ptable->m_image);
-   if (playfield)
-      m_pin3d.m_pd3dPrimaryDevice->m_ballShader->SetTexture(SHADER_tex_ball_playfield, playfield);*/
+   m_pin3d.m_pd3dPrimaryDevice->m_ballShader->SetTexture(SHADER_brdfLUT, &m_pin3d.m_brdfLutTexture);
 
    const bool lowDetailBall = (m_ptable->GetDetailLevel() < 10);
    delete m_ballMeshBuffer;
@@ -4843,16 +4837,6 @@ void Player::DrawBalls()
       #else
       m_pin3d.m_pd3dPrimaryDevice->m_ballShader->SetFloat4v(SHADER_ballPackedLights, (vec4 *)l, sizeof(CLight) * (MAX_LIGHT_SOURCES + MAX_BALL_LIGHT_SOURCES) / (4 * sizeof(float)));
       #endif
-
-      // now for a weird hack: make material more rough, depending on how near the nearest lightsource is, to 'emulate' the area of the bulbs (as VP only features point lights so far)
-      float Roughness = 0.8f;
-      if (light_nearest[0] != nullptr)
-      {
-          const float dist = Vertex3Ds(light_nearest[0]->m_d.m_vCenter.x - pball->m_d.m_pos.x, light_nearest[0]->m_d.m_vCenter.y - pball->m_d.m_pos.y, light_nearest[0]->m_d.m_meshRadius + light_nearest[0]->m_surfaceHeight - pball->m_d.m_pos.z).Length(); //!! z pos
-          Roughness = min(max(dist*0.006f, 0.4f), Roughness);
-      }
-      const vec4 rwem(exp2f(10.0f * Roughness + 1.0f), 0.f, 1.f, 0.05f);
-      m_pin3d.m_pd3dPrimaryDevice->m_ballShader->SetVector(SHADER_Roughness_WrapL_Edge_Thickness, &rwem);
 
       // ************************* draw the ball itself ****************************
       Vertex2D stretch;

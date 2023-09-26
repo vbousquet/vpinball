@@ -308,6 +308,7 @@
 #define IDC_STEP                        218
 #define IDC_STATUSNAME                  218
 #define IDB_BALL                        220
+#define IDB_BRDF_LUT                    221
 #define IDR_SURFACEMENU                 221
 #define IDD_ROTATE                      222
 #define IDR_MULTIMENU                   222

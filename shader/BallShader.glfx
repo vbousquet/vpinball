@@ -46,6 +46,7 @@ layout(depth_unchanged) out float gl_FragDepth;
 uniform sampler2D tex_ball_color; // base texture
 uniform samplerStereo tex_ball_playfield; // playfield
 uniform sampler2D tex_ball_decal; // ball decal
+uniform sampler2D brdfLUT; // Precomputed BRDF LUT
 
 uniform sampler2D tex_env; // envmap
 uniform sampler2D tex_diffuse_env; // envmap radiance
@@ -136,46 +137,57 @@ void main()
 
 ////FRAGMENT
 
-float3 ballLightLoop(const float3 pos, const float3 N, const float3 V, float3 diffuse, float3 glossy, const float3 specular, const float edge, const bool is_metal)
-{
-   // N and V must be already normalized by the caller
-   // N = normalize(N);
-   // V = normalize(V);
-
-   // normalize BRDF layer inputs //!! use diffuse = (1-glossy)*diffuse instead?
-   const float diffuseMax = max(diffuse.x,max(diffuse.y,diffuse.z));
-   const float glossyMax = max(glossy.x,max(glossy.y,glossy.z));
-   const float specularMax = max(specular.x,max(specular.y,specular.z)); //!! not needed as 2nd layer only so far
-   const float sum = diffuseMax + glossyMax; //+ specularMax
-   if(sum > 1.0)
-   {
-      const float invsum = 1.0/sum;
-      diffuse  *= invsum;
-      glossy   *= invsum;
-      //specular *= invsum;
-   }
-
-   float3 color = float3(0.0, 0.0, 0.0);
-
-   BRANCH if((!is_metal && (diffuseMax > 0.0)) || (glossyMax > 0.0))
-      for(int i = 0; i < iLightPointBallsNum; i++)  
-         color += DoPointLight(pos, N, V, diffuse, glossy, edge, Roughness_WrapL_Edge_Thickness.x, i, is_metal); // no clearcoat needed as only pointlights so far
-
-   BRANCH if(!is_metal && (diffuseMax > 0.0))
-      color += DoEnvmapDiffuse(normalize((matView * vec4(N,0.0)).xyz), diffuse); // trafo back to world for lookup into world space envmap // actually: mul(vec4(N, 0.0), matViewInverseInverseTranspose)
-
-   if(specularMax > 0.0)
-      color += specular; //!! blend? //!! Fresnel with 1st layer?
-
-   return color;
-}
-
-
 ////psBall
 
 in vec4 normal_t0x;
 in vec4 worldPos_t0y;
 flat in float eye;
+
+
+float DistributionGGX(vec3 N, vec3 H, float roughness)
+{
+    float a      = roughness*roughness;
+    float a2     = a*a;
+    float NdotH  = max(dot(N, H), 0.0);
+    float NdotH2 = NdotH*NdotH;
+	
+    float num   = a2;
+    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+    denom = PI * denom * denom;
+	
+    return num / denom;
+}
+
+float GeometrySchlickGGX(float NdotV, float roughness)
+{
+    float r = (roughness + 1.0);
+    float k = (r*r) / 8.0;
+
+    float num   = NdotV;
+    float denom = NdotV * (1.0 - k) + k;
+	
+    return num / denom;
+}
+
+float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
+{
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotL = max(dot(N, L), 0.0);
+    float ggx2  = GeometrySchlickGGX(NdotV, roughness);
+    float ggx1  = GeometrySchlickGGX(NdotL, roughness);
+	
+    return ggx1 * ggx2;
+}
+
+vec3 fresnelSchlick(float cosTheta, vec3 F0)
+{
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
+vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
+{
+    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
 
 void main()
 {
@@ -183,7 +195,9 @@ void main()
     const float3 N = normalize(normal_t0x.xyz);
     const float3 R = reflect(V, N);
 
-    float3 ballImageColor;
+	// Compute environment specular reflection from the ball_color texture (which is an environment map) and the previous frame (which is a reflection probe)
+
+    float3 environmentColor;
     const float edge = dot(V, R);
     // edge falloff to reduce aliasing on edges (picks smaller mipmap -> more blur)
     const float lod = (edge > 0.6) ? edge*(6.0*1.0/0.4)-(6.0*0.6/0.4) : 0.0;
@@ -193,39 +207,15 @@ void main()
       // matView is always an orthonormal matrix, so no need to normalize after transform
       const float3 rv = /*normalize*/((float4(-R,0.0) * matView).xyz);
       const float2 uv = ray_to_equirectangular_uv(rv);
-      ballImageColor = textureLod(tex_ball_color, uv, lod).rgb;
+      environmentColor = textureLod(tex_ball_color, uv, lod).rgb;
     }
     else
     { // Spherical Map Reflections
       // calculate the intermediate value for the final texture coords. found here http://www.ozone3d.net/tutorials/glsl_texturing_p04.php
       const float m = (1.0 - R.z > 0.) ? 0.3535533905932737622 * rsqrt(1.0 - R.z) : 0.; // 0.353...=0.5/sqrt(2)
       const float2 uv = float2(0.5 - m * R.x, 0.5 - m * R.y);
-      ballImageColor = textureLod(tex_ball_color, uv, lod).rgb;
+      environmentColor = textureLod(tex_ball_color, uv, lod).rgb;
     }
-
-    const float4 decalColorT = texture(tex_ball_decal, float2(normal_t0x.w, worldPos_t0y.w));
-    float3 decalColor = decalColorT.rgb;
-
-    if (!%PARAM1%) // decalMode
-    {
-       // decal texture is an alpha scratch texture and must be added to the ball texture
-       // the strength of the scratches totally rely on the alpha values.
-       decalColor *= decalColorT.a;
-       ballImageColor += decalColor;
-    }
-    else
-       ballImageColor = ScreenHDR(ballImageColor, decalColor);
-
-    BRANCH if (disableLighting)
-    {
-       color = float4(ballImageColor,cBase_Alpha.a);
-       return;
-    }
-
-    if (!%PARAM1%) // decalMode
-       ballImageColor *= fenvEmissionScale_TexWidth.x;
-    else
-       ballImageColor *= 0.5*fenvEmissionScale_TexWidth.x; //!! 0.5=magic
 
     // No need to normalize here since the matWorldView matrix is normal (world is identity and view is always orthonormal)
     // No need to use a dedicated 'normal' matrix since the matWorldView is orthonormal (world is identity and view is always orthonormal)
@@ -266,19 +256,107 @@ void main()
 	else
 		// Default: magic falloff between playfield (down) and environment (up)
 		weight = NdotR * NdotR;
-	ballImageColor = lerp(ballImageColor, playfieldColor, weight);
+	environmentColor = lerp(environmentColor, playfieldColor, weight);
 
-    float3 diffuse = cBase_Alpha.rgb*0.075;
+	// Legacy processing for unshaded balls
+	const float4 decalColorT = texture(tex_ball_decal, float2(normal_t0x.w, worldPos_t0y.w));
+    BRANCH if (disableLighting)
+    {
+		float3 ballImageColor = environmentColor;
+		float3 decalColor = decalColorT.rgb;
+		if (!%PARAM1%) // decalMode
+		{
+		   // decal texture is an alpha scratch texture and must be added to the ball texture
+		   // the strength of the scratches totally rely on the alpha values.
+		   decalColor *= decalColorT.a;
+		   ballImageColor += decalColor;
+		}
+		else
+		   ballImageColor = ScreenHDR(ballImageColor, decalColor);
+       color = float4(ballImageColor, cBase_Alpha.a);
+       return;
+    }
+
+	// More or less a shameless copy/paste from https://learnopengl.com/PBR/Theory
+	// Using precomputed BRDF LUT from https://github.com/ImagicTheCat/love-DPBR (MIT licensed)
+	
+	// material parameters
+	float metallic = 0.75; // Keep a bit of diffuse lighting
+	float roughness = 0.15; // Searched a value that more or less match the rendering before 10.8
+	float ao = 1.; // Not implemented yet
+	vec3  albedo;
     if(!%PARAM1%) // decalMode
-       diffuse *= decalColor; // scratches make the material more rough
+	{
+	   // Scratch texture: alpha leads to high roughness and replace albedo
+	   albedo = lerp(cBase_Alpha.rgb, decalColorT.rgb, decalColorT.a);
+       roughness = lerp(roughness, 1., decalColorT.a); // FIXME the roughness is not taken in account for the main env reflection, so... we could hack it by playing on the color...
+    }
+	else
+	{
+	   // Logo texture: just apply it as the color
+	   albedo = ScreenHDR(cBase_Alpha.rgb, decalColorT.rgb);
+	}
 
-    const float3 glossy = max(diffuse*2.0, float3(0.1,0.1,0.1)); //!! meh
+    vec3 F0 = vec3(0.04); 
+    F0 = mix(F0, albedo, metallic);
+	           
+    // Accumulate contribution from diretc point light (reflectance equation)
+    vec3 Lo = vec3(0.0);
+    for(int i = 0; i < iLightPointBallsNum; ++i) 
+    {
+        // calculate per-light radiance
+		const float3 lightDir = (matView * float4(lightPos[i].xyz, 1.0)).xyz - worldPos_t0y.xyz;
+		const float3 L = normalize(lightDir);
+        vec3 H = normalize(V + L);
+        float distance    = length(lightDir);
+        // const float attenuation = 1.0 / (distance * distance); // We do not use standard falloff but our custom ranged based one
+	    const float sqrl_lightDir = dot(lightDir,lightDir); // tweaked falloff to have ranged lightsources
+	    float attenuation = saturate(1.0 - sqrl_lightDir*sqrl_lightDir/(cAmbient_LightRange.w*cAmbient_LightRange.w*cAmbient_LightRange.w*cAmbient_LightRange.w)); //!! pre-mult/invert cAmbient_LightRange.w?
+	    attenuation = attenuation*attenuation/(sqrl_lightDir + 1.0);
+        vec3 radiance     = lightEmission[i].rgb * attenuation;        
+        
+        // cook-torrance brdf
+        float NDF = DistributionGGX(N, H, roughness);        
+        float G   = GeometrySmith(N, V, L, roughness);      
+        vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);       
+        
+        vec3 kS = F;
+        vec3 kD = vec3(1.0) - kS;
+        kD *= 1.0 - metallic;
+        
+        vec3 numerator    = NDF * G * F;
+        float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
+        vec3 specular     = numerator / denominator;  
+            
+        // add to outgoing radiance Lo
+        float NdotL = max(dot(N, L), 0.0);                
+        Lo += (kD * albedo / PI + specular) * radiance * NdotL; 
+    }   
 
-    float3 specular = ballImageColor * cBase_Alpha.rgb; //!! meh, too, as only added in ballLightLoop anyhow
-    if(!%PARAM1%) // decalMode
-       specular *= float3(1.,1.,1.)-decalColor; // see above
+	// Ambient contribution
+	vec3 F = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
+	vec3 kS = F; 
+	vec3 kD = 1.0 - kS;
 
-    color.rgb = ballLightLoop(worldPos_t0y.xyz, N, V, diffuse, glossy, specular, 1.0, false);
+	// TODO use irradiance from environment but also some approximation for playfield reflections
+	// => not a big deal since metallic is nearly 1, wo nearly no diffuse component
+	kD *= 1.0 - metallic;
+	// TODO we should consider the ball image as the environment and compute its filtered irradiance => overkill ?
+    const float3 rv = /*normalize*/((float4(-R,0.0) * matView).xyz);
+    const float2 uv = ray_to_equirectangular_uv(rv);
+    const float3 irradiance = texNoLod(tex_diffuse_env, uv).rgb * fenvEmissionScale_TexWidth.x;
+	vec3 envDiffuse = irradiance * albedo;
+
+	// TODO use prefiltered environment + some approximation for playfield reflections
+	// => not really needed for a shiny ball (roughness is nearly 0)
+	// const float MAX_REFLECTION_LOD = 4.0;
+	// prefilteredColor = textureLod(prefilterMap, R,  roughness * MAX_REFLECTION_LOD).rgb;   
+	vec2 envBRDF  = texture(brdfLUT, vec2(max(dot(N, V), 0.0), 1.0 - roughness)).rg; // reversed v axis for OpenGL
+	vec3 envSpecular = environmentColor * fenvEmissionScale_TexWidth.x * (F * envBRDF.x + envBRDF.y);
+	
+	vec3 ambient    = (kD * envDiffuse + envSpecular) * ao; 
+	
+	color.rgb = ambient + Lo;
     color.a = cBase_Alpha.a;
 }
 

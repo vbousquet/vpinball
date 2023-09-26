@@ -26,6 +26,8 @@ Pin3D::~Pin3D()
 
    m_pd3dPrimaryDevice->FreeShader();
 
+   m_brdfLutTexture.FreeStuff();
+
    m_pinballEnvTexture.FreeStuff();
 
    m_builtinEnvTexture.FreeStuff();
@@ -503,12 +505,23 @@ HRESULT Pin3D::InitPin3D(const bool fullScreen, const int width, const int heigh
 
    // This used to be a spheremap BMP, upgraded in 10.8 for an equirectangular HDR env map
    //m_pinballEnvTexture.CreateFromResource(IDB_BALL);
-   HMODULE handle = ::GetModuleHandle(NULL);
-   HRSRC rc = ::FindResource(handle, MAKEINTRESOURCE(IDB_BALL), MAKEINTRESOURCE(EXR_FILE));
-   HGLOBAL rcData = ::LoadResource(handle, rc);
-   DWORD size = ::SizeofResource(handle, rc);
-   BYTE* data = static_cast<BYTE*>(::LockResource(rcData));
-   m_pinballEnvTexture.LoadFromMemory(data, size);
+   {
+      HMODULE handle = ::GetModuleHandle(NULL);
+      HRSRC rc = ::FindResource(handle, MAKEINTRESOURCE(IDB_BALL), MAKEINTRESOURCE(EXR_FILE));
+      HGLOBAL rcData = ::LoadResource(handle, rc);
+      DWORD size = ::SizeofResource(handle, rc);
+      BYTE* data = static_cast<BYTE*>(::LockResource(rcData));
+      m_pinballEnvTexture.LoadFromMemory(data, size);
+   }
+
+   {
+      HMODULE handle = ::GetModuleHandle(NULL);
+      HRSRC rc = ::FindResource(handle, MAKEINTRESOURCE(IDB_BRDF_LUT), MAKEINTRESOURCE(EXR_FILE));
+      HGLOBAL rcData = ::LoadResource(handle, rc);
+      DWORD size = ::SizeofResource(handle, rc);
+      BYTE* data = static_cast<BYTE*>(::LockResource(rcData));
+      m_brdfLutTexture.LoadFromMemory(data, size);
+   }
 
    m_aoDitherTexture.CreateFromResource(IDB_AO_DITHER);
 
