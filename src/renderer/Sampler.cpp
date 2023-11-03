@@ -1,8 +1,11 @@
 #include "stdafx.h"
 #include "Sampler.h"
 #include "RenderDevice.h"
+#include <fstream>
+#include <filesystem>
+#include "miniz/miniz.h"
 
-Sampler::Sampler(RenderDevice* rd, BaseTexture* const surf, const bool force_linear_rgb, const SamplerAddressMode clampu, const SamplerAddressMode clampv, const SamplerFilter filter) : 
+Sampler::Sampler(RenderDevice* rd, BaseTexture* const surf, const bool force_linear_rgb, const SamplerAddressMode clampu, const SamplerAddressMode clampv, const SamplerFilter filter, const bool compress) : 
    m_type(SurfaceType::RT_DEFAULT), 
    m_rd(rd),
    m_dirty(false),
@@ -41,11 +44,11 @@ Sampler::Sampler(RenderDevice* rd, BaseTexture* const surf, const bool force_lin
       else if (format == colorFormat::SRGBA)
          format = colorFormat::RGBA;
    }
-   m_texture = CreateTexture(surf, 0, format, 0);
+   m_texture = CreateTexture(surf, 0, format, 0, compress);
    m_isLinear = format != colorFormat::SRGB && format != colorFormat::SRGBA;
 #else
    colorFormat texformat;
-   IDirect3DTexture9* sysTex = CreateSystemTexture(surf, force_linear_rgb, texformat);
+   IDirect3DTexture9* sysTex = CreateSystemTexture(surf, force_linear_rgb, texformat, compress);
 
    m_isLinear = texformat == colorFormat::RGBA16F || texformat == colorFormat::RGBA32F || force_linear_rgb;
 
@@ -134,7 +137,7 @@ void Sampler::Unbind()
 #endif
 }
 
-void Sampler::UpdateTexture(BaseTexture* const surf, const bool force_linear_rgb)
+void Sampler::UpdateTexture(BaseTexture* const surf, const bool force_linear_rgb, const bool compress)
 {
 #ifdef ENABLE_SDL
    colorFormat format;
@@ -182,7 +185,7 @@ void Sampler::UpdateTexture(BaseTexture* const surf, const bool force_linear_rgb
    glBindTexture(m_texTarget, 0);
 #else
    colorFormat texformat;
-   IDirect3DTexture9* sysTex = CreateSystemTexture(surf, force_linear_rgb, texformat);
+   IDirect3DTexture9* sysTex = CreateSystemTexture(surf, force_linear_rgb, texformat, compress);
    CHECKD3D(m_rd->GetCoreDevice()->UpdateTexture(sysTex, m_texture));
    SAFE_RELEASE(sysTex);
 #endif
@@ -209,7 +212,7 @@ void Sampler::SetName(const string& name)
 }
 
 #ifdef ENABLE_SDL
-GLuint Sampler::CreateTexture(BaseTexture* const surf, unsigned int Levels, colorFormat Format, int stereo)
+GLuint Sampler::CreateTexture(BaseTexture* const surf, unsigned int Levels, colorFormat Format, int stereo, const bool compress)
 {
    unsigned int Width = surf->width();
    unsigned int Height = surf->height();
@@ -260,7 +263,7 @@ GLuint Sampler::CreateTexture(BaseTexture* const surf, unsigned int Levels, colo
    }
 
    colorFormat comp_format = Format;
-   if (m_rd->m_compress_textures && ((Width & 3) == 0) && ((Height & 3) == 0) && (Width > 256) && (Height > 256))
+   if (compress && ((Width & 3) == 0) && ((Height & 3) == 0) && (Width > 256) && (Height > 256))
    {
       if (col_type == GL_FLOAT || col_type == GL_HALF_FLOAT)
       {
@@ -299,10 +302,106 @@ GLuint Sampler::CreateTexture(BaseTexture* const surf, unsigned int Levels, colo
    if (data)
    {
       glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-      // This line causes a false GLIntercept error log on OpenGL >= 403 since the image is initialized through TexStorage and not TexImage (expected by GLIntercept)
-      // InterceptImage::SetImageDirtyPost - Flagging an image as dirty when it is not ready/init?
-      glTexSubImage2D(m_texTarget, 0, 0, 0, Width, Height, col_format, col_type, data);
-      glGenerateMipmap(m_texTarget); // Generate mip-maps, when using TexStorage will generate same amount as specified in TexStorage, otherwise good idea to limit by GL_TEXTURE_MAX_LEVEL
+      #ifdef CACHE_COMPRESSED_TEX
+      if (comp_format == Format)
+      #endif
+      {
+         // This line causes a false GLIntercept error log on OpenGL >= 403 since the image is initialized through TexStorage and not TexImage (expected by GLIntercept)
+         // InterceptImage::SetImageDirtyPost - Flagging an image as dirty when it is not ready/init?
+         glTexSubImage2D(m_texTarget, 0, 0, 0, Width, Height, col_format, col_type, data);
+         glGenerateMipmap(m_texTarget); // Generate mip-maps, when using TexStorage will generate same amount as specified in TexStorage, otherwise good idea to limit by GL_TEXTURE_MAX_LEVEL
+      }
+      #ifdef CACHE_COMPRESSED_TEX
+      else
+      {
+         bool loadedFromCache = false;
+
+         string dir = g_pvp->m_szMyPrefPath + "Cache" + PATH_SEPARATOR_CHAR + g_pplayer->m_ptable->m_szTitle + PATH_SEPARATOR_CHAR;
+         std::filesystem::create_directories(std::filesystem::path(dir));
+         uint8_t* md5 = surf->GetMD5Hash();
+         char buf[32+4+1] = { 0 };
+         sprintf_s(buf, sizeof(buf), "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X.tex", 
+            md5[0], md5[1], md5[2], md5[3], md5[4], md5[5], md5[6], md5[7],
+            md5[8], md5[9], md5[10], md5[11], md5[12], md5[13], md5[14], md5[15]);
+         string filename = dir + buf;
+         if (FileExists(filename))
+         {
+            std::ifstream fin;
+            fin.open(filename, std::ios::binary | std::ios::in);
+            uint8_t* buffer = nullptr;
+            int buffer_size = 0, size, level = 0;
+            GLsizei w = Width, h = Height, numMips, texFormat, fileFormat;
+            fin.read((char*)&fileFormat, sizeof(fileFormat));
+            if (fileFormat == 1)
+            {
+               fin.read((char*)&texFormat, sizeof(texFormat));
+               fin.read((char*)&numMips, sizeof(numMips));
+               while (!fin.eof())
+               {
+                  fin.read((char*)&size, sizeof(size));
+                  if (size > buffer_size)
+                  {
+                     delete[] buffer;
+                     buffer = new uint8_t[size];
+                  }
+                  //fin.read((char*)buffer, size);
+                  mz_ulong clen;
+                  fin.read((char*)&clen, sizeof(clen));
+                  mz_uint8* c = (mz_uint8*)malloc(clen);
+                  fin.read((char*)c, clen);
+                  mz_ulong uclen = size;
+                  const int error = uncompress2((unsigned char*)buffer, &uclen, c, &clen);
+                  if (error != Z_OK)
+                     ShowError("Could not unzip compressed texture data, error " + std::to_string(error));
+                  free(c);
+                  glCompressedTexSubImage2D(m_texTarget, level, 0, 0, w, h, texFormat, size, buffer);
+                  w = max(1, (w / 2));
+                  h = max(1, (h / 2));
+                  level++;
+               }
+               fin.close();
+               delete[] buffer;
+               loadedFromCache = true;
+            }
+         }
+         if (!loadedFromCache)
+         {
+            glTexSubImage2D(m_texTarget, 0, 0, 0, Width, Height, col_format, col_type, data);
+            glGenerateMipmap(m_texTarget);
+            std::ofstream fout;
+            fout.open(filename, std::ios::binary | std::ios::out);
+            uint8_t* buffer = nullptr;
+            int buffer_size = 0, size, texFormat, fileFormat = 1;
+            glGetTexLevelParameteriv(m_texTarget, 0, GL_TEXTURE_INTERNAL_FORMAT, &texFormat);
+            fout.write((char*)&fileFormat, sizeof(fileFormat));
+            fout.write((char*)&texFormat, sizeof(texFormat));
+            fout.write((char*)&num_mips, sizeof(num_mips));
+            for (int level = 0; level < num_mips; level++)
+            {
+               glGetTexLevelParameteriv(m_texTarget, level, GL_TEXTURE_COMPRESSED_IMAGE_SIZE, &size);
+               if (size > buffer_size)
+               {
+                  delete[] buffer;
+                  buffer = new uint8_t[size];
+               }
+               glGetCompressedTexImage(m_texTarget, level, buffer);
+               fout.write((char*)&size, sizeof(size));
+               //fout.write((char*)buffer, size);
+               // We compress the data to limit the cache size
+               const mz_ulong slen = (mz_ulong)(size);
+               mz_ulong clen = compressBound(slen);
+               mz_uint8* c = (mz_uint8*)malloc(clen);
+               if (compress2(c, &clen, (const unsigned char*)buffer, slen, MZ_BEST_COMPRESSION) != Z_OK)
+                  ShowError("Could not zip compressed texture data");
+               fout.write((char*)&clen, sizeof(clen));
+               fout.write((char*)c, clen);
+               free(c);
+            }
+            fout.close();
+            delete[] buffer;
+         }
+      }
+      #endif
    }
    return texture;
 }
@@ -326,7 +425,7 @@ IDirect3DTexture9* Sampler::CreateSystemTexture(BaseTexture* const surf, const b
    else
    {
       texformat = colorFormat::RGBA8;
-      if (m_rd->m_compress_textures && ((texwidth & 3) == 0) && ((texheight & 3) == 0) && (texwidth > 256) && (texheight > 256))
+      if (compress && ((texwidth & 3) == 0) && ((texheight & 3) == 0) && (texwidth > 256) && (texheight > 256))
          texformat = colorFormat::DXT5;
    }
 

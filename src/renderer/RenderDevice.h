@@ -239,7 +239,6 @@ public:
    void GetViewport(ViewPort*);
 
    void SetMainTextureDefaultFiltering(const SamplerFilter filter);
-   void CompressTextures(const bool enable) { m_compress_textures = enable; }
 
    // performance counters
    unsigned int Perf_GetNumDrawCalls() const        { return m_frameDrawCalls; }
@@ -325,7 +324,6 @@ private:
 
 public:
    bool m_autogen_mipmap;
-   bool m_compress_textures;
 
 private:
    bool m_dwm_was_enabled;

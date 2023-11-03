@@ -458,9 +458,6 @@ HRESULT Pin3D::InitPrimary(const bool fullScreen, const int colordepth, int& ref
 
    BAMView::init();
 
-   const bool compressTextures = g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "CompressTextures"s, false);
-   m_pd3dPrimaryDevice->CompressTextures(compressTextures);
-
    m_pd3dPrimaryDevice->SetViewport(&m_viewPort);
 
    return S_OK;

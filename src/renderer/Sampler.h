@@ -44,7 +44,7 @@ struct SamplerBinding
 class Sampler
 {
 public:
-   Sampler(RenderDevice* rd, BaseTexture* const surf, const bool force_linear_rgb, const SamplerAddressMode clampu = SA_UNDEFINED, const SamplerAddressMode clampv = SA_UNDEFINED, const SamplerFilter filter = SF_UNDEFINED);
+   Sampler(RenderDevice* rd, BaseTexture* const surf, const bool force_linear_rgb, const SamplerAddressMode clampu = SA_UNDEFINED, const SamplerAddressMode clampv = SA_UNDEFINED, const SamplerFilter filter = SF_UNDEFINED, const bool compress = false);
 #ifdef ENABLE_SDL
    Sampler(RenderDevice* rd, SurfaceType type, GLuint glTexture, bool ownTexture, bool force_linear_rgb, const SamplerAddressMode clampu = SA_UNDEFINED, const SamplerAddressMode clampv = SA_UNDEFINED, const SamplerFilter filter = SF_UNDEFINED);
    GLuint GetCoreTexture() const { return m_texture; }
@@ -56,7 +56,7 @@ public:
    ~Sampler();
 
    void Unbind();
-   void UpdateTexture(BaseTexture* const surf, const bool force_linear_rgb);
+   void UpdateTexture(BaseTexture* const surf, const bool force_linear_rgb, const bool compress = false);
    void SetClamp(const SamplerAddressMode clampu, const SamplerAddressMode clampv);
    void SetFilter(const SamplerFilter filter);
    void SetName(const string& name);
@@ -85,9 +85,9 @@ private:
 #ifdef ENABLE_SDL
    GLenum m_texTarget = 0;
    GLuint m_texture = 0;
-   GLuint CreateTexture(BaseTexture* const surf, unsigned int Levels, colorFormat Format, int stereo);
+   GLuint CreateTexture(BaseTexture* const surf, unsigned int Levels, colorFormat Format, int stereo, const bool compress);
 #else
    IDirect3DTexture9* m_texture;
-   IDirect3DTexture9* CreateSystemTexture(BaseTexture* const surf, const bool force_linear_rgb, colorFormat& texformat);
+   IDirect3DTexture9* CreateSystemTexture(BaseTexture* const surf, const bool force_linear_rgb, colorFormat& texformat, const bool compress);
 #endif
 };
