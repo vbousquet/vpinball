@@ -133,11 +133,6 @@
 #pragma GCC diagnostic ignored "-Wcast-function-type"       // warning: cast between incompatible function types (for loader)
 #endif
 
-#ifdef __RK3588__
-#define IMGUI_IMPL_OPENGL_ES3
-#include <glad/gles2.h>
-#endif
-
 // GL includes
 #if defined(IMGUI_IMPL_OPENGL_ES2)
 #if (defined(__APPLE__) && (TARGET_OS_IOS || TARGET_OS_TV))

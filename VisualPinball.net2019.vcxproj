@@ -907,6 +907,7 @@ copy "$(TargetPath)" "%25VPIN_DIR%25"
     <ClCompile Include="imgui\implot\implot.cpp" />
     <ClCompile Include="imgui\implot\implot_items.cpp" />
     <ClCompile Include="imgui\imgui_impl_opengl3.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
