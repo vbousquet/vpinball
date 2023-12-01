@@ -624,8 +624,10 @@
 #define IDC_MSAA_COMBO                  390
 #define IDD_SEARCH_SELECT_ELEMENT       391
 #define IDI_KICKER                      391
+#define IDC_EDIT_APP_SETTINGS           391
 #define IDD_DRAWING_ORDER               392
 #define IDI_TEXTBOX                     392
+#define IDC_EDIT_TABLE_OVERRIDE         392
 #define IDR_Flasher                     393
 #define IDI_REEL                        393
 #define IDC_ENABLE_OFF_LIGHTING         394

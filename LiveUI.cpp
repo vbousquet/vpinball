@@ -1039,8 +1039,12 @@ void LiveUI::UpdateCameraModeUI()
          case Player::BS_Layback: CM_ROW("Layback", "%.1f", viewSetup.mLayback, ""); CM_SKIP_LINE; break;
          case Player::BS_ViewHOfs: CM_ROW("Horizontal Offset", "%.1f", viewSetup.mViewHOfs, isWindow ? "cm" : ""); break;
          case Player::BS_ViewVOfs: CM_ROW("Vertical Offset", "%.1f", viewSetup.mViewVOfs, isWindow ? "cm" : ""); CM_SKIP_LINE; break;
-         case Player::BS_WndTopZOfs: CM_ROW("Window Top Z Ofs.", "%.1f", VPUTOCM(viewSetup.mWindowTopZOfs), "cm"); break;
-         case Player::BS_WndBottomZOfs: CM_ROW("Window Bottom Z Ofs.", "%.1f", VPUTOCM(viewSetup.mWindowBottomZOfs), "cm"); CM_SKIP_LINE; break;
+         case Player::BS_WndTopZOfs: CM_ROW("Window Top Pos", "%.1f", 100.f * viewSetup.mWindowTopPos, "%"); break;
+         case Player::BS_WndBottomZOfs: CM_ROW("Window Bottom Pos", "%.1f", 100.f * viewSetup.mWindowBottomPos, "%"); CM_SKIP_LINE; break;
+
+         // Table properties
+         case Player::BS_GlassTopZ: CM_ROW("Glass Top Height", "%.1f", VPUTOCM(table->m_glassTopHeight), "cm"); break;
+         case Player::BS_GlassBottomZ: CM_ROW("Glass Bottom Height", "%.1f", VPUTOCM(table->m_glassBottomHeight), "cm"); break;
 
          // Scene lighting
          case Player::BS_LightEmissionScale: CM_ROW("Light Emission Scale", "%.0f", table->m_lightEmissionScale, ""); break;

@@ -1127,6 +1127,8 @@ void PinInput::FireKeyEvent(const int dispid, int keycode)
          ViewSetupID id = table->m_BG_current_set;
          ViewSetup &viewSetup = table->mViewSetups[id];
          viewSetup.mViewportRotation = 0.f;
+         viewSetup.mWindowBottomPos = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "WndBottomPos"s, 1.f));
+         viewSetup.mWindowTopPos = CMTOVPU(LoadValueWithDefault(regKey[RegName::DefaultCamera], "WndTopPos"s, 1.f));
          const bool portrait = g_pplayer->m_wnd_width < g_pplayer->m_wnd_height;
          switch (id)
          {

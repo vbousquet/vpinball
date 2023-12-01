@@ -28,19 +28,16 @@ void ViewSetup::SetWindowModeFromAppSettings(const PinTable* const table)
 
 float ViewSetup::GetWindowTopZOFfset(const PinTable* const table) const
 {
-   // FIXME to be replaced by a relative position between playfield and table glass
    if (mMode == VLM_WINDOW)
-      return mWindowTopZOfs;
+      return mWindowTopPos * table->m_glassTopHeight;
    else
       return 0.f;
 }
 
 float ViewSetup::GetWindowBottomZOFfset(const PinTable* const table) const
 {
-   // FIXME to be replaced by a relative position between playfield and table glass
-   // result is in the table coordinate system (so, usually between 0 and table->bottomglassheight)
    if (mMode == VLM_WINDOW)
-      return mWindowBottomZOfs;
+      return mWindowBottomPos * table->m_glassBottomHeight;
    else
       return 0.f;
 }

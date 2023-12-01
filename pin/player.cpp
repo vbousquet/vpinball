@@ -3812,8 +3812,10 @@ void Player::UpdateBackdropSettings(const bool up)
    case BS_XOffset: if (isWindow) SaveValue(regKey[RegName::Player], "ScreenPlayerX"s, LoadValueWithDefault(regKey[RegName::Player], "ScreenPlayerX"s, 0.0f) + 0.25f * thesign); else viewSetup.mViewX += 5.f * thesign; break;
    case BS_YOffset: if (isWindow) SaveValue(regKey[RegName::Player], "ScreenPlayerY"s, LoadValueWithDefault(regKey[RegName::Player], "ScreenPlayerY"s, 0.0f) + 0.25f * thesign); else viewSetup.mViewY += 5.f * thesign; break;
    case BS_ZOffset: if (isWindow) SaveValue(regKey[RegName::Player], "ScreenPlayerZ"s, LoadValueWithDefault(regKey[RegName::Player], "ScreenPlayerZ"s, 70.0f) + 0.25f * thesign); else viewSetup.mViewZ += (viewSetup.mMode == VLM_LEGACY ? 50.f : 5.f) * thesign; break;
-   case BS_WndTopZOfs: viewSetup.mWindowTopZOfs += 5.f * thesign; break;
-   case BS_WndBottomZOfs: viewSetup.mWindowBottomZOfs += 5.f * thesign; break;
+   case BS_GlassBottomZ: break;
+   case BS_GlassTopZ: break;
+   case BS_WndTopZOfs: viewSetup.mWindowTopPos += 0.1f * thesign; break;
+   case BS_WndBottomZOfs: viewSetup.mWindowBottomPos += 0.1f * thesign; break;
 
    // Scene lighting settings
    case BS_LightEmissionScale:
