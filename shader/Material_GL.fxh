@@ -128,22 +128,23 @@ float3 DoEnvmapDiffuse(const float3 N, const float3 diffuse)
 
 //!! PI?
 // very very crude approximation by abusing miplevels
-float3 DoEnvmapGlossy(const float3 N, const float3 V, const float2 Ruv, const float3 glossy, const float glossyPower)
+float3 DoEnvmapGlossy(const float3 N, const float3 V, const float2 Ruv, const float3 glossy, const float glossyPower, const float4 probe)
 {
    const float mip = min(log2(fenvEmissionScale_TexWidth.y * sqrt(3.0)) - 0.5*log2(glossyPower + 1.0), log2(fenvEmissionScale_TexWidth.y)-1.); //!! do diffuse lookup instead of this limit/min, if too low?? and blend?
-   const float3 env = textureLod(tex_env, Ruv, mip).xyz;
-   return glossy * env*fenvEmissionScale_TexWidth.x;
+   const float3 env = lerp(fenvEmissionScale_TexWidth.x * textureLod(tex_env, Ruv, mip).xyz, probe.xyz, probe.w);
+   return glossy * env;
 }
 
 //!! PI?
-float3 DoEnvmap2ndLayer(const float3 color1stLayer, const float3 pos, const float3 N, const float3 V, const float NdotV, const float2 Ruv, const float3 specular)
+float3 DoEnvmap2ndLayer(const float3 color1stLayer, const float3 pos, const float3 N, const float3 V, const float NdotV, const float2 Ruv, const float3 specular, const float4 probe)
 {
    const float3 w = FresnelSchlick(specular, NdotV, Roughness_WrapL_Edge_Thickness.z); //!! ?
-   const float3 env = texNoLod(tex_env, Ruv).xyz;
-   return lerp(color1stLayer, env*fenvEmissionScale_TexWidth.x, w); // weight (optional) lower diffuse/glossy layer with clearcoat/specular
+   const float3 env = lerp(fenvEmissionScale_TexWidth.x * texNoLod(tex_env, Ruv).xyz, probe.xyz, probe.w);
+   return lerp(color1stLayer, env, w); // weight (optional) lower diffuse/glossy layer with clearcoat/specular
 }
 
-float3 lightLoop(const float3 pos, float3 N, const float3 V, float3 diffuse, float3 glossy, const float3 specular, const float edge, const bool fix_normal_orientation, const bool is_metal) // input vectors (N,V) are normalized for BRDF evals
+float3 lightLoop(const float3 pos, float3 N, const float3 V, float3 diffuse, float3 glossy, const float3 specular, const float edge, 
+    const bool fix_normal_orientation, const bool is_metal, const float2 screenSpaceUV, const float reflectionProbeFactor, const float3 reflectionProbeNormal) // input vectors (N,V) are normalized for BRDF evals
 {
    // normalize BRDF layer inputs //!! use diffuse = (1-glossy)*diffuse instead?
    const float diffuseMax = max(diffuse.x,max(diffuse.y,diffuse.z));
@@ -192,13 +193,26 @@ float3 lightLoop(const float3 pos, float3 N, const float3 V, float3 diffuse, flo
 
 	   const float2 Ruv = ray_to_equirectangular_uv(R);
 
+        
+       float4 envProbe;
+       if (reflectionProbeFactor > 0.0)
+       {
+          envProbe = texStereo(tex_reflection, screenSpaceUV);
+          envProbe.xyz *= reflectionProbeFactor;
+          envProbe.w *= smoothstep(0.5, 0.9, dot(reflectionProbeNormal, N));
+       }
+       else
+       {
+          envProbe = float4(0.0, 0.0, 0.0, 0.0);
+       }
+
 #if !ENABLE_VR
 	   if (glossyMax > 0.0)
-		  color += DoEnvmapGlossy(N, V, Ruv, glossy, Roughness_WrapL_Edge_Thickness.x);
+		  color += DoEnvmapGlossy(N, V, Ruv, glossy, Roughness_WrapL_Edge_Thickness.x, envProbe);
 
 	   // 2nd Layer
 	   if (specularMax > 0.0)
-		  color = DoEnvmap2ndLayer(color, pos, N, V, NdotV, Ruv, specular);
+		  color = DoEnvmap2ndLayer(color, pos, N, V, NdotV, Ruv, specular, envProbe);
 #else
       // Abuse mipmaps to reduce shimmering in VR
       float4 colorMip;
@@ -229,7 +243,7 @@ float3 lightLoop(const float3 pos, float3 N, const float3 V, float3 diffuse, flo
         color += glossy * envTex * fenvEmissionScale_TexWidth.x;
 
       // Envmap2ndLayer
-      if(fix_normal_orientation && specularMax > 0.0)
+      if(specularMax > 0.0)
       {
         const float3 w = FresnelSchlick(specular, NdotV, Roughness_WrapL_Edge_Thickness.z);
         color = mix(color, envTex * fenvEmissionScale_TexWidth.x, w);

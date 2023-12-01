@@ -473,7 +473,7 @@ void main() {
    const float3 N = normalize(normal);
    //color = float4((N+1.0)*0.5,1.0); return; // visualize normals
 
-   color = float4(lightLoop(worldPos, N, V, diffuse, glossy, specular, edge, true, is_metal), cBase_Alpha.a);
+   color = float4(lightLoop(worldPos, N, V, diffuse, glossy, specular, edge, true, is_metal, (gl_FragCoord.xy + vec2(0.5)) * w_h_height.xy, mirrorFactor, mirrorNormal), cBase_Alpha.a);
 
    BRANCH if (cBase_Alpha.a < 1.0)
    {
@@ -492,8 +492,8 @@ void main() {
       color.rgb *= shadow;
    }
 
-   BRANCH if (doReflections)
-      color.rgb += compute_reflection(gl_FragCoord.xy * w_h_height.xy, N, eye);
+   //BRANCH if (doReflections)
+   //   color.rgb += compute_reflection(gl_FragCoord.xy * w_h_height.xy, N, eye);
 
    BRANCH if (doRefractions)
    {
@@ -533,7 +533,7 @@ void main() {
       N = normal_map(N, V, tex01);
    //!! color = float4((N+1.0)*0.5,1.0); return; // visualize normals
 
-   color = float4(lightLoop(worldPos, N, V, diffuse, glossy, specular, edge, !doNormalMapping, is_metal), pixel.a);
+   color = float4(lightLoop(worldPos, N, V, diffuse, glossy, specular, edge, !doNormalMapping, is_metal, (gl_FragCoord.xy + vec2(0.5)) * w_h_height.xy, mirrorFactor, mirrorNormal), pixel.a);
 
    BRANCH if (color.a < 1.0)
    {
@@ -552,8 +552,8 @@ void main() {
       color.rgb *= shadow;
    }
 
-   BRANCH if (doReflections)
-      color.rgb += compute_reflection(gl_FragCoord.xy * w_h_height.xy, N, eye);
+   //BRANCH if (doReflections)
+   //   color.rgb += compute_reflection(gl_FragCoord.xy * w_h_height.xy, N, eye);
 
    BRANCH if (doRefractions)
    {

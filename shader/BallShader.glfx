@@ -46,6 +46,8 @@ uniform sampler2D tex_ball_decal; // ball decal
 uniform sampler2D tex_env; // envmap
 uniform sampler2D tex_diffuse_env; // envmap radiance
 
+uniform samplerStereo tex_reflection; // reflections (unused)
+
 #include "Material_GL.fxh"
 
 uniform vec4  invTableRes_playfield_height_reflection;
