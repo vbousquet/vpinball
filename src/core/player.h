@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/HeadTracking.h"
 #include "physics/kdtree.h"
 #include "physics/quadtree.h"
 #include "Debugger.h"
@@ -609,7 +610,7 @@ public:
    VRPreviewMode m_vrPreview;
    bool m_vrPreviewShrink = false;
 
-   bool m_headTracking;
+   HeadTracking* m_headTracking = nullptr;
 
    int m_BWrendering; // 0=off, 1=Black&White from RedGreen, 2=B&W from Red only
    bool m_bloomOff;

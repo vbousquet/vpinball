@@ -202,8 +202,10 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
       m_videoSyncMode = VideoSyncMode::VSM_NONE;
       m_maxFramerate = 0;
    }
-
-   m_headTracking = useVR ? false : m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "BAMHeadTracking"s, false);
+   else if (m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "HeadTracking"s, false))
+   {
+      m_headTracking = new HeadTracking(this);
+   }
 
    m_ballImage = nullptr;
    m_decalImage = nullptr;
@@ -851,6 +853,13 @@ void Player::Shutdown()
 
    delete m_audio;
    m_audio = nullptr;
+
+   if (m_headTracking != nullptr)
+   {
+      m_headTracking->Release();
+      delete m_headTracking;
+      m_headTracking = nullptr;
+   }
 
    for (size_t i = 0; i < m_controlclsidsafe.size(); i++)
       delete m_controlclsidsafe[i];
@@ -4084,8 +4093,7 @@ void Player::PrepareFrame()
    else 
    #endif
    if (m_headTracking)
-      // #ravarcade: UpdateBAMHeadTracking will set proj/view matrix to add BAM view and head tracking
-      m_pin3d.UpdateBAMHeadTracking();
+      m_headTracking->Update();
    else if (m_liveUI->IsTweakMode())
       m_pin3d.InitLayout();
 
