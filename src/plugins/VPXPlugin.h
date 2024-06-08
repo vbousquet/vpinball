@@ -103,6 +103,11 @@ typedef void (*vpxpi_event_callback)(const unsigned int eventId, void* userData,
 typedef int                 BOOL;
 #endif
 
+// Needed since the VPX API conflicts with Win32 definitions...
+#ifdef CreateWindow
+#undef CreateWindow
+#endif
+
 
 typedef struct VPXTableInfo
 {
@@ -129,6 +134,11 @@ typedef struct VPXViewSetupDef
    float interpupillaryDistance;                       // [R_] TODO upgrade to RW to allow head tracking to measure and adjust accordingly
 } VPXViewSetupDef;
 
+typedef void* VPXWindow;
+typedef void* VPXRenderTarget;
+typedef void* VPXVertexBuffer;
+typedef void* VPXIndexBuffer;
+typedef void* VPXMeshBuffer;
 
 typedef struct VPXPluginAPI
 {
@@ -152,4 +162,36 @@ typedef struct VPXPluginAPI
    void (*GetActiveViewSetup)(VPXViewSetupDef* view);
    void (*SetActiveViewSetup)(VPXViewSetupDef* view);
 
+   // Auxiliary Window Management (additional windows, sharing swapchain of the main playfield window, only available if graphic backend supports it, so only BGFX with DX11+/Vulkan/Metal)
+   enum WindowFlags { WND_ALLOW_DRAG = 0x0001, };
+   VPXWindow (*CreateWindow)(unsigned int wndFlags);
+   void (*DeleteWindow)(VPXWindow& wnd);
+   void (*GetWindowRect)(VPXWindow& wnd, int& x, int& y, int& w, int& h);
+   void (*SetWindowRect)(VPXWindow& wnd, const int x, const int y, const int w, const int h);
+
+   // Rendering API
+   VPXRenderTarget (*CreateRenderTarget)();
+   void (*DeleteRenderTarget)(VPXRenderTarget& rt);
+   VPXVertexBuffer (*CreateVertexBuffer)(const unsigned int nVertices, const float* vertices);
+   void (*DeleteVertexBuffer)(VPXVertexBuffer& vb);
+   VPXIndexBuffer (*CreateIndexBuffer)(const unsigned int nIndices, const unsigned int* indices);
+   void (*DeleteIndexBuffer)(VPXIndexBuffer& ib);
+   VPXMeshBuffer (*CreateMeshBuffer)(const char* name, VPXVertexBuffer& vb, VPXIndexBuffer& ib);
+   void (*DeleteMeshBuffer)(VPXMeshBuffer& mb);
+   void (*SetRenderTarget)(const char* passName, VPXRenderTarget& rt, const BOOL useRTContent);
+   void (*AddRenderTargetDependency)(VPXRenderTarget& rt, const BOOL useDepth);
+   void (*ClearRenderTarget)(const unsigned int flags);
+   enum ShaderId { };
+   enum ShaderUniformId { };
+   void (*SetUniformSampler)(const enum ShaderId shader, const enum ShaderUniformId uniform, const char* imageId); // FIXME add wrap and filter properties
+   void (*SetUniformVec4)(const enum ShaderId shader, const enum ShaderUniformId uniform, const float x, const float y, const float z, const float w);
+   void (*DrawMesh)(const enum ShaderId shader, VPXMeshBuffer& mb, const unsigned int startIndex, const unsigned int indexCount, const bool isTranparentPass, const float sortKey);
+   void (*DrawFullscreenTexturedQuad)(const enum ShaderId shader);
+
+   // Game Controller API
+   unsigned int (*GetFrameIndex)();
+   double (*GetGameTime)();
+   unsigned int (*GetRenderingMode)();
+   enum DMDPixelFormat { };
+   void (*SetDMDPixels)(const unsigned int width, const unsigned int height, const enum DMDPixelFormat format, const char* data);
 } VPXPluginAPI;

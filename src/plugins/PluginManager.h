@@ -73,9 +73,41 @@ public:
    static void GetActiveViewSetup(VPXViewSetupDef* view);
    static void SetActiveViewSetup(VPXViewSetupDef* view);
 
+   // Auxiliary Window Management (additional windows, sharing swapchain of the main playfield window, only available if graphic backend supports it, so only BGFX with DX11+/Vulkan/Metal)
+   static VPXWindow CreateWindow(unsigned int wndFlags);
+   static void DeleteWindow(VPXWindow& wnd);
+   static void GetWindowRect(VPXWindow& wnd, int& x, int& y, int& w, int& h);
+   static void SetWindowRect(VPXWindow& wnd, const int x, const int y, const int w, const int h);
+
+   // Rendering API
+   static VPXRenderTarget CreateRenderTarget();
+   static void DeleteRenderTarget(VPXRenderTarget& rt);
+   static VPXVertexBuffer CreateVertexBuffer(const unsigned int nVertices, const float* vertices);
+   static void DeleteVertexBuffer(VPXVertexBuffer& vb);
+   static VPXIndexBuffer CreateIndexBuffer(const unsigned int nIndices, const unsigned int* indices);
+   static void DeleteIndexBuffer(VPXIndexBuffer& ib);
+   static VPXMeshBuffer CreateMeshBuffer(const char* name, VPXVertexBuffer& vb, VPXIndexBuffer& ib);
+   static void DeleteMeshBuffer(VPXMeshBuffer& mb);
+   static void SetRenderTarget(const char* passName, VPXRenderTarget& rt, const BOOL useRTContent);
+   static void AddRenderTargetDependency(VPXRenderTarget& rt, const BOOL useDepth);
+   static void ClearRenderTarget(const unsigned int flags);
+   static void SetUniformSampler(const VPXPluginAPI::ShaderId shader, const VPXPluginAPI::ShaderUniformId uniform, const char* imageId); // FIXME add wrap and filter properties
+   static void SetUniformVec4(const VPXPluginAPI::ShaderId shader, const VPXPluginAPI::ShaderUniformId uniform, const float x, const float y, const float z, const float w);
+   static void DrawMesh(const VPXPluginAPI::ShaderId shader, VPXMeshBuffer& mb, const unsigned int startIndex, const unsigned int indexCount, const bool isTranparentPass, const float sortKey);
+   static void DrawFullscreenTexturedQuad(const VPXPluginAPI::ShaderId shader);
+
+   // Game Controller API
+   static unsigned int GetFrameIndex();
+   static double GetGameTime();
+   static unsigned int GetRenderingMode();
+   static void SetDMDPixels(const unsigned int width, const unsigned int height, const VPXPluginAPI::DMDPixelFormat format, const char* data);
+
 private:
    vector<VPXPlugin*> m_plugins;
    VPXPluginAPI m_vpxAPI;
+
+   // Helpers
+   static class Shader* GetShader(const VPXPluginAPI::ShaderId shader);
 
    // Event API implementation
    static robin_hood::unordered_map<string, unsigned int> s_eventIds;

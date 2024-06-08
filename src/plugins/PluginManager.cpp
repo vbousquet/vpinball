@@ -18,16 +18,49 @@ PluginManager::PluginManager()
    m_vpxAPI.SubscribeEvent = SubscribeEvent;
    m_vpxAPI.UnsubscribeEvent = UnsubscribeEvent;
    m_vpxAPI.BroadcastEvent = BroadcastEvent;
+
    // General information API
    m_vpxAPI.GetTableInfo = GetTableInfo;
+
    // User Interface API
    m_vpxAPI.GetOption = GetOption;
    m_vpxAPI.PushNotification = PushNotification;
    m_vpxAPI.UpdateNotification = UpdateNotification;
+
    // View API
    m_vpxAPI.DisableStaticPrerendering = DisableStaticPrerendering;
    m_vpxAPI.GetActiveViewSetup = GetActiveViewSetup;
    m_vpxAPI.SetActiveViewSetup = SetActiveViewSetup;
+
+   // Auxiliary Window Management (additional windows, sharing swapchain of the main playfield window, only available if graphic backend supports it, so only BGFX with DX11+/Vulkan/Metal)
+   m_vpxAPI.CreateWindow = CreateWindow;
+   m_vpxAPI.DeleteWindow = DeleteWindow;
+   m_vpxAPI.GetWindowRect = GetWindowRect;
+   m_vpxAPI.SetWindowRect = SetWindowRect;
+
+   // Rendering API
+   m_vpxAPI.CreateRenderTarget = CreateRenderTarget;
+   m_vpxAPI.DeleteRenderTarget = DeleteRenderTarget;
+   m_vpxAPI.CreateVertexBuffer = CreateVertexBuffer;
+   m_vpxAPI.DeleteVertexBuffer = DeleteVertexBuffer;
+   m_vpxAPI.CreateIndexBuffer = CreateIndexBuffer;
+   m_vpxAPI.DeleteIndexBuffer = DeleteIndexBuffer;
+   m_vpxAPI.CreateMeshBuffer = CreateMeshBuffer;
+   m_vpxAPI.DeleteMeshBuffer = DeleteMeshBuffer;
+   m_vpxAPI.SetRenderTarget = SetRenderTarget;
+   m_vpxAPI.AddRenderTargetDependency = AddRenderTargetDependency;
+   m_vpxAPI.ClearRenderTarget = ClearRenderTarget;
+   m_vpxAPI.SetUniformSampler = SetUniformSampler;
+   m_vpxAPI.SetUniformVec4 = SetUniformVec4;
+   m_vpxAPI.DrawMesh = DrawMesh;
+   m_vpxAPI.DrawFullscreenTexturedQuad = DrawFullscreenTexturedQuad;
+
+   // Game Controller API
+   m_vpxAPI.GetFrameIndex = GetFrameIndex;
+   m_vpxAPI.GetGameTime = GetGameTime;
+   m_vpxAPI.GetRenderingMode = GetRenderingMode;
+   m_vpxAPI.SetDMDPixels = SetDMDPixels;
+
    // Validate API to ensure no field has been forgotten
    #ifdef _DEBUG
    for (size_t i = 0; i < sizeof(m_vpxAPI) / 4; i++)
@@ -211,6 +244,174 @@ void PluginManager::SetActiveViewSetup(VPXViewSetupDef* view)
    viewSetup.mViewZ = view->viewZ;
    g_pplayer->m_renderer->InitLayout();
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// Auxiliary Window Management
+
+
+VPXWindow PluginManager::CreateWindow(unsigned int wndFlags)
+{
+   assert(g_pplayer); // Only allowed in game
+   // FIXME implement
+   return nullptr;
+}
+
+void PluginManager::DeleteWindow(VPXWindow& wnd)
+{
+   assert(g_pplayer); // Only allowed in game
+   // FIXME implement
+}
+
+void PluginManager::GetWindowRect(VPXWindow& wnd, int& x, int& y, int& w, int& h)
+{
+   assert(g_pplayer); // Only allowed in game
+   // FIXME implement
+}
+
+void PluginManager::SetWindowRect(VPXWindow& wnd, const int x, const int y, const int w, const int h)
+{
+   assert(g_pplayer); // Only allowed in game
+   // FIXME implement
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// Rendering API
+VPXRenderTarget PluginManager::CreateRenderTarget()
+{
+   assert(g_pplayer);
+   return (VPXRenderTarget) new RenderTarget(g_pplayer->m_renderer->m_pd3dPrimaryDevice, 640, 480, colorFormat::RGBA);
+}
+
+void PluginManager::DeleteRenderTarget(VPXRenderTarget& rt)
+{
+   delete (RenderTarget*)rt;
+   rt = nullptr;
+}
+
+VPXVertexBuffer PluginManager::CreateVertexBuffer(const unsigned int nVertices, const float* vertices)
+{
+   assert(g_pplayer);
+   return (VPXVertexBuffer) new VertexBuffer(g_pplayer->m_renderer->m_pd3dPrimaryDevice, nVertices, vertices);
+}
+
+void PluginManager::DeleteVertexBuffer(VPXVertexBuffer& vb)
+{
+   delete (VertexBuffer*)vb;
+   vb = nullptr;
+}
+
+VPXIndexBuffer PluginManager::CreateIndexBuffer(const unsigned int nIndices, const unsigned int* indices)
+{
+   assert(g_pplayer);
+   return (VPXIndexBuffer) new IndexBuffer(g_pplayer->m_renderer->m_pd3dPrimaryDevice, nIndices, indices);
+}
+
+void PluginManager::DeleteIndexBuffer(VPXIndexBuffer& ib)
+{
+   delete (IndexBuffer*)ib;
+   ib = nullptr;
+}
+
+VPXMeshBuffer PluginManager::CreateMeshBuffer(const char* name, VPXVertexBuffer& vb, VPXIndexBuffer& ib)
+{
+   assert(g_pplayer);
+   return (VPXMeshBuffer) new MeshBuffer((VertexBuffer*)vb, (IndexBuffer*)ib);
+}
+
+void PluginManager::DeleteMeshBuffer(VPXMeshBuffer& mb)
+{
+   delete (MeshBuffer*)mb;
+   mb = nullptr;
+}
+
+void PluginManager::SetRenderTarget(const char* passName, VPXRenderTarget& rt, const BOOL useRTContent)
+{
+   assert(g_pplayer);
+   g_pplayer->m_renderer->m_pd3dPrimaryDevice->SetRenderTarget(passName, (RenderTarget*) rt, !!useRTContent);
+}
+
+void PluginManager::AddRenderTargetDependency(VPXRenderTarget& rt, const BOOL useDepth)
+{
+   assert(g_pplayer);
+   g_pplayer->m_renderer->m_pd3dPrimaryDevice->AddRenderTargetDependency((RenderTarget*)rt);
+}
+
+void PluginManager::ClearRenderTarget(const unsigned int flags)
+{
+   assert(g_pplayer);
+   //g_pplayer->m_renderer->m_pd3dPrimaryDevice->Clear();
+}
+
+Shader* PluginManager::GetShader(const VPXPluginAPI::ShaderId shader)
+{
+   assert(g_pplayer);
+   return nullptr;
+}
+
+void PluginManager::SetUniformSampler(const VPXPluginAPI::ShaderId shaderId, const VPXPluginAPI::ShaderUniformId uniform, const char* imageId)
+{
+   assert(g_pplayer);
+   Shader* shader = GetShader(shaderId);
+   //if (shader)
+   //   shader->SetVector(SHADER_u_basic_shade_mode, )
+}
+
+void PluginManager::SetUniformVec4(const VPXPluginAPI::ShaderId shaderId, const VPXPluginAPI::ShaderUniformId uniform, const float x, const float y, const float z, const float w)
+{
+   assert(g_pplayer);
+   Shader* shader = GetShader(shaderId);
+   if (shader)
+      shader->SetVector(SHADER_u_basic_shade_mode, x, y, z, w);
+}
+
+void PluginManager::DrawMesh(const VPXPluginAPI::ShaderId shaderId, VPXMeshBuffer& mb, const unsigned int startIndex, const unsigned int indexCount, const bool isTranparentPass, const float sortKey)
+{
+   assert(g_pplayer);
+   Shader* shader = GetShader(shaderId);
+   //if (shader)
+   //   g_pplayer->m_renderer->m_pd3dPrimaryDevice->DrawMesh(shader, isTranparentPass, );
+}
+
+void PluginManager::DrawFullscreenTexturedQuad(const VPXPluginAPI::ShaderId shaderId)
+{
+   assert(g_pplayer);
+   Shader* shader = GetShader(shaderId);
+   if (shader)
+      g_pplayer->m_renderer->m_pd3dPrimaryDevice->DrawFullscreenTexturedQuad(shader);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Game Controller API
+unsigned int PluginManager::GetFrameIndex()
+{
+   assert(g_pplayer);
+   return g_pplayer->m_overall_frames;
+}
+
+double PluginManager::GetGameTime()
+{
+   assert(g_pplayer);
+   return g_pplayer->m_time_sec;
+}
+
+unsigned int PluginManager::GetRenderingMode()
+{
+   assert(g_pplayer);
+   if (g_pplayer->m_renderer->m_stereo3D == STEREO_VR)
+      return 2; // VR
+   else if ((g_pplayer->m_renderer->m_stereo3D != STEREO_OFF) && g_pplayer->m_renderer->m_stereo3Denabled)
+      return 1; // Stereo 3D (3DTV or anaglyph)
+   else
+      return 0; // 2D
+}
+
+void PluginManager::SetDMDPixels(const unsigned int width, const unsigned int height, const VPXPluginAPI::DMDPixelFormat format, const char* data)
+{
+   assert(g_pplayer);
+}
+
 
 
 ///////////////////////////////////////////////////////////////////////////////
