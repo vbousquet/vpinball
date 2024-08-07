@@ -352,7 +352,6 @@
 #define IDC_DESCRIPTION                 252
 #define IDC_RULES                       253
 #define IDC_CHANGELOG                   254
-#define IDD_VIDEO_OPTIONS               255
 #define IDC_FULLSCREEN                  256
 #define IDD_FONTDIALOG                  256
 #define IDC_SIZELIST                    257
@@ -1272,6 +1271,12 @@
 #define IDC_INFOTEXT_EDIT               926
 #define IDC_EXPOSURE                    927
 #define IDC_SYNC                        928
+#define IDD_RENDER_OPT                  929
+#define IDD_CABINET_OPT                 930
+#define IDD_PFVIEW_OPT                  931
+#define IDD_ALPHAVIEW_OPT               932
+#define IDD_DMDVIEW_OPT                 933
+#define IDD_BACKGLASS_OPT               934
 #define IDC_LAYBACK_EDIT                1040
 #define IDC_3D_STEREO_SEPARATION_EDIT   1041
 #define IDC_3D_STEREO_ZPD_EDIT          1042
@@ -1468,7 +1473,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        681
 #define _APS_NEXT_COMMAND_VALUE         4030
-#define _APS_NEXT_CONTROL_VALUE         929
+#define _APS_NEXT_CONTROL_VALUE         935
 #define _APS_NEXT_SYMED_VALUE           191
 #endif
 #endif
