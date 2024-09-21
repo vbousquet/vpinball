@@ -1,7 +1,5 @@
 #pragma once
 
-#include "../b2s_i.h"
-
 class PictureBoxAnimationEntry
 {
 public:
