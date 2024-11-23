@@ -224,7 +224,7 @@ public:
 static const string platform_cpu[2] = { "x86"s, "arm"s };
 static const string platform_bits[2] = { "32"s, "64"s };
 static const string platform_os[6] = { "windows"s, "linux"s, "ios"s, "tvos"s, "macos"s, "android"s };
-static const string platform_renderer[2] = { "dx"s, "gl"s }; // gles necessary, too?
+static const string platform_renderer[3] = { "dx"s, "gl"s, "bgfx"s }; // gles necessary, too?
 
 #if defined(_M_IX86) || defined(_M_X64) || defined(_M_AMD64) || defined(__i386__) || defined(__i386) || defined(__i486__) || defined(__i486) || defined(i386) || defined(__ia64__) || defined(__x86_64__)
  #define GET_PLATFORM_CPU_ENUM 0

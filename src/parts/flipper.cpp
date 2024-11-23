@@ -821,7 +821,7 @@ void Flipper::Render(const unsigned int renderMask)
    {
       matTrafo = Matrix3D::MatrixRotateZ(m_phitflipper->m_flipperMover.m_angleCur) * matTrafo;
    }
-   g_pplayer->m_renderer->UpdateBasicShaderMatrix(matTrafo);
+   g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->UpdateBasicShaderMatrix(matTrafo);
    Texture * const pin = m_ptable->GetImage(m_d.m_szImage);
 
    m_rd->m_basicShader->SetBasic(m_ptable->GetMaterial(m_d.m_szMaterial), pin);
@@ -833,7 +833,7 @@ void Flipper::Render(const unsigned int renderMask)
       m_rd->DrawMesh(m_rd->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, flipperBaseNumIndices, flipperBaseNumIndices);
    }
 
-   g_pplayer->m_renderer->UpdateBasicShaderMatrix();
+   g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->UpdateBasicShaderMatrix();
 }
 
 #pragma endregion

@@ -22,13 +22,16 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncMode, const StereoMode stereo3D)
-   : m_table(table)
+Renderer::Renderer(const unsigned int index, SharedContext* context, RenderDevice* renderDevice, VPX::Window* wnd, VideoSyncMode& syncMode, const StereoMode stereo3D)
+   : m_context(context)
+   , m_table(context->m_table) // FIXME remove
+   , m_rendererIndex(index)
+   , m_renderDevice(renderDevice)
    , m_stereo3D(stereo3D)
    #if defined(ENABLE_DX9) // DirectX 9 does not support stereo rendering
    , m_stereo3DfakeStereo(true)
    #else
-   , m_stereo3DfakeStereo(stereo3D == STEREO_VR ? false : table->m_settings.LoadValueWithDefault(Settings::Player, "Stereo3DFake"s, false))
+   , m_stereo3DfakeStereo(stereo3D == STEREO_VR ? false : context->m_table->m_settings.LoadValueWithDefault(Settings::Player, "Stereo3DFake"s, false))
    #endif
 {
    m_stereo3Denabled = m_table->m_settings.LoadValueWithDefault(Settings::Player, "Stereo3DEnabled"s, (m_stereo3D != STEREO_OFF));
@@ -59,27 +62,6 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
    }
    m_trailForBalls = m_table->m_settings.LoadValueWithDefault(Settings::Player, "BallTrail"s, true);
    m_ballTrailStrength = m_table->m_settings.LoadValueWithDefault(Settings::Player, "BallTrailStrength"s, 0.5f);
-   m_ballImage = nullptr;
-   m_decalImage = nullptr;
-   m_overwriteBallImages = m_table->m_settings.LoadValueWithDefault(Settings::Player, "OverwriteBallImage"s, false);
-   if (m_overwriteBallImages)
-   {
-      string imageName;
-      bool hr = m_table->m_settings.LoadValue(Settings::Player, "BallImage"s, imageName);
-      if (hr)
-      {
-         BaseTexture* const tex = BaseTexture::CreateFromFile(imageName, m_table->m_settings.LoadValueWithDefault(Settings::Player, "MaxTexDimension"s, 0));
-         if (tex != nullptr)
-            m_ballImage = new Texture(tex);
-      }
-      hr = m_table->m_settings.LoadValue(Settings::Player, "DecalImage"s, imageName);
-      if (hr)
-      {
-         BaseTexture* const tex = BaseTexture::CreateFromFile(imageName, m_table->m_settings.LoadValueWithDefault(Settings::Player, "MaxTexDimension"s, 0));
-         if (tex != nullptr)
-            m_decalImage = new Texture(tex);
-      }
-   }
 
    // Global emission scale
    m_globalEmissionScale = m_table->m_globalEmissionScale;
@@ -123,23 +105,12 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
    m_mvp = new ModelViewProj(m_stereo3D == STEREO_OFF ? 1 : 2);
 
    #if defined(ENABLE_OPENGL)
-   const int nMSAASamples = m_table->m_settings.LoadValueWithDefault(Settings::Player, "MSAASamples"s, 1);
+   int nMSAASamples = m_table->m_settings.LoadValueWithDefault(Settings::Player, "MSAASamples"s, 1);
    #elif defined(ENABLE_DX9) || defined(ENABLE_BGFX)
    // Sadly DX9 does not support resolving an MSAA depth buffer, making MSAA implementation complex for it. So just disable for now
    // BGFX MSAA is likely possible but not yet implemented
    constexpr int nMSAASamples = 1;
    #endif
-   const bool useNvidiaApi = m_table->m_settings.LoadValueWithDefault(Settings::Player, "UseNVidiaAPI"s, false);
-   const bool disableDWM = m_table->m_settings.LoadValueWithDefault(Settings::Player, "DisableDWM"s, false);
-   const bool compressTextures = m_table->m_settings.LoadValueWithDefault(Settings::Player, "CompressTextures"s, false);
-   int nEyes = (m_stereo3D == STEREO_VR || (m_stereo3D != STEREO_OFF && !m_stereo3DfakeStereo)) ? 2 : 1;
-   try {
-      m_renderDevice = new RenderDevice(wnd, m_stereo3D == STEREO_VR, nEyes, useNvidiaApi, disableDWM, compressTextures, m_BWrendering, nMSAASamples, syncMode);
-   }
-   catch (...) {
-      // TODO better error handling => just let the exception up ?
-      throw(E_FAIL);
-   }
 
    if (m_stereo3D == STEREO_VR)
    {
@@ -189,8 +160,13 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
                       ? SurfaceType::RT_DEFAULT : SurfaceType::RT_STEREO;
 
    // MSAA render target which is resolved to the non MSAA render target
-   if (nMSAASamples > 1) 
-      m_pOffscreenMSAABackBufferTexture = new RenderTarget(m_renderDevice, rtType, "MSAABackBuffer"s, renderWidthAA, renderHeightAA, renderFormat, true, nMSAASamples, "Fatal Error: unable to create MSAA render buffer!");
+   #if defined(ENABLE_OPENGL)
+      int maxSamples;
+      glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+      nMSAASamples = min(maxSamples, nMSAASamples);
+      if (nMSAASamples > 1)
+         m_pOffscreenMSAABackBufferTexture = new RenderTarget(m_renderDevice, rtType, "MSAABackBuffer"s, renderWidthAA, renderHeightAA, renderFormat, true, nMSAASamples, "Fatal Error: unable to create MSAA render buffer!");
+   #endif
 
    // Either the main render target for non MSAA, or the buffer where the MSAA render is resolved
    m_pOffscreenBackBufferTexture1 = new RenderTarget(m_renderDevice, rtType, "BackBuffer1"s, renderWidthAA, renderHeightAA, renderFormat, true, 1, "Fatal Error: unable to create offscreen back buffer");
@@ -316,38 +292,10 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
    VertexBuffer* ballTrailVertexBuffer = new VertexBuffer(m_renderDevice, 64 * (MAX_BALL_TRAIL_POS - 2) * 2 + 4, nullptr, true);
    m_ballTrailMeshBuffer = new MeshBuffer(L"Ball.Trail"s, ballTrailVertexBuffer);
 
-   // Cache DMD renderer properties
-   {
-      const int dmdProfile = m_table->m_settings.LoadValueWithDefault(Settings::DMD, "RenderProfile"s, 0);
-      const string prefix = "User."s + std::to_string(dmdProfile + 1) + "."s;
-      // DMD View
-      m_dmdViewExposure = m_table->m_settings.LoadValueWithDefault(Settings::DMD, "Exposure"s, 2.f);
-      m_dmdViewDot = convertColor(
-         m_table->m_settings.LoadValueWithDefault(Settings::DMD, prefix + "DotTint"s, 0x002D52FF), // Default tint is Neon plasma (255, 82, 45)
-         m_table->m_settings.LoadValueWithDefault(Settings::DMD, prefix + "DotBrightness"s, 5.0f));
-      // DMD Renderer
-      m_dmdUseNewRenderer = m_table->m_settings.LoadValueWithDefault(Settings::DMD, prefix + "Legacy"s, false);
-      #if !defined(ENABLE_BGFX)
-         m_dmdUseNewRenderer = false; // Only available for BGFX
-      #endif
-      m_dmdDotProperties.x = m_table->m_settings.LoadValueWithDefault(Settings::DMD, prefix + "DotSize"s, 0.85f);
-      m_dmdDotProperties.y = m_table->m_settings.LoadValueWithDefault(Settings::DMD, prefix + "DotSharpness"s, 0.8f);
-      m_dmdDotProperties.z = m_table->m_settings.LoadValueWithDefault(Settings::DMD, prefix + "DotRounding"s, 0.85f);
-      m_dmdDotProperties.w = m_table->m_settings.LoadValueWithDefault(Settings::DMD, prefix + "DotGlow"s, 0.015f);
-      m_dmdUnlitDotColor = convertColor(
-         m_table->m_settings.LoadValueWithDefault(Settings::DMD, prefix + "UnlitDotColor"s, 0x00202020),
-         m_table->m_settings.LoadValueWithDefault(Settings::DMD, prefix + "BackGlow"s, 0.005f));
-      // Convert color as settings are sRGB color while shader needs linear RGB color
-      #define InvsRGB(x) (((x) <= 0.04045f) ? ((x) * (float)(1.0 / 12.92)) : (powf((x) * (float)(1.0 / 1.055) + (float)(0.055 / 1.055), 2.4f)))
-      m_dmdViewDot.x = InvsRGB(m_dmdViewDot.x);
-      m_dmdViewDot.y = InvsRGB(m_dmdViewDot.y);
-      m_dmdViewDot.z = InvsRGB(m_dmdViewDot.z);
-      m_dmdUnlitDotColor.x = InvsRGB(m_dmdUnlitDotColor.x);
-      m_dmdUnlitDotColor.y = InvsRGB(m_dmdUnlitDotColor.y);
-      m_dmdUnlitDotColor.z = InvsRGB(m_dmdUnlitDotColor.z);
-      #undef InvsRGB
-   }
+   InitLayout();
 
+   if (wnd->IsVRHeadSet())
+      DisableStaticPrePass(true);
 
    m_renderDevice->ResetRenderState();
    #if defined(ENABLE_DX9)
@@ -377,8 +325,6 @@ Renderer::~Renderer()
    m_pinballEnvTexture.FreeStuff();
    m_builtinEnvTexture.FreeStuff();
    m_aoDitherTexture.FreeStuff();
-   delete m_ballImage;
-   delete m_decalImage;
    delete m_envRadianceTexture;
    delete m_backGlass;
    delete m_ballMeshBuffer;
@@ -386,8 +332,6 @@ Renderer::~Renderer()
    delete m_ballDebugPoints;
    #endif
    delete m_ballTrailMeshBuffer;
-   delete m_ballImage;
-   delete m_decalImage;
    delete m_tonemapLUT;
    delete m_staticPrepassRT;
    delete m_pOffscreenBackBufferTexture1;
@@ -398,17 +342,11 @@ Renderer::~Renderer()
    delete m_pPostProcessRenderTarget2;
    delete m_pReflectionBufferTexture;
    delete m_pMotionBlurBufferTexture;
-   delete m_pOffscreenVRLeft;
-   delete m_pOffscreenVRRight;
+   #ifdef ENABLE_VR
+      delete m_pOffscreenVRLeft;
+      delete m_pOffscreenVRRight;
+   #endif
    ReleaseAORenderTargets();
-   delete m_renderDevice;
-}
-
-void Renderer::SwapBackBufferRenderTargets()
-{
-   RenderTarget* tmp = m_pOffscreenBackBufferTexture1;
-   m_pOffscreenBackBufferTexture1 = m_pOffscreenBackBufferTexture2;
-   m_pOffscreenBackBufferTexture2 = tmp;
 }
 
 RenderTarget* Renderer::GetPostProcessRenderTarget1()
@@ -848,22 +786,30 @@ BaseTexture* Renderer::EnvmapPrecalc(const Texture* envTex, const unsigned int r
 
 void Renderer::DrawBackground()
 {
-   const PinTable * const ptable = g_pplayer->m_ptable;
-   Texture * const pin = ptable->GetDecalsEnabled() ? ptable->GetImage(ptable->m_BG_image[ptable->m_BG_current_set]) : nullptr;
    m_renderDevice->ResetRenderState();
    m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_CCW);
-   if (pin)
+   if (m_stereo3D == STEREO_VR)
    {
-      m_renderDevice->Clear(clearType::ZBUFFER, 0, 1.0f, 0L);
-      m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
-      m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
-      m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
-      g_pplayer->m_renderer->DrawSprite(0.f, 0.f, 1.f, 1.f, 0xFFFFFFFF, m_renderDevice->m_texMan.LoadTexture(pin->m_pdsBuffer, SF_TRILINEAR, SA_CLAMP, SA_CLAMP, false), ptable->m_ImageBackdropNightDay ? sqrtf(m_globalEmissionScale) : 1.0f, true);
+      m_renderDevice->Clear(clearType::TARGET | clearType::ZBUFFER, 0, 1.0f, 0L);
    }
    else
    {
-      const D3DCOLOR d3dcolor = COLORREF_to_D3DCOLOR(ptable->m_colorbackdrop);
-      m_renderDevice->Clear(clearType::TARGET | clearType::ZBUFFER, d3dcolor, 1.0f, 0L);
+      const PinTable* const ptable = g_pplayer->m_ptable;
+      Texture* const pin = ptable->GetDecalsEnabled() ? ptable->GetImage(ptable->m_BG_image[ptable->m_BG_current_set]) : nullptr;
+      if (pin)
+      {
+         m_renderDevice->Clear(clearType::ZBUFFER, 0, 1.0f, 0L);
+         m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
+         m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
+         m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
+         g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->DrawSprite(0.f, 0.f, 1.f, 1.f, 0xFFFFFFFF, m_renderDevice->m_texMan.LoadTexture(pin->m_pdsBuffer, SF_TRILINEAR, SA_CLAMP, SA_CLAMP, false),
+            ptable->m_ImageBackdropNightDay ? sqrtf(m_globalEmissionScale) : 1.0f, true);
+      }
+      else
+      {
+         const D3DCOLOR d3dcolor = COLORREF_to_D3DCOLOR(ptable->m_colorbackdrop);
+         m_renderDevice->Clear(clearType::TARGET | clearType::ZBUFFER, d3dcolor, 1.0f, 0L);
+      }
    }
 }
 
@@ -1094,9 +1040,6 @@ void Renderer::UpdateStereoShaderState()
 
 void Renderer::RenderFrame()
 {
-   // Keep previous render as a reflection probe for ball reflection and for hires motion blur
-   SwapBackBufferRenderTargets();
-
    // Reinitialize parts that have been modified
    for (auto renderable : m_renderableToInit)
    {
@@ -1106,7 +1049,6 @@ void Renderer::RenderFrame()
    m_renderableToInit.clear();
 
    // Setup ball rendering: collect all lights that can reflect on balls
-   m_ballTrailMeshBufferPos = 0;
    m_ballReflectedLights.clear();
    for (size_t i = 0; i < m_table->m_vedit.size(); i++)
    {
@@ -1114,23 +1056,30 @@ void Renderer::RenderFrame()
       if (item && item->GetItemType() == eItemLight && static_cast<Light*>(item)->m_d.m_showReflectionOnBall && !static_cast<Light*>(item)->m_backglass)
          m_ballReflectedLights.push_back(static_cast<Light*>(item));
    }
+
+   // Keep previous render as a reflection probe for ball reflection and ball motion blur
+   RenderTarget* tmp = m_pOffscreenBackBufferTexture1;
+   m_pOffscreenBackBufferTexture1 = m_pOffscreenBackBufferTexture2;
+   m_pOffscreenBackBufferTexture2 = tmp;
    // We don't need to set the dependency on the previous frame render as this would be a cross frame dependency which does not have any meaning since dependencies are resolved per frame
-   // m_renderDevice->AddRenderTargetDependency(m_renderDevice->GetPreviousBackBufferTexture());
-   m_renderDevice->m_ballShader->SetTexture(SHADER_tex_ball_playfield, GetPreviousBackBufferTexture()->GetColorSampler());
+   // m_renderDevice->AddRenderTargetDependency(m_pOffscreenBackBufferTexture2);
+   m_renderDevice->m_ballShader->SetTexture(SHADER_tex_ball_playfield, m_pOffscreenBackBufferTexture2->GetColorSampler());
+   m_ballTrailMeshBufferPos = 0;
 
    // Update camera point of view
+   // FIXME this should be done per view as each view is displayed at a different location in real world space
    #if defined(ENABLE_VR) || defined(ENABLE_XR)
    if (m_stereo3D == STEREO_VR)
       g_pplayer->m_vrDevice->UpdateVRPosition(GetMVP());
    else 
    #endif
-   // Legacy headtracking (to be moved to a plugin, using plugin API to update camera)
+   // Legacy headtracking (to be moved to a plugin, using plugin API to update camera and applied for each render view)
    if (g_pplayer->m_headTracking)
    {
       Matrix3D m_matView;
       Matrix3D m_matProj[2];
       #ifndef __STANDALONE__
-      BAMView::createProjectionAndViewMatrix(&m_matProj[0]._11, &m_matView._11);
+         BAMView::createProjectionAndViewMatrix(&m_matProj[0]._11, &m_matView._11);
       #endif
       m_mvp->SetView(m_matView);
       for (unsigned int eye = 0; eye < m_mvp->m_nEyes; eye++)
@@ -1138,120 +1087,23 @@ void Renderer::RenderFrame()
    }
 
    // Start from the prerendered parts/background or a clear background for VR
-   if (m_stereo3D == STEREO_VR || g_pplayer->GetInfoMode() == IF_DYNAMIC_ONLY)
-   {
-      m_renderDevice->SetRenderTarget("Render Scene"s, GetMSAABackBufferTexture());
-      m_renderDevice->Clear(clearType::TARGET | clearType::ZBUFFER, 0, 1.0f, 0L);
-   }
-   else
+   if (IsUsingStaticPrepass() && g_pplayer->GetInfoMode() != IF_DYNAMIC_ONLY)
    {
       RenderStaticPrepass(); // Update staticly prerendered parts if needed
       m_renderDevice->SetRenderTarget("Render Scene"s, GetMSAABackBufferTexture());
       m_renderDevice->AddRenderTargetDependency(m_staticPrepassRT);
       m_renderDevice->BlitRenderTarget(m_staticPrepassRT, GetMSAABackBufferTexture());
    }
-
+   else
+   {
+      m_renderDevice->SetRenderTarget("Render Scene"s, GetMSAABackBufferTexture());
+      DrawBackground();
+   }
    if (g_pplayer->GetInfoMode() != IF_STATIC_ONLY)
       RenderDynamics();
 
    // Apply screenspace transforms (MSAA, AO, AA, stereo, ball motion blur, tonemapping, dithering, bloom,...)
    PrepareVideoBuffers(m_renderDevice->GetOutputBackBuffer());
-}
-
-void Renderer::RenderDMD(BaseTexture* dmd, const bool isColored, RenderTarget* rt)
-{
-   m_renderDevice->ResetRenderState();
-   m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
-   m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
-   m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
-   m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
-   m_renderDevice->SetRenderTarget("DMDView", rt, false);
-   SetupDMDRender(m_dmdViewDot, dmd, 1.f, true, isColored);
-   m_renderDevice->m_DMDShader->SetVector(SHADER_exposure_wcg, m_dmdViewExposure, 1.f, 1.f, 0.f);
-   const float rtAR = static_cast<float>(rt->GetWidth()) / static_cast<float>(rt->GetHeight());
-   const float dmdAR = static_cast<float>(dmd->width()) / static_cast<float>(dmd->height());
-   const float w = rtAR > dmdAR ? dmdAR / rtAR : 1.f;
-   const float h = rtAR < dmdAR ? rtAR / dmdAR : 1.f;
-   const Vertex3D_NoTex2 vertices[4] = {
-      {  w, -h, 0.f, 0.f, 0.f, 1.f, 1.f, 1.f },
-      { -w, -h, 0.f, 0.f, 0.f, 1.f, 0.f, 1.f },
-      {  w,  h, 0.f, 0.f, 0.f, 1.f, 1.f, 0.f },
-      { -w,  h, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f }
-   };
-   m_renderDevice->DrawTexturedQuad(m_renderDevice->m_DMDShader, vertices);
-}
-
-void Renderer::SetupDMDRender(const vec4& color, BaseTexture* dmd, const float alpha, const bool sRGB, const bool isColored)
-{
-   // Legacy DMD renderer
-   if (m_dmdUseNewRenderer)
-   {
-      m_renderDevice->m_DMDShader->SetVector(SHADER_vColor_Intensity, &color);
-      #ifdef DMD_UPSCALE
-         m_renderDevice->m_DMDShader->SetVector(SHADER_vRes_Alpha_time, (float)(dmd->width() * 3), (float)(dmd->height() * 3), alpha, (float)(g_pplayer->m_overall_frames % 2048));
-      #else
-         m_renderDevice->m_DMDShader->SetVector(SHADER_vRes_Alpha_time, (float)dmd->width(), (float)dmd->height(), alpha, (float)(g_pplayer->m_overall_frames % 2048));
-      #endif
-      m_renderDevice->m_DMDShader->SetTechnique(SHADER_TECHNIQUE_basic_DMD);
-      m_renderDevice->m_DMDShader->SetTexture(SHADER_tex_dmd, dmd, SF_NONE, SA_CLAMP, SA_CLAMP, true);
-   }
-   // New DMD renderer
-   else
-   {
-      static int lastFrame = -1;
-      static BaseTexture* lastDmd = nullptr;
-      const vec4 dotColor(color.x, color.y, color.z, 0.f);
-      const float brightness = color.w;
-      Sampler* dmdSampler = m_renderDevice->m_texMan.LoadTexture(dmd, SamplerFilter::SF_BILINEAR, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, true);
-      if (m_dmdBlurs[0] == nullptr || m_dmdBlurs[0]->GetWidth() != dmdSampler->GetWidth() || m_dmdBlurs[0]->GetHeight() != dmdSampler->GetHeight())
-      {
-         lastFrame = -1;
-         for (int i = 0; i < 4; i++)
-         {
-            delete m_dmdBlurs[i];
-            m_dmdBlurs[i] = new RenderTarget(m_renderDevice, SurfaceType::RT_DEFAULT, "DMDBlur" + std::to_string(i), dmd->width(), dmd->height(), colorFormat::RGBA8, false, 1, "");
-         }
-      }
-      if (g_pplayer->m_overall_frames != lastFrame || lastDmd != dmd)
-      {
-         lastDmd = dmd;
-         lastFrame = g_pplayer->m_overall_frames;
-         RenderPass* const initial_rt = m_renderDevice->GetCurrentPass();
-         for (int i = 0; i < 3; i++)
-         {
-            {
-               m_renderDevice->SetRenderTarget("DMD HBlur "s + std::to_string(i + 1), m_dmdBlurs[0], false);
-               if (i > 0)
-                  m_renderDevice->AddRenderTargetDependency(m_dmdBlurs[i]);
-               m_renderDevice->m_FBShader->SetTexture(SHADER_tex_fb_filtered, i == 0 ? dmdSampler : m_dmdBlurs[i]->GetColorSampler());
-               m_renderDevice->m_FBShader->SetVector(SHADER_w_h_height, (float)(1.0 / dmdSampler->GetWidth()), (float)(1.0 / dmdSampler->GetHeight()), 1.0f, 1.0f);
-               m_renderDevice->m_FBShader->SetTechnique(i == 0 ? SHADER_TECHNIQUE_fb_blur_horiz7x7 : SHADER_TECHNIQUE_fb_blur_horiz9x9);
-               m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
-            }
-            {
-               m_renderDevice->SetRenderTarget("DMD VBlur "s + std::to_string(i + 1), m_dmdBlurs[i + 1], false);
-               m_renderDevice->AddRenderTargetDependency(m_dmdBlurs[0]);
-               m_renderDevice->m_FBShader->SetTexture(SHADER_tex_fb_filtered, m_dmdBlurs[0]->GetColorSampler());
-               m_renderDevice->m_FBShader->SetVector(SHADER_w_h_height, (float)(1.0 / dmdSampler->GetWidth()), (float)(1.0 / dmdSampler->GetHeight()), 1.0f, 1.0f);
-               m_renderDevice->m_FBShader->SetTechnique(i == 0 ? SHADER_TECHNIQUE_fb_blur_vert7x7 : SHADER_TECHNIQUE_fb_blur_vert9x9);
-               m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
-            }
-         }
-         m_renderDevice->SetRenderTarget(initial_rt->m_name, initial_rt->m_rt, true);
-         initial_rt->m_name += '-';
-      }
-      m_renderDevice->m_DMDShader->SetVector(SHADER_w_h_height, m_dmdDotProperties.x /* size */, m_dmdDotProperties.y /* sharpness */, m_dmdDotProperties.z /* rounding */, isColored ? 1.f : 0.f /* luminance or RGB */);
-      m_renderDevice->m_DMDShader->SetVector(SHADER_vColor_Intensity, dotColor.x * brightness, dotColor.y * brightness, dotColor.z * brightness, brightness); // dot color (only used if we received brightness data, premultiplied by overall brightness) and overall brightness (used for colored date)
-      m_renderDevice->m_DMDShader->SetVector(SHADER_staticColor_Alpha, m_dmdUnlitDotColor.x, m_dmdUnlitDotColor.y, m_dmdUnlitDotColor.z, 0.f /* unused */);
-      m_renderDevice->m_DMDShader->SetVector(SHADER_vRes_Alpha_time, (float)dmd->width(), (float)dmd->height(), m_dmdDotProperties.w /* dot glow */ * brightness, m_dmdUnlitDotColor.w /* back glow */ * brightness);
-
-      m_renderDevice->m_DMDShader->SetTechnique(sRGB ? SHADER_TECHNIQUE_basic_DMD2_srgb : SHADER_TECHNIQUE_basic_DMD2);
-      m_renderDevice->m_DMDShader->SetTexture(SHADER_tex_dmd, dmd);
-      m_renderDevice->AddRenderTargetDependency(m_dmdBlurs[1]);
-      m_renderDevice->m_DMDShader->SetTexture(SHADER_dmdDotGlow, m_dmdBlurs[1]->GetColorSampler());
-      m_renderDevice->AddRenderTargetDependency(m_dmdBlurs[3]);
-      m_renderDevice->m_DMDShader->SetTexture(SHADER_dmdBackGlow, m_dmdBlurs[3]->GetColorSampler()); // FIXME why don't we directly blur from 1 to 3 ?
-   }
 }
 
 void Renderer::DrawBulbLightBuffer()
@@ -1383,7 +1235,7 @@ void Renderer::RenderStaticPrepass()
       return;
 
    #if defined(ENABLE_OPENGL) && defined(__STANDALONE__)
-   SDL_GL_MakeCurrent(g_pplayer->m_playfieldWnd->GetCore(), g_pplayer->m_renderer->m_renderDevice->m_sdl_context);
+   SDL_GL_MakeCurrent(g_pplayer->m_playfieldWnd->GetCore(), g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_renderDevice->m_sdl_context);
    #endif
 
    m_isStaticPrepassDirty = false;
@@ -2203,6 +2055,7 @@ void Renderer::PrepareVideoBuffers(RenderTarget* outputBackBuffer)
    }
 
    // Apply stereo
+   m_pVRFinal = renderedRT; // Cache render target with stereo render for preview mirror
    if (stereo)
    {
       #if defined(ENABLE_VR)
@@ -2321,3 +2174,43 @@ void Renderer::PrepareVideoBuffers(RenderTarget* outputBackBuffer)
 }
 
 #pragma endregion
+
+
+#pragma region SharedContext
+
+Renderer::SharedContext::SharedContext(PinTable* const table)
+   : m_table(table)
+{
+   m_ballImage = nullptr;
+   m_decalImage = nullptr;
+   m_overwriteBallImages = m_table->m_settings.LoadValueWithDefault(Settings::Player, "OverwriteBallImage"s, false);
+   if (m_overwriteBallImages)
+   {
+      string imageName;
+      bool hr = m_table->m_settings.LoadValue(Settings::Player, "BallImage"s, imageName);
+      if (hr)
+      {
+         BaseTexture* const tex = BaseTexture::CreateFromFile(imageName, m_table->m_settings.LoadValueWithDefault(Settings::Player, "MaxTexDimension"s, 0));
+         if (tex != nullptr)
+            m_ballImage = new Texture(tex);
+      }
+      hr = m_table->m_settings.LoadValue(Settings::Player, "DecalImage"s, imageName);
+      if (hr)
+      {
+         BaseTexture* const tex = BaseTexture::CreateFromFile(imageName, m_table->m_settings.LoadValueWithDefault(Settings::Player, "MaxTexDimension"s, 0));
+         if (tex != nullptr)
+            m_decalImage = new Texture(tex);
+      }
+   }
+}
+
+Renderer::SharedContext::~SharedContext()
+{
+   delete m_ballImage;
+   delete m_decalImage;
+}
+
+#pragma endregion
+
+
+

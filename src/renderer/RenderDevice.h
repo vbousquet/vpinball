@@ -75,7 +75,7 @@ public:
 class RenderDevice final
 {
 public:
-   RenderDevice(VPX::Window* const wnd, const bool isVR, const int nEyes, const bool useNvidiaApi, const bool disable_dwm, const bool compressTextures, const int BWrendering, int nMSAASamples, VideoSyncMode& syncMode);
+   RenderDevice(VPX::Window* const wnd, const int nEyes, const bool useNvidiaApi, const bool disable_dwm, const bool compressTextures, VideoSyncMode& syncMode);
    ~RenderDevice();
 
    void AddWindow(VPX::Window* wnd);
@@ -224,8 +224,6 @@ public:
    VPX::Window* m_outputWnd[8];
 
 private:
-   const bool m_isVR;
-
    RenderFrame m_renderFrame;
    RenderPass* m_currentPass = nullptr;
    RenderPass* m_nextRenderCommandDependency = nullptr;

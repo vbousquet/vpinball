@@ -103,15 +103,15 @@ void RenderCommand::Execute(const int nInstances, const bool log)
 
    case RC_SUBMIT_VR:
    {
-      if (log) {
-         PLOGI << "> Submit VR";
-      }
       #if defined(ENABLE_VR)
+         if (log) {
+            PLOGI << "> Submit VR";
+         }
          if (g_pplayer->m_vrDevice && g_pplayer->m_vrDevice->IsVRReady())
          {
             g_frameProfiler.EnterProfileSection(FrameProfiler::PROFILE_GPU_FLIP); 
             g_frameProfiler.OnPresent();
-            g_pplayer->m_vrDevice->SubmitFrame(g_pplayer->m_renderer->GetOffscreenVR(0)->GetColorSampler(), g_pplayer->m_renderer->GetOffscreenVR(1)->GetColorSampler());
+            g_pplayer->m_vrDevice->SubmitFrame(g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->GetOffscreenVR(0)->GetColorSampler(), g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->GetOffscreenVR(1)->GetColorSampler());
             g_frameProfiler.ExitProfileSection();
          }
       #endif

@@ -300,6 +300,7 @@ void RenderDevice::RenderThread(RenderDevice* rd, const bgfx::Init& initReq)
    #ifdef ENABLE_XR
    if (g_pplayer->m_vrDevice)
    {
+      assert(rd->m_outputWnd[0]->IsVRHeadSet());
       g_pplayer->m_vrDevice->CreateSession();
       init.type = bgfx::RendererType::Direct3D11; // TODO support other backends
       init.resolution.width = g_pplayer->m_vrDevice->GetEyeWidth(); // Needed for bgfx::clear to work
@@ -387,10 +388,10 @@ void RenderDevice::RenderThread(RenderDevice* rd, const bgfx::Init& initReq)
    case bgfx::TextureFormat::RGBA8: back_buffer_format = colorFormat::RGBA8; break;
    default: assert(false); back_buffer_format = colorFormat::RGBA8;
    }
-   // FIXME the headset output should be separated from the preview window, each with the right RT definition
-   if (g_pplayer->m_vrDevice) {
+   if (rd->m_outputWnd[0]->IsVRHeadSet())
+   {
       rd->m_outputWnd[0]->SetBackBuffer(new RenderTarget(rd, SurfaceType::RT_STEREO, init.resolution.width, init.resolution.height, back_buffer_format), isWcg);
-      rd->m_framePending = true; // Delay first frame preparation
+      rd->m_framePending = true; // Delay first frame preparation after xrWaitFrame from headset swapchain
    }
    else
    {
@@ -504,16 +505,15 @@ void RenderDevice::RenderThread(RenderDevice* rd, const bgfx::Init& initReq)
 }
 #endif
 
-RenderDevice::RenderDevice(VPX::Window* const wnd, const bool isVR, const int nEyes, const bool useNvidiaApi, const bool disableDWM, const bool compressTextures, const int BWrendering, int nMSAASamples, VideoSyncMode& syncMode)
-   : m_isVR(isVR)
-   , m_nEyes(nEyes)
+RenderDevice::RenderDevice(VPX::Window* const wnd, const int nEyes, const bool useNvidiaApi, const bool disableDWM, const bool compressTextures, VideoSyncMode& syncMode)
+   : m_nEyes(nEyes)
    , m_texMan(*this)
    , m_renderFrame(this)
    , m_compressTextures(compressTextures)
 {
    m_outputWnd[0] = wnd;
 
-   assert(!isVR || m_nEyes == 2);
+   assert(!wnd->IsVRHeadSet() || m_nEyes == 2);
 
    #if defined(ENABLE_DX9)
       m_useNvidiaApi = useNvidiaApi;
@@ -551,7 +551,7 @@ RenderDevice::RenderDevice(VPX::Window* const wnd, const bool isVR, const int nE
    assert(g_pplayer != nullptr); // Player must be created to give access to the output window
 
    // 0 means disable limiting of draw-ahead queue
-   int maxPrerenderedFrames = isVR ? 0 : g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "MaxPrerenderedFrames"s, 0);
+   int maxPrerenderedFrames = wnd->IsVRHeadSet() ? 0 : g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "MaxPrerenderedFrames"s, 0);
 
 #if defined(ENABLE_BGFX)
    ///////////////////////////////////
@@ -1026,13 +1026,6 @@ RenderDevice::RenderDevice(VPX::Window* const wnd, const bool isVR, const int nE
    m_nullTexture->SetName("Null"s);
    delete surf;
 
-   // alloc float buffer for rendering
-   #if defined(ENABLE_OPENGL)
-   int maxSamples;
-   glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
-   nMSAASamples = min(maxSamples, nMSAASamples);
-   #endif
-
    // create default vertex declarations for shaders
    #if defined(ENABLE_BGFX)
    m_pVertexTexelDeclaration = new bgfx::VertexLayout; // TODO remove Pos/TexCoord format and only use one Pos/Normal/TexCoord
@@ -1127,7 +1120,7 @@ RenderDevice::RenderDevice(VPX::Window* const wnd, const bool isVR, const int nE
 
    m_basicShader = new Shader(this, Shader::BASIC_SHADER, m_nEyes == 2);
    m_ballShader = new Shader(this, Shader::BALL_SHADER, m_nEyes == 2);
-   m_DMDShader = new Shader(this, m_isVR ? Shader::DMD_VR_SHADER : Shader::DMD_SHADER, m_nEyes == 2);
+   m_DMDShader = new Shader(this, wnd->IsVRHeadSet() ? Shader::DMD_VR_SHADER : Shader::DMD_SHADER, m_nEyes == 2);
    m_flasherShader = new Shader(this, Shader::FLASHER_SHADER, m_nEyes == 2);
    m_lightShader = new Shader(this, Shader::LIGHT_SHADER, m_nEyes == 2);
    m_stereoShader = new Shader(this, Shader::STEREO_SHADER, m_nEyes == 2);
@@ -1288,8 +1281,15 @@ RenderDevice::~RenderDevice()
 void RenderDevice::AddWindow(VPX::Window* wnd)
 {
    assert(wnd->GetBackBuffer() == nullptr);
-   if (m_nOutputWnd >= 8)
+   assert(m_nOutputWnd < 8);
+   assert(!wnd->IsVRHeadSet()); // There can be only one VR headset output and it must be the the main window, used to setup the render thread and base swapchain
+
+   // FIXME (re)use the temporary default window created for the VR headset
+   if (m_outputWnd[0]->IsVRHeadSet() && m_nOutputWnd == 1)
+   {
+
       return;
+   }
 
 #if defined(ENABLE_BGFX) && (ENABLE_SDL_VIDEO)
    if ((bgfx::getCaps()->supported & BGFX_CAPS_SWAP_CHAIN) == 0)
@@ -1304,33 +1304,37 @@ void RenderDevice::AddWindow(VPX::Window* wnd)
    }
    SDL_Window* sdlWnd = wnd->GetCore();
    void* nwh;
-#if BX_PLATFORM_LINUX || BX_PLATFORM_BSD
-   void* ndt;
-   if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "x11") == 0) {
-      ndt = SDL_GetPointerProperty(SDL_GetWindowProperties(sdlWnd), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, NULL);
-      nwh = (void*)SDL_GetNumberProperty(SDL_GetWindowProperties(sdlWnd), SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
-   }
-   else if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "wayland") == 0) {
-      ndt = SDL_GetPointerProperty(SDL_GetWindowProperties(sdlWnd), SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, NULL);
-      nwh = SDL_GetPointerProperty(SDL_GetWindowProperties(sdlWnd), SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, NULL);
-   }
-#elif BX_PLATFORM_OSX
-   nwh = SDL_GetRenderMetalLayer(SDL_CreateRenderer(sdlWnd, "Metal"));
-#elif BX_PLATFORM_IOS
-   nwh = SDL_GetRenderMetalLayer(SDL_CreateRenderer(sdlWnd, "Metal"));
-#elif BX_PLATFORM_ANDROID
-   nwh = SDL_GetPointerProperty(SDL_GetWindowProperties(sdlWnd), SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, NULL);
-#elif BX_PLATFORM_WINDOWS
-   nwh = wnd->GetNativeHWND();
-#elif BX_PLATFORM_STEAMLINK
-   nwh = wmInfo.info.vivante.window;
-#else
-   return nullptr;
-#endif // BX_PLATFORM_
+   #if BX_PLATFORM_LINUX || BX_PLATFORM_BSD
+      void* ndt;
+      if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "x11") == 0) {
+         ndt = SDL_GetPointerProperty(SDL_GetWindowProperties(sdlWnd), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, NULL);
+         nwh = (void*)SDL_GetNumberProperty(SDL_GetWindowProperties(sdlWnd), SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
+      }
+      else if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "wayland") == 0) {
+         ndt = SDL_GetPointerProperty(SDL_GetWindowProperties(sdlWnd), SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, NULL);
+         nwh = SDL_GetPointerProperty(SDL_GetWindowProperties(sdlWnd), SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, NULL);
+      }
+   #elif BX_PLATFORM_OSX
+      nwh = SDL_GetRenderMetalLayer(SDL_CreateRenderer(sdlWnd, "Metal"));
+   #elif BX_PLATFORM_IOS
+      nwh = SDL_GetRenderMetalLayer(SDL_CreateRenderer(sdlWnd, "Metal"));
+   #elif BX_PLATFORM_ANDROID
+      nwh = SDL_GetPointerProperty(SDL_GetWindowProperties(sdlWnd), SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, NULL);
+   #elif BX_PLATFORM_WINDOWS
+      nwh = wnd->GetNativeHWND();
+   #elif BX_PLATFORM_STEAMLINK
+      nwh = wmInfo.info.vivante.window;
+   #else
+      return nullptr;
+   #endif // BX_PLATFORM_
    bgfx::FrameBufferHandle fbh = bgfx::createFrameBuffer(nwh, uint16_t(wnd->GetWidth()), uint16_t(wnd->GetHeight()));
    m_outputWnd[m_nOutputWnd] = wnd;
    m_nOutputWnd++;
    wnd->SetBackBuffer(new RenderTarget(this, fbh, "BackBuffer #"s + std::to_string(m_nOutputWnd), wnd->GetWidth(), wnd->GetHeight(), fmt));
+
+#else
+   assert(false);
+
 #endif
 }
 
@@ -1442,12 +1446,12 @@ void RenderDevice::Flip()
    SubmitAndFlipFrame();
 
    #elif defined(ENABLE_OPENGL)
-   if (!m_isVR)
+   if (!m_outputWnd[0]->IsVRHeadSet())
       g_frameProfiler.OnPresent();
    SDL_GL_SwapWindow(m_outputWnd[0]->GetCore());
 
    #elif defined(ENABLE_DX9)
-   if (!m_isVR)
+   if (!m_outputWnd[0]->IsVRHeadSet())
       g_frameProfiler.OnPresent();
    CHECKD3D(m_pD3DDevice->Present(nullptr, nullptr, nullptr, nullptr));
    #endif
@@ -1756,7 +1760,7 @@ void RenderDevice::SetClipPlane(const vec4 &plane)
    m_ballShader->SetVector(SHADER_clip_plane, &plane);
 #elif defined(ENABLE_DX9)
    // FIXME DX9 shouldn't we set the Model matrix to identity first ?
-   Matrix3D mT = g_pplayer->m_renderer->GetMVP().GetModelViewProj(0); // = world * view * proj
+   Matrix3D mT = g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->GetMVP().GetModelViewProj(0); // = world * view * proj
    mT.Invert();
    mT.Transpose();
    const D3DXMATRIX m(mT);
@@ -1912,7 +1916,7 @@ void RenderDevice::DrawMesh(Shader* shader, const bool isTranparentPass, const V
    RenderCommand* cmd = m_renderFrame.NewCommand();
    // Legacy sorting order (only along negative z axis, which is reversed for reflections).
    // This is completely wrong but needed to preserve backward compatibility. We should sort along the view axis (especially for reflection probes)
-   const float depth = g_pplayer->m_renderer && g_pplayer->m_renderer->IsRenderPass(Renderer::REFLECTION_PASS) ? depthBias + center.z : depthBias - center.z;
+   const float depth = g_pplayer->m_multiViewRenderer->GetCurrentRenderer() && g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->IsRenderPass(Renderer::REFLECTION_PASS) ? depthBias + center.z : depthBias - center.z;
    // We can not use the real opacity from render states since some legacy uses alpha part that write to the depth buffer (rendered during transparent pass) to mask out opaque parts
    cmd->SetDrawMesh(shader, mb, type, startIndex, indexCount, isTranparentPass /* && !GetRenderState().IsOpaque() */, depth);
    cmd->m_dependency = m_nextRenderCommandDependency;

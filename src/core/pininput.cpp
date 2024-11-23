@@ -1299,9 +1299,9 @@ void PinInput::ProcessCameraKeys(const DIDEVICEOBJECTDATA * __restrict input)
             if ((input->dwData & 0x80) != 0)
             {
                 if (!m_cameraModeAltKey)
-                    g_pplayer->m_renderer->m_cam.y += up ? 10.0f : -10.0f;
+                    g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_cam.y += up ? 10.0f : -10.0f;
                 else
-                    g_pplayer->m_renderer->m_cam.z += up ? 10.0f : -10.0f;
+                    g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_cam.z += up ? 10.0f : -10.0f;
 
                 m_cameraMode = up ? 1 : 2;
             }
@@ -1316,9 +1316,9 @@ void PinInput::ProcessCameraKeys(const DIDEVICEOBJECTDATA * __restrict input)
             if ((input->dwData & 0x80) != 0)
             {
                 if (!m_cameraModeAltKey)
-                    g_pplayer->m_renderer->m_cam.x += right ? -10.0f : 10.0f;
+                    g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_cam.x += right ? -10.0f : 10.0f;
                 else
-                    g_pplayer->m_renderer->m_inc += right ? -0.01f : 0.01f;
+                    g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_inc += right ? -0.01f : 0.01f;
 
                 m_cameraMode = right ? 3 : 4;
             }
@@ -1873,30 +1873,30 @@ void PinInput::ProcessKeys(/*const U32 curr_sim_msec,*/ int curr_time_msec) // l
             if (m_cameraMode == 1)
             {
 			      if (!m_cameraModeAltKey)
-			         g_pplayer->m_renderer->m_cam.y += 10.0f;
+			         g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_cam.y += 10.0f;
 			      else
-			         g_pplayer->m_renderer->m_cam.z += 10.0f;
+			         g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_cam.z += 10.0f;
             }
             else if (m_cameraMode == 2)
             {
 			      if (!m_cameraModeAltKey)
-			         g_pplayer->m_renderer->m_cam.y -= 10.0f;
+			         g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_cam.y -= 10.0f;
 			      else
-			         g_pplayer->m_renderer->m_cam.z -= 10.0f;
+			         g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_cam.z -= 10.0f;
             }
             else if (m_cameraMode == 3)
             {
 			      if (!m_cameraModeAltKey)
-			         g_pplayer->m_renderer->m_cam.x -= 10.0f;
+			         g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_cam.x -= 10.0f;
 			      else
-			         g_pplayer->m_renderer->m_inc -= 0.01f;
+			         g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_inc -= 0.01f;
             }
             else if (m_cameraMode == 4)
             {
 			      if (!m_cameraModeAltKey)
-			         g_pplayer->m_renderer->m_cam.x += 10.0f;
+			         g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_cam.x += 10.0f;
 			      else
-			         g_pplayer->m_renderer->m_inc += 0.01f;
+			         g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_inc += 0.01f;
             }
 
             // Table tweaks, continuous actions
@@ -1979,47 +1979,47 @@ void PinInput::ProcessKeys(/*const U32 curr_sim_msec,*/ int curr_time_msec) // l
          {
             if ((input->dwData & 0x80) != 0)
             {
-               if (IsAnaglyphStereoMode(g_pplayer->m_renderer->m_stereo3D))
+               if (IsAnaglyphStereoMode(g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3D))
                {
                   // Select next glasses or toggle stereo on/off
-                  int glassesIndex = g_pplayer->m_renderer->m_stereo3D - STEREO_ANAGLYPH_1;
-                  if (!g_pplayer->m_renderer->m_stereo3Denabled && glassesIndex != 0)
+                  int glassesIndex = g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3D - STEREO_ANAGLYPH_1;
+                  if (!g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3Denabled && glassesIndex != 0)
                   {
                      g_pplayer->m_liveUI->PushNotification("Stereo enabled"s, 2000);
-                     g_pplayer->m_renderer->m_stereo3Denabled = true;
+                     g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3Denabled = true;
                   }
                   else
                   {
                      const int dir = (m_keyPressedState[eLeftFlipperKey] || m_keyPressedState[eRightFlipperKey]) ? -1 : 1;
                      // Loop back with shift pressed
-                     if (!g_pplayer->m_renderer->m_stereo3Denabled && glassesIndex <= 0 && dir == -1)
+                     if (!g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3Denabled && glassesIndex <= 0 && dir == -1)
                      {
-                        g_pplayer->m_renderer->m_stereo3Denabled = true;
+                        g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3Denabled = true;
                         glassesIndex = 9;
                      }
-                     else if (g_pplayer->m_renderer->m_stereo3Denabled && glassesIndex <= 0 && dir == -1)
+                     else if (g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3Denabled && glassesIndex <= 0 && dir == -1)
                      {
                         g_pplayer->m_liveUI->PushNotification("Stereo disabled"s, 2000);
-                        g_pplayer->m_renderer->m_stereo3Denabled = false;
+                        g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3Denabled = false;
                      }
                      // Loop forward
-                     else if (!g_pplayer->m_renderer->m_stereo3Denabled)
+                     else if (!g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3Denabled)
                      {
                         g_pplayer->m_liveUI->PushNotification("Stereo enabled"s, 2000);
-                        g_pplayer->m_renderer->m_stereo3Denabled = true;
+                        g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3Denabled = true;
                      }
                      else if (glassesIndex >= 9 && dir == 1)
                      {
                         g_pplayer->m_liveUI->PushNotification("Stereo disabled"s, 2000);
                         glassesIndex = 0;
-                        g_pplayer->m_renderer->m_stereo3Denabled = false;
+                        g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3Denabled = false;
                      }
                      else
                      {
                         glassesIndex += dir;
                      }
-                     g_pplayer->m_renderer->m_stereo3D = (StereoMode)(STEREO_ANAGLYPH_1 + glassesIndex);
-                     if (g_pplayer->m_renderer->m_stereo3Denabled)
+                     g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3D = (StereoMode)(STEREO_ANAGLYPH_1 + glassesIndex);
+                     if (g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3Denabled)
                      {
                         string name;
                         static const string defaultNames[] = { "Red/Cyan"s, "Green/Magenta"s, "Blue/Amber"s, "Cyan/Red"s, "Magenta/Green"s, "Amber/Blue"s, "Custom 1"s, "Custom 2"s, "Custom 3"s, "Custom 4"s };
@@ -2029,22 +2029,22 @@ void PinInput::ProcessKeys(/*const U32 curr_sim_msec,*/ int curr_time_msec) // l
                      }
                   }
                }
-               else if (Is3DTVStereoMode(g_pplayer->m_renderer->m_stereo3D))
+               else if (Is3DTVStereoMode(g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3D))
                {
                   // Toggle stereo on/off
-                  g_pplayer->m_renderer->m_stereo3Denabled = !g_pplayer->m_renderer->m_stereo3Denabled;
+                  g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3Denabled = !g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3Denabled;
                }
-               else if (g_pplayer->m_renderer->m_stereo3D == STEREO_VR)
+               else if (g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3D == STEREO_VR)
                {
-                  g_pplayer->m_renderer->m_vrPreview = (VRPreviewMode)((g_pplayer->m_renderer->m_vrPreview + 1) % (VRPREVIEW_BOTH + 1));
-                  g_pplayer->m_liveUI->PushNotification(g_pplayer->m_renderer->m_vrPreview == VRPREVIEW_DISABLED ? "Preview disabled"s // Will only display in headset
-                                                      : g_pplayer->m_renderer->m_vrPreview == VRPREVIEW_LEFT     ? "Preview switched to left eye"s
-                                                      : g_pplayer->m_renderer->m_vrPreview == VRPREVIEW_RIGHT    ? "Preview switched to right eye"s
+                  g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_vrPreview = (VRPreviewMode)((g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_vrPreview + 1) % (VRPREVIEW_BOTH + 1));
+                  g_pplayer->m_liveUI->PushNotification(g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_vrPreview == VRPREVIEW_DISABLED ? "Preview disabled"s // Will only display in headset
+                                                      : g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_vrPreview == VRPREVIEW_LEFT     ? "Preview switched to left eye"s
+                                                      : g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_vrPreview == VRPREVIEW_RIGHT    ? "Preview switched to right eye"s
                                                                                                      : "Preview switched to both eyes"s, 2000);
                }
-               g_pvp->m_settings.SaveValue(Settings::Player, "Stereo3DEnabled"s, g_pplayer->m_renderer->m_stereo3Denabled);
-               g_pplayer->m_renderer->InitLayout();
-               g_pplayer->m_renderer->UpdateStereoShaderState();
+               g_pvp->m_settings.SaveValue(Settings::Player, "Stereo3DEnabled"s, g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3Denabled);
+               g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->InitLayout();
+               g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->UpdateStereoShaderState();
             }
          }
          else if (input->dwOfs == (DWORD)g_pplayer->m_rgKeys[eDBGBalls])

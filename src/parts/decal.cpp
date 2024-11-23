@@ -661,87 +661,18 @@ void Decal::RenderSetup(RenderDevice *device)
       DeleteObject(hbm);
 #endif
    }
-
-   const float height = m_ptable->GetSurfaceHeight(m_d.m_szSurface, m_d.m_vCenter.x, m_d.m_vCenter.y);
-
-   float leading, descent; // For fonts
-   if (m_d.m_decaltype != DecalImage)
-   {
-      leading = m_leading;
-      descent = m_descent;
-   }
-   else
-   {
-      leading = 0.f;
-      descent = 0.f;
-   }
-
-   const float halfwidth = m_realwidth * 0.5f;
-   const float halfheight = m_realheight * 0.5f;
-
-   const float radangle = ANGTORAD(m_d.m_rotation);
-   const float sn = sinf(radangle);
-   const float cs = cosf(radangle);
-
-   VertexBuffer *vertexBuffer = new VertexBuffer(m_rd, 4);
-   Vertex3D_NoTex2 *vertices;
-   vertexBuffer->Lock(vertices);
-   const float z = m_backglass ? 0.f : (height + 0.2f);
-   int renderWidth, renderHeight;
-   g_pplayer->m_renderer->GetRenderSize(renderWidth, renderHeight);
-   const float xmult = m_backglass ? ((float)renderWidth * (float)(1.0 / EDITOR_BG_WIDTH)) : 1.f;
-   const float ymult = m_backglass ? ((float)renderHeight * (float)(1.0 / EDITOR_BG_HEIGHT)) : 1.f;
-   const float offs = m_backglass ? 0.5f : 0.f;
-
-   vertices[0].x = (m_d.m_vCenter.x + sn*(halfheight + leading) - cs*halfwidth)*xmult-offs;
-   vertices[0].y = (m_d.m_vCenter.y - cs*(halfheight + leading) - sn*halfwidth)*ymult-offs;
-   vertices[0].z = z;
-   vertices[0].nx = 0.f;
-   vertices[0].ny = 0.f;
-   vertices[0].nz = 1.f;
-   vertices[0].tu = 0;
-   vertices[0].tv = 0;
-
-   vertices[1].x = (m_d.m_vCenter.x + sn*(halfheight + leading) + cs*halfwidth)*xmult-offs;
-   vertices[1].y = (m_d.m_vCenter.y - cs*(halfheight + leading) + sn*halfwidth)*ymult-offs;
-   vertices[1].z = z;
-   vertices[1].nx = 0.f;
-   vertices[1].ny = 0.f;
-   vertices[1].nz = 1.f;
-   vertices[1].tu = 1.0f;
-   vertices[1].tv = 0;
-
-   vertices[2].x = (m_d.m_vCenter.x - sn*(halfheight + descent) - cs*halfwidth)*xmult-offs;
-   vertices[2].y = (m_d.m_vCenter.y + cs*(halfheight + descent) - sn*halfwidth)*ymult-offs;
-   vertices[2].z = z;
-   vertices[2].nx = 0.f;
-   vertices[2].ny = 0.f;
-   vertices[2].nz = 1.f;
-   vertices[2].tu = 0;
-   vertices[2].tv = 1.0f;
-
-   vertices[3].x = (m_d.m_vCenter.x - sn*(halfheight + descent) + cs*halfwidth)*xmult-offs;
-   vertices[3].y = (m_d.m_vCenter.y + cs*(halfheight + descent) + sn*halfwidth)*ymult-offs;
-   vertices[3].z = z;
-   vertices[3].nx = 0.f;
-   vertices[3].ny = 0.f;
-   vertices[3].nz = 1.f;
-   vertices[3].tu = 1.0f;
-   vertices[3].tv = 1.0f;
-
-   vertexBuffer->Unlock();
-
-   delete m_meshBuffer;
-   m_meshBuffer = new MeshBuffer(m_wzName, vertexBuffer);
 }
 
 void Decal::RenderRelease()
 {
    assert(m_rd != nullptr);
    delete m_textImg;
-   delete m_meshBuffer;
    m_textImg = nullptr;
-   m_meshBuffer = nullptr;
+   for (int i = 0; i < MAX_RENDERER_COUNT; i++)
+   {
+      delete m_meshBuffer[i];
+      m_meshBuffer[i] = nullptr;
+   }
    m_rd = nullptr;
 }
 
@@ -769,6 +700,81 @@ void Decal::Render(const unsigned int renderMask)
    if (!(   (!isDynamicOnly && (m_backglass || !mat->m_bOpacityActive)) // Static prerendering
          || (!isStaticOnly && (!m_backglass && mat->m_bOpacityActive)))) // Not prerendered part pass
       return;
+
+   if (m_meshBuffer[g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_rendererIndex] == nullptr)
+   {
+      const float height = m_ptable->GetSurfaceHeight(m_d.m_szSurface, m_d.m_vCenter.x, m_d.m_vCenter.y);
+
+      float leading, descent; // For fonts
+      if (m_d.m_decaltype != DecalImage)
+      {
+         leading = m_leading;
+         descent = m_descent;
+      }
+      else
+      {
+         leading = 0.f;
+         descent = 0.f;
+      }
+
+      const float halfwidth = m_realwidth * 0.5f;
+      const float halfheight = m_realheight * 0.5f;
+
+      const float radangle = ANGTORAD(m_d.m_rotation);
+      const float sn = sinf(radangle);
+      const float cs = cosf(radangle);
+
+      VertexBuffer *vertexBuffer = new VertexBuffer(m_rd, 4);
+      Vertex3D_NoTex2 *vertices;
+      vertexBuffer->Lock(vertices);
+      const float z = m_backglass ? 0.f : (height + 0.2f);
+      int renderWidth, renderHeight;
+      g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->GetRenderSize(renderWidth, renderHeight);
+      const float xmult = m_backglass ? ((float)renderWidth * (float)(1.0 / EDITOR_BG_WIDTH)) : 1.f;
+      const float ymult = m_backglass ? ((float)renderHeight * (float)(1.0 / EDITOR_BG_HEIGHT)) : 1.f;
+      const float offs = m_backglass ? 0.5f : 0.f;
+
+      vertices[0].x = (m_d.m_vCenter.x + sn * (halfheight + leading) - cs * halfwidth) * xmult - offs;
+      vertices[0].y = (m_d.m_vCenter.y - cs * (halfheight + leading) - sn * halfwidth) * ymult - offs;
+      vertices[0].z = z;
+      vertices[0].nx = 0.f;
+      vertices[0].ny = 0.f;
+      vertices[0].nz = 1.f;
+      vertices[0].tu = 0;
+      vertices[0].tv = 0;
+
+      vertices[1].x = (m_d.m_vCenter.x + sn * (halfheight + leading) + cs * halfwidth) * xmult - offs;
+      vertices[1].y = (m_d.m_vCenter.y - cs * (halfheight + leading) + sn * halfwidth) * ymult - offs;
+      vertices[1].z = z;
+      vertices[1].nx = 0.f;
+      vertices[1].ny = 0.f;
+      vertices[1].nz = 1.f;
+      vertices[1].tu = 1.0f;
+      vertices[1].tv = 0;
+
+      vertices[2].x = (m_d.m_vCenter.x - sn * (halfheight + descent) - cs * halfwidth) * xmult - offs;
+      vertices[2].y = (m_d.m_vCenter.y + cs * (halfheight + descent) - sn * halfwidth) * ymult - offs;
+      vertices[2].z = z;
+      vertices[2].nx = 0.f;
+      vertices[2].ny = 0.f;
+      vertices[2].nz = 1.f;
+      vertices[2].tu = 0;
+      vertices[2].tv = 1.0f;
+
+      vertices[3].x = (m_d.m_vCenter.x - sn * (halfheight + descent) + cs * halfwidth) * xmult - offs;
+      vertices[3].y = (m_d.m_vCenter.y + cs * (halfheight + descent) + sn * halfwidth) * ymult - offs;
+      vertices[3].z = z;
+      vertices[3].nx = 0.f;
+      vertices[3].ny = 0.f;
+      vertices[3].nz = 1.f;
+      vertices[3].tu = 1.0f;
+      vertices[3].tv = 1.0f;
+
+      vertexBuffer->Unlock();
+
+      m_meshBuffer[g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_rendererIndex] = new MeshBuffer(m_wzName, vertexBuffer);
+   }
+
 
    m_rd->ResetRenderState();
 
@@ -843,10 +849,11 @@ void Decal::Render(const unsigned int renderMask)
       #endif
    }
 
-   m_rd->DrawMesh(m_rd->m_basicShader, !m_backglass, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLESTRIP, 0, 4);
+   m_rd->DrawMesh(m_rd->m_basicShader, !m_backglass, m_boundingSphereCenter, 0.f, 
+      m_meshBuffer[g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_rendererIndex], RenderDevice::TRIANGLESTRIP, 0, 4);
 
    if (m_backglass)
-      g_pplayer->m_renderer->UpdateBasicShaderMatrix();
+      g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->UpdateBasicShaderMatrix();
 }
 
 #pragma endregion

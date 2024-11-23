@@ -869,7 +869,7 @@ STDMETHODIMP ScriptGlobalTable::get_SystemTime(long *pVal)
 STDMETHODIMP ScriptGlobalTable::get_NightDay(int *pVal)
 {
    if (g_pplayer)
-      *pVal = quantizeUnsignedPercent(g_pplayer->m_renderer->m_globalEmissionScale);
+      *pVal = quantizeUnsignedPercent(g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_globalEmissionScale);
 
    return S_OK;
 }
@@ -1126,8 +1126,8 @@ STDMETHODIMP ScriptGlobalTable::put_DMDPixels(VARIANT pVal) // assumes VT_UI1 as
       {
          if (g_pplayer->m_texdmd)
          {
-            g_pplayer->m_renderer->m_renderDevice->m_DMDShader->SetTextureNull(SHADER_tex_dmd);
-            g_pplayer->m_renderer->m_renderDevice->m_texMan.UnloadTexture(g_pplayer->m_texdmd);
+            g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_renderDevice->m_DMDShader->SetTextureNull(SHADER_tex_dmd);
+            g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_renderDevice->m_texMan.UnloadTexture(g_pplayer->m_texdmd);
             delete g_pplayer->m_texdmd;
          }
 #ifdef DMD_UPSCALE
@@ -1148,7 +1148,7 @@ STDMETHODIMP ScriptGlobalTable::put_DMDPixels(VARIANT pVal) // assumes VT_UI1 as
       if (g_pplayer->m_scaleFX_DMD)
          upscale(data, g_pplayer->m_dmd, true);
 
-      g_pplayer->m_renderer->m_renderDevice->m_texMan.SetDirty(g_pplayer->m_texdmd);
+      g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_renderDevice->m_texMan.SetDirty(g_pplayer->m_texdmd);
    }
 
    return S_OK;
@@ -1175,8 +1175,8 @@ STDMETHODIMP ScriptGlobalTable::put_DMDColoredPixels(VARIANT pVal) //!! assumes 
       {
          if (g_pplayer->m_texdmd)
          {
-            g_pplayer->m_renderer->m_renderDevice->m_DMDShader->SetTextureNull(SHADER_tex_dmd);
-            g_pplayer->m_renderer->m_renderDevice->m_texMan.UnloadTexture(g_pplayer->m_texdmd);
+            g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_renderDevice->m_DMDShader->SetTextureNull(SHADER_tex_dmd);
+            g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_renderDevice->m_texMan.UnloadTexture(g_pplayer->m_texdmd);
             delete g_pplayer->m_texdmd;
          }
 #ifdef DMD_UPSCALE
@@ -1197,7 +1197,7 @@ STDMETHODIMP ScriptGlobalTable::put_DMDColoredPixels(VARIANT pVal) //!! assumes 
 		if (g_pplayer->m_scaleFX_DMD)
 			upscale(data, g_pplayer->m_dmd, false);
 
-		g_pplayer->m_renderer->m_renderDevice->m_texMan.SetDirty(g_pplayer->m_texdmd);
+		g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_renderDevice->m_texMan.SetDirty(g_pplayer->m_texdmd);
 	}
 
 	return S_OK;
@@ -1208,7 +1208,7 @@ STDMETHODIMP ScriptGlobalTable::get_DisableStaticPrerendering(VARIANT_BOOL *pVal
    if (g_pplayer == nullptr)
       return E_FAIL;
 
-   *pVal = FTOVB(!g_pplayer->m_renderer->IsUsingStaticPrepass());
+   *pVal = FTOVB(!g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->IsUsingStaticPrepass());
    return S_OK;
 }
 
@@ -1217,7 +1217,7 @@ STDMETHODIMP ScriptGlobalTable::put_DisableStaticPrerendering(VARIANT_BOOL newVa
    if (g_pplayer == nullptr)
       return E_FAIL;
 
-   g_pplayer->m_renderer->DisableStaticPrePass(VBTOb(newVal));
+   g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->DisableStaticPrePass(VBTOb(newVal));
    return S_OK;
 }
 
@@ -1434,9 +1434,9 @@ STDMETHODIMP ScriptGlobalTable::GetSerialDevices(VARIANT *pVal)
 
 STDMETHODIMP ScriptGlobalTable::get_RenderingMode(int *pVal)
 {
-   if (g_pplayer->m_renderer->m_stereo3D == STEREO_VR)
+   if (g_pplayer->m_vrDevice)
       *pVal = 2; // VR
-   else if ((g_pplayer->m_renderer->m_stereo3D != STEREO_OFF) && g_pplayer->m_renderer->m_stereo3Denabled)
+   else if ((g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3D != STEREO_OFF) && g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3Denabled)
       *pVal = 1; // Stereo 3D (3DTV or anaglyph)
    else {
 #ifndef __STANDALONE__
@@ -9081,7 +9081,7 @@ STDMETHODIMP PinTable::put_BallTrail(UserDefaultOnOff newVal)
    else
       m_settings.SaveValue(Settings::Player, "BallTrail"s, newVal == 1, true);
    if (g_pplayer)
-      g_pplayer->m_renderer->m_trailForBalls = (newVal == UserDefaultOnOff::On)
+      g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_trailForBalls = (newVal == UserDefaultOnOff::On)
          || ((newVal == UserDefaultOnOff::Default) && m_settings.LoadValueWithDefault(Settings::Player, "BallTrail"s, true));
    return S_OK;
 }
@@ -9096,7 +9096,7 @@ STDMETHODIMP PinTable::put_TrailStrength(int newVal)
 {
    m_settings.SaveValue(Settings::Player, "BallTrailStrength"s, static_cast<float>(newVal) / 100.f);
    if (g_pplayer)
-      g_pplayer->m_renderer->m_ballTrailStrength = static_cast<float>(newVal) / 100.f;
+      g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_ballTrailStrength = static_cast<float>(newVal) / 100.f;
    return S_OK;
 }
 

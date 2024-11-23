@@ -25,6 +25,7 @@ public:
    unsigned int GetCommandCount() const { return (unsigned int)m_commands.size(); }
 
    RenderTarget* m_rt;
+   bool m_isFinalPass = false; // If true, this passes and all its dependencies must be rendered for final result (pass sorting is performed from it)
    vec4 m_areaOfInterest; // if defined (not FLT_MAX), defines render clipping bounds (in clip space -1..1)
    int m_singleLayerRendering = -1; // if positive, rendering will only be performed on the corresponding layer
    string m_name;

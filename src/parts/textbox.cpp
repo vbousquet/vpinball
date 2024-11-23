@@ -491,15 +491,15 @@ void Textbox::Render(const unsigned int renderMask)
       #if defined(ENABLE_BGFX) || defined(ENABLE_OPENGL)
       // If DMD capture is enabled check if external DMD exists and update m_texdmd with captured data (for capturing UltraDMD+P-ROC DMD)
       m_rd->m_DMDShader->SetTechnique(isExternalDMD ? SHADER_TECHNIQUE_basic_DMD_ext : SHADER_TECHNIQUE_basic_DMD); //!! DMD_UPSCALE ?? -> should just work
-      if (g_pplayer->m_renderer->m_backGlass)
+      if (g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_backGlass)
       {
-         g_pplayer->m_renderer->m_backGlass->GetDMDPos(x, y, w, h);
+         g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_backGlass->GetDMDPos(x, y, w, h);
          m_rd->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
          m_rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
          m_rd->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
       }
       #elif defined(ENABLE_DX9)
-      //const float width = m_renderer->m_useAA ? 2.0f*(float)m_width : (float)m_width; //!! AA ?? -> should just work
+      //const float width = g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_useAA ? 2.0f*(float)m_width : (float)m_width; //!! AA ?? -> should just work
       m_rd->m_DMDShader->SetTechnique(SHADER_TECHNIQUE_basic_DMD); //!! DMD_UPSCALE ?? -> should just work
       #endif
 
@@ -522,8 +522,8 @@ void Textbox::Render(const unsigned int renderMask)
          if (dmd.frame)
          {
             // convert color from sRGB to RGB ?
-            g_pplayer->m_renderer->SetupDMDRender(color, dmd.frame, 1.f, false, false);
-            m_rd->m_DMDShader->SetVector(SHADER_exposure_wcg, 1.f, 1.f, 1.f, 0.f);
+            //g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->SetupDMDRender(color, dmd.frame, 1.f, false, false);
+            //m_rd->m_DMDShader->SetVector(SHADER_exposure_wcg, 1.f, 1.f, 1.f, 0.f);
          }
       }
       else
@@ -644,7 +644,7 @@ void Textbox::Render(const unsigned int renderMask)
 
       m_rd->ResetRenderState();
       m_rd->m_DMDShader->SetFloat(SHADER_alphaTestValue, (float)(128.0 / 255.0));
-      g_pplayer->m_renderer->DrawSprite(x, y, w, h, 0xFFFFFFFF, m_rd->m_texMan.LoadTexture(m_texture, SF_TRILINEAR, SA_CLAMP, SA_CLAMP, false), m_d.m_intensity_scale);
+      g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->DrawSprite(x, y, w, h, 0xFFFFFFFF, m_rd->m_texMan.LoadTexture(m_texture, SF_TRILINEAR, SA_CLAMP, SA_CLAMP, false), m_d.m_intensity_scale);
       m_rd->m_DMDShader->SetFloat(SHADER_alphaTestValue, 1.0f);
    }
 }

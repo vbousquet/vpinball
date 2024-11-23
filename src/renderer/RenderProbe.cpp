@@ -134,7 +134,7 @@ RenderTarget* RenderProbe::Render(const unsigned int renderMask)
    {
    case PLANE_REFLECTION:
    {
-      const ReflectionMode mode = min(m_reflection_mode, g_pplayer->m_renderer->GetMaxReflectionMode());
+      const ReflectionMode mode = min(m_reflection_mode, g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->GetMaxReflectionMode());
       if (mode == REFL_NONE || (isStaticOnly && (mode == REFL_BALLS || mode == REFL_DYNAMIC)) || (isDynamicOnly && (mode == REFL_STATIC)))
          return nullptr;
       if (m_dirty)
@@ -297,7 +297,7 @@ void RenderProbe::SetReflectionMode(ReflectionMode mode)
 void RenderProbe::PreRenderStaticReflectionProbe()
 {
    // For dynamic reflection mode, in static camera mode, we prerender static elements (like for main view) to get better antialiasing and overall performance
-   if (min(m_reflection_mode, g_pplayer->m_renderer->GetMaxReflectionMode()) != REFL_DYNAMIC)
+   if (min(m_reflection_mode, g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->GetMaxReflectionMode()) != REFL_DYNAMIC)
       return;
 
    RenderPass* const previousRT = m_rd->GetCurrentPass();
@@ -337,7 +337,7 @@ void RenderProbe::PreRenderStaticReflectionProbe()
       assert(iter != 0 || (u1 == 0.f && u2 == 0.f));
 
       // Setup Camera,etc matrices for each iteration, applying antialiasing offset
-      g_pplayer->m_renderer->InitLayout(u1, u2);
+      g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->InitLayout(u1, u2);
 
       m_rd->SetRenderTarget("PreRender Reflection"s, m_prerenderRT, false);
       m_rd->ResetRenderState();
@@ -392,7 +392,7 @@ void RenderProbe::RenderReflectionProbe(const unsigned int renderMask)
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
    assert((renderMask & Renderer::REFLECTION_PASS) == 0);
-   const ReflectionMode mode = min(m_reflection_mode, g_pplayer->m_renderer->GetMaxReflectionMode());
+   const ReflectionMode mode = min(m_reflection_mode, g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->GetMaxReflectionMode());
 
    if (mode == REFL_NONE
    || (isStaticOnly && (mode == REFL_BALLS || mode == REFL_DYNAMIC))
@@ -431,10 +431,10 @@ void RenderProbe::DoRenderReflectionProbe(const bool render_static, const bool r
    m_rd->ResetRenderState();
    m_rd->CopyRenderStates(true, *m_rdState);
 
-   const unsigned int prevRenderMask = g_pplayer->m_renderer->m_render_mask;
-   g_pplayer->m_renderer->m_render_mask |= Renderer::REFLECTION_PASS;
+   const unsigned int prevRenderMask = g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_render_mask;
+   g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_render_mask |= Renderer::REFLECTION_PASS;
    if (m_disableLightReflection)
-      g_pplayer->m_renderer->m_render_mask |= Renderer::DISABLE_LIGHTMAPS;
+      g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_render_mask |= Renderer::DISABLE_LIGHTMAPS;
 
    // Set the clip plane to only render objects above the reflection plane (do not reflect what is under or the plane itself)
    Vertex3Ds n(m_reflection_plane.x, m_reflection_plane.y, m_reflection_plane.z);
@@ -449,26 +449,26 @@ void RenderProbe::DoRenderReflectionProbe(const bool render_static, const bool r
 
    // Flip camera
    Matrix3D viewMat, initialViewMat;
-   viewMat = g_pplayer->m_renderer->GetMVP().GetView();
+   viewMat = g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->GetMVP().GetView();
    memcpy(&initialViewMat.m[0][0], &viewMat.m[0][0], 4 * 4 * sizeof(float));
    viewMat = Matrix3D::MatrixPlaneReflection(n, m_reflection_plane.w) * viewMat;
-   g_pplayer->m_renderer->GetMVP().SetView(viewMat);
+   g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->GetMVP().SetView(viewMat);
 
    if (render_static || render_dynamic)
-      g_pplayer->m_renderer->UpdateBasicShaderMatrix();
+      g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->UpdateBasicShaderMatrix();
    if (render_balls)
-      g_pplayer->m_renderer->UpdateBallShaderMatrix();
+      g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->UpdateBallShaderMatrix();
 
    if (render_static)
-      g_pplayer->m_renderer->DrawStatics();
+      g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->DrawStatics();
    if (render_dynamic)
-      g_pplayer->m_renderer->DrawDynamics(false);
+      g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->DrawDynamics(false);
    else if (render_balls)
-      g_pplayer->m_renderer->DrawDynamics(true);
+      g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->DrawDynamics(true);
 
    // Restore initial render states and camera
-   g_pplayer->m_renderer->m_render_mask = prevRenderMask;
+   g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_render_mask = prevRenderMask;
    m_rd->CopyRenderStates(false, *m_rdState);
    m_rd->SetDefaultRenderState();
-   g_pplayer->m_renderer->GetMVP().SetView(initialViewMat);
+   g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->GetMVP().SetView(initialViewMat);
 }

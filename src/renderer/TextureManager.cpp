@@ -11,16 +11,16 @@ Sampler* TextureManager::LoadTexture(BaseTexture* memtex, const SamplerFilter fi
 {
    const Iter it = m_map.find(memtex);
    // During static part prerendering, trilinear/anisotropic filtering is disabled to get sharper results
-   const bool isPreRender = g_pplayer->m_renderer && g_pplayer->m_renderer->IsRenderPass(Renderer::STATIC_ONLY);
+   const bool isPreRender = g_pplayer->m_multiViewRenderer->GetCurrentRenderer() && g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->IsRenderPass(Renderer::STATIC_ONLY);
    const SamplerFilter filter2 = (isPreRender && (filter == SamplerFilter::SF_ANISOTROPIC || filter == SamplerFilter::SF_TRILINEAR)) ? SamplerFilter::SF_BILINEAR : filter;
    if (it == m_map.end())
    {
       MapEntry entry;
       entry.sampler = new Sampler(&m_rd, memtex, force_linear_rgb, clampU, clampV, filter2);
       #ifdef DEBUG
-      if (g_pplayer->m_renderer && g_pplayer->m_renderer->m_envTexture != nullptr && g_pplayer->m_renderer->m_envTexture->m_pdsBuffer == memtex)
+      if (g_pplayer->m_multiViewRenderer->GetCurrentRenderer() && g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_envTexture != nullptr && g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_envTexture->m_pdsBuffer == memtex)
          entry.sampler->SetName("Env"s);
-      else if (g_pplayer->m_renderer && g_pplayer->m_renderer->m_pinballEnvTexture.m_pdsBuffer == memtex)
+      else if (g_pplayer->m_multiViewRenderer->GetCurrentRenderer() && g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_pinballEnvTexture.m_pdsBuffer == memtex)
          entry.sampler->SetName("Default Ball Env"s);
       else if (g_pplayer->m_texdmd == memtex)
          entry.sampler->SetName("DMD"s);

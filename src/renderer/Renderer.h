@@ -10,11 +10,30 @@
 
 class Renderable;
 
+#define MAX_RENDERER_COUNT 8
+
 class Renderer
 {
 public:
-   Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncMode, const StereoMode stereo3D);
+   class SharedContext
+   {
+   public:
+      SharedContext(PinTable* const table);
+      ~SharedContext();
+
+      PinTable* const m_table;
+
+      bool m_overwriteBallImages = false;
+      Texture* m_ballImage = nullptr;
+      Texture* m_decalImage = nullptr;
+   };
+
+   Renderer(const unsigned int index, SharedContext* context, RenderDevice* renderDevice, VPX::Window* wnd, VideoSyncMode& syncMode, const StereoMode stereo3D);
    ~Renderer();
+
+   SharedContext* GetContext() const { return m_context; }
+
+   const unsigned int m_rendererIndex; // Unique index that can be used to easily cache rendering data
 
    void GetRenderSize(int& w, int& h) const { w = m_renderWidth, h = m_renderHeight; }
    void GetRenderSizeAA(int& w, int& h) const { w = m_pOffscreenBackBufferTexture1->GetWidth(), h = m_pOffscreenBackBufferTexture1->GetHeight(); }
@@ -38,16 +57,17 @@ public:
    void RenderStaticPrepass();
 
    void RenderFrame();
-   void RenderDMD(BaseTexture* dmd, const bool isColored, RenderTarget* rt);
 
-   void SetupDMDRender(const vec4& color, BaseTexture* dmd, const float alpha, const bool sRGB, const bool isColored);
    void DrawStatics();
    void DrawDynamics(bool onlyBalls);
    void DrawSprite(const float posx, const float posy, const float width, const float height, const COLORREF color, Sampler* const tex, const float intensity, const bool backdrop = false);
 
    void ReinitRenderable(Renderable* part) { m_renderableToInit.push_back(part); }
 
-   RenderProbe::ReflectionMode GetMaxReflectionMode() const {
+   RenderTarget* GetVRRenderTarget() const { return m_pVRFinal; } // The stereo render target with the final stereo result to be used for VR mirror
+
+   RenderProbe::ReflectionMode GetMaxReflectionMode() const
+   {
       // For dynamic mode, static reflections are not available so adapt the mode
       return !IsUsingStaticPrepass() && m_maxReflectionMode >= RenderProbe::REFL_STATIC ? RenderProbe::REFL_DYNAMIC : m_maxReflectionMode;
    }
@@ -74,9 +94,6 @@ public:
    int m_ballTrailMeshBufferPos = 0;
    bool m_trailForBalls = false;
    float m_ballTrailStrength = 0.5f;
-   bool m_overwriteBallImages = false;
-   Texture* m_ballImage = nullptr;
-   Texture* m_decalImage = nullptr;
 
    // Post processing
    void SetScreenOffset(const float x, const float y); // set render offset in screen coordinates, e.g., for the nudge shake
@@ -85,7 +102,7 @@ public:
    int m_FXAA; // =FXAASettings
    int m_sharpen; // 0=off, 1=CAS, 2=bilateral CAS
    
-   VRPreviewMode m_vrPreview;
+   VRPreviewMode m_vrPreview; // FIXME per view
 
    enum RenderMask : unsigned int
    {
@@ -106,7 +123,7 @@ public:
 
    CGpuProfiler m_gpu_profiler;
 
-   RenderDevice* m_renderDevice = nullptr;
+   RenderDevice* const m_renderDevice;
 
    Texture* m_envTexture = nullptr;
    Texture m_pinballEnvTexture; // loaded from assets folder
@@ -120,9 +137,13 @@ public:
    bool m_stereo3Denabled;
    float m_stereo3DDefocus = 0.f;
 
-   RenderTarget* GetOffscreenVR(int eye) const { return eye == 0 ? m_pOffscreenVRLeft : m_pOffscreenVRRight; }
+   #if defined(ENABLE_VR)
+      RenderTarget* GetOffscreenVR(int eye) const { return eye == 0 ? m_pOffscreenVRLeft : m_pOffscreenVRRight; }
+   #endif
 
 private:
+   SharedContext* m_context;
+
    void RenderDynamics();
    void DrawBackground();
    void DrawBulbLightBuffer();
@@ -140,7 +161,6 @@ private:
    RenderTarget* m_pOffscreenBackBufferTexture2 = nullptr;
    RenderTarget* GetBackBufferTexture() const { return m_pOffscreenBackBufferTexture1; } // Main render target, with MSAA resolved if any, also may have stereo output (2 viewports)
    RenderTarget* GetPreviousBackBufferTexture() const { return m_pOffscreenBackBufferTexture2; } // Same as back buffer but for previous frame
-   void SwapBackBufferRenderTargets();
 
    RenderTarget* m_pAORenderTarget1 = nullptr;
    RenderTarget* m_pAORenderTarget2 = nullptr;
@@ -165,8 +185,11 @@ private:
    RenderTarget* GetBloomBufferTexture() const { return m_pBloomBufferTexture; }
    RenderTarget* GetBloomTmpBufferTexture() const { return m_pBloomTmpBufferTexture; }
 
-   RenderTarget* m_pOffscreenVRLeft = nullptr;
-   RenderTarget* m_pOffscreenVRRight = nullptr;
+   RenderTarget* m_pVRFinal = nullptr;
+   #if defined(ENABLE_VR)
+      RenderTarget* m_pOffscreenVRLeft = nullptr;
+      RenderTarget* m_pOffscreenVRRight = nullptr;
+   #endif
 
    PinTable* const m_table;
 
@@ -199,12 +222,4 @@ private:
    #else
    BaseTexture* m_envRadianceTexture = nullptr;
    #endif
-
-   // DMD rendering
-   vec4 m_dmdViewDot; // External window dot color and brightness
-   float m_dmdViewExposure; // External window dot color and brightness
-   bool m_dmdUseNewRenderer;
-   vec4 m_dmdDotProperties; // size, sharpness, rounding, glow
-   vec4 m_dmdUnlitDotColor; // unlit color and back glow
-   RenderTarget* m_dmdBlurs[4] = { nullptr };
 };

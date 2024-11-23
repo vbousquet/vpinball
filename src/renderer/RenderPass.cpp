@@ -27,6 +27,7 @@ void RenderPass::Reset(const string& name, RenderTarget* const rt)
    m_depthReadback = false;
    m_sortKey = 0;
    m_mergeable = true;
+   m_isFinalPass = false;
    m_commands.clear();
    m_dependencies.clear();
    m_referencedRT.clear();
@@ -45,6 +46,7 @@ void RenderPass::RecycleCommands(std::vector<RenderCommand*>& commandPool)
 void RenderPass::AddPrecursor(RenderPass* dependency)
 {
    assert(this != dependency);
+   assert(!dependency->m_isFinalPass);
    if (FindIndexOf(m_dependencies, dependency) == -1)
       m_dependencies.push_back(dependency);
 }

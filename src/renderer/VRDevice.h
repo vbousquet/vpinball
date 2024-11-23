@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "math/ModelViewProj.h"
+
 #ifdef ENABLE_VR
    #include <openvr.h>
 #elif defined(ENABLE_XR)

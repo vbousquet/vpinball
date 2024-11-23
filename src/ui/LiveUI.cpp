@@ -706,6 +706,7 @@ LiveUI::LiveUI(RenderDevice *const rd)
    m_live_table = m_player->m_ptable;
    m_pininput = &(m_player->m_pininput);
    m_renderer = m_player->m_renderer;
+   m_multiViewRenderer = m_player->m_multiViewRenderer;
    m_disable_esc = m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "DisableESC"s, m_disable_esc);
    memset(m_tweakState, 0, sizeof(m_tweakState));
 
@@ -890,7 +891,7 @@ ImGui::MarkdownImageData LiveUI::MarkdownImageCallback(ImGui::MarkdownLinkCallba
    Texture *const ppi = ui->m_live_table->GetImage(std::string(data.link, data.linkLength));
    if (ppi == nullptr)
       return ImGui::MarkdownImageData {};
-   Sampler *sampler = g_pplayer->m_renderer->m_renderDevice->m_texMan.LoadTexture(ppi->m_pdsBuffer, SamplerFilter::SF_BILINEAR, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, false);
+   Sampler *sampler = g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_renderDevice->m_texMan.LoadTexture(ppi->m_pdsBuffer, SamplerFilter::SF_BILINEAR, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, false);
    if (sampler == nullptr)
       return ImGui::MarkdownImageData {};
    #if defined(ENABLE_BGFX)
@@ -1942,7 +1943,7 @@ void LiveUI::OnTweakModeEvent(const int keyEvent, const int keycode)
             case BG_INVALID:
             case NUM_BG_SETS: assert(false); break;
             }
-            g_pplayer->m_renderer->m_cam = Vertex3Ds(0.f, 0.f, 0.f);
+            g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_cam = Vertex3Ds(0.f, 0.f, 0.f);
             UpdateTweakPage();
          }
          // Reset custom table/plugin options
@@ -1989,7 +1990,7 @@ void LiveUI::OnTweakModeEvent(const int keyEvent, const int keycode)
                PinTable *const __restrict dst = m_live_table;
                dst->mViewSetups[id] = src->mViewSetups[id];
                dst->mViewSetups[id].ApplyTableOverrideSettings(m_live_table->m_settings, (ViewSetupID)id);
-               g_pplayer->m_renderer->m_cam = Vertex3Ds(0.f, 0.f, 0.f);
+               g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_cam = Vertex3Ds(0.f, 0.f, 0.f);
             }
             if (m_tweakPages[m_activeTweakPageIndex] == TP_TableOption)
             {
@@ -4266,7 +4267,7 @@ void LiveUI::ImageProperties()
       m_table->SetNonUndoableDirty(eSaveDirty);
    ImGui::EndDisabled();
    ImGui::Separator();
-   Sampler *sampler = g_pplayer->m_renderer->m_renderDevice->m_texMan.LoadTexture(
+   Sampler *sampler = g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_renderDevice->m_texMan.LoadTexture(
       m_selection.image->m_pdsBuffer, SamplerFilter::SF_BILINEAR, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, false);
 #if defined(ENABLE_BGFX)
    // FIXME implement

@@ -544,7 +544,7 @@ void Light::Render(const unsigned int renderMask)
       float xMin = 1.f, yMin = 1.f, xMax = -1.f, yMax = -1.f;
       for (int eye = 0; eye < m_rd->m_nEyes; eye++)
       {
-         const Matrix3D &mvp = g_pplayer->m_renderer->GetMVP().GetModelViewProj(eye);
+         const Matrix3D &mvp = g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->GetMVP().GetModelViewProj(eye);
          for (int i = 0; i < 4; i++)
          {
             Vertex3Ds p;
@@ -639,7 +639,7 @@ void Light::Render(const unsigned int renderMask)
       && m_d.m_visible
       && ((m_d.m_reflectionEnabled && ! m_backglass) || !isReflectionPass)
       && (m_lightmapMeshBuffer != nullptr) // in case of degenerate light
-      && (!m_backglass || (GetPTable()->GetDecalsEnabled() && g_pplayer->m_renderer->m_stereo3D != STEREO_VR)))
+      && (!m_backglass || (GetPTable()->GetDecalsEnabled() && g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_stereo3D != STEREO_VR)))
    {
       Texture *offTexel = nullptr;
 
@@ -710,7 +710,7 @@ void Light::Render(const unsigned int renderMask)
 
          lightColor_intensity.w = m_currentIntensity * 0.02f; //!! make configurable?
          //lightColor_intensity.w = m_currentIntensity * 0.5f;
-         if (m_d.m_BulbLight && g_pplayer->m_renderer->IsRenderPass(Renderer::LIGHT_BUFFER))
+         if (m_d.m_BulbLight && g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->IsRenderPass(Renderer::LIGHT_BUFFER))
             lightColor_intensity.w *= m_d.m_transmissionScale;
          m_rd->m_lightShader->SetLightColorIntensity(lightColor_intensity);
          m_rd->m_lightShader->SetFloat(SHADER_blend_modulate_vs_add, 0.0001f); // additive, but avoid full 0, as it disables the blend
@@ -788,7 +788,7 @@ void Light::Render(const unsigned int renderMask)
       shader->SetLightData(center_range);
       shader->SetLightColor2FalloffPower(lightColor2_falloff_power);
       lightColor_intensity.w = m_currentIntensity;
-      if (g_pplayer->m_renderer->IsRenderPass(Renderer::LIGHT_BUFFER))
+      if (g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->IsRenderPass(Renderer::LIGHT_BUFFER))
          lightColor_intensity.w *= m_d.m_transmissionScale;
       shader->SetLightColorIntensity(lightColor_intensity);
 
@@ -868,7 +868,7 @@ void Light::Render(const unsigned int renderMask)
 
       // Restore state
       if (m_backglass)
-         g_pplayer->m_renderer->UpdateBasicShaderMatrix();
+         g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->UpdateBasicShaderMatrix();
    }
 }
 

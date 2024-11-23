@@ -135,6 +135,7 @@ private:
    PinTable *m_table; // The edited table
    PinTable *m_live_table; // The live copy of the edited table being played by the player (all properties can be changed at any time by the script)
    PinInput *m_pininput;
+   MultiViewRenderer *m_multiViewRenderer;
    Renderer *m_renderer;
    bool m_staticPrepassDisabled = false;
    struct Selection

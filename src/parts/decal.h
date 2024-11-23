@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "renderer/Renderer.h"
+
 class DecalData final : public BaseProperty
 {
 public:
@@ -71,7 +73,7 @@ private:
    PinTable *m_ptable = nullptr;
 
    RenderDevice *m_rd = nullptr;
-   MeshBuffer *m_meshBuffer = nullptr;
+   MeshBuffer* m_meshBuffer[MAX_RENDERER_COUNT] = { nullptr };
    BaseTexture *m_textImg = nullptr;
    float m_leading = 0.0f, m_descent = 0.0f;
    float m_realwidth = 0.0f, m_realheight = 0.0f;

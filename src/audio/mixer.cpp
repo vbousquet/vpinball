@@ -241,18 +241,18 @@ void mixer_draw()
 
       // Set the color.
       /*// Draw the tick mark.  (Reversed x and y to match coordinate system of front end.)
-            g_pplayer->m_renderer->DrawSprite( (cabMode ? fX : fY) - (float)(1.0/1000.0), (cabMode ? fY : fX) - (float)(1.0/1000.0),
+            g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->DrawSprite( (cabMode ? fX : fY) - (float)(1.0/1000.0), (cabMode ? fY : fX) - (float)(1.0/1000.0),
             (cabMode ? size[0] : size[1]) + (float)(2.0/1000.0), (cabMode ? size[1] : size[0]) + (float)(2.0/1000.0),
             drop_color,
-            g_pplayer->m_renderer->m_renderDevice->m_nullTexture,
+            g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_renderDevice->m_nullTexture,
             fade);
             */
       // Set the color.
       // Draw the tick mark.  (Reversed x and y to match coordinate system of front end.)
-      g_pplayer->m_renderer->m_renderDevice->ResetRenderState();
-      g_pplayer->m_renderer->m_renderDevice->EnableAlphaBlend(true);
-      g_pplayer->m_renderer->DrawSprite(cabMode ? fX : fY, cabMode ? fY : fX,
+      g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_renderDevice->ResetRenderState();
+      g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_renderDevice->EnableAlphaBlend(true);
+      g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->DrawSprite(cabMode ? fX : fY, cabMode ? fY : fX,
          cabMode ? size[0] : size[1], cabMode ? size[1] : size[0],
-         color, g_pplayer->m_renderer->m_renderDevice->m_nullTexture, fade);
+         color, g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_renderDevice->m_nullTexture, fade);
    }
 }

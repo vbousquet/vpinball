@@ -8,6 +8,8 @@
 #include <windows.h>
 #endif
 
+#include "VRDevice.h"
+
 namespace VPX
 {
 
@@ -16,6 +18,7 @@ namespace VPX
 class Window final
 {
 public:
+   Window(VRDevice* headset);
    Window(const string &title, const Settings::Section section, const string &settingsPrefix);
    ~Window();
 
@@ -30,6 +33,7 @@ public:
    bool IsWCGDisplay() const { return m_wcgDisplay; } // Wether this window is on a WCG enabled display
    float GetSDRWhitePoint() const { return m_sdrWhitePoint; } // Selected SDR White Point of display in multiple of 80nits (so 3 gives 240nits for SDR white)
    float GetHDRHeadRoom() const { return m_hdrHeadRoom; } // Maximum luminance of display expressed in multiple of SDRWhitePoint (so 6 means 6 times the SDR whitepoint)
+   bool IsVRHeadSet() const { return m_vrDevice != nullptr; }
 
    void SetPos(const int x, const int y);
    void Show(const bool show = true);
@@ -92,6 +96,8 @@ private:
    float m_hdrHeadRoom = 1.f;
    bool m_wcgDisplay = false;
    bool m_wcgBackbuffer = false;
+
+   VRDevice* m_vrDevice = nullptr;
 
    class RenderTarget* m_backBuffer = nullptr;
 

@@ -71,7 +71,7 @@ void UpdateNotification(const void* handle, const char* msg, const unsigned int 
 void DisableStaticPrerendering(const BOOL disable)
 {
    assert(g_pplayer); // Only allowed in game
-   g_pplayer->m_renderer->DisableStaticPrePass(disable);
+   g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->DisableStaticPrePass(disable);
 }
 
 void GetActiveViewSetup(VPXViewSetupDef* view)
@@ -106,7 +106,7 @@ void SetActiveViewSetup(VPXViewSetupDef* view)
    viewSetup.mViewX = view->viewX;
    viewSetup.mViewY = view->viewY;
    viewSetup.mViewZ = view->viewZ;
-   g_pplayer->m_renderer->InitLayout();
+   g_pplayer->m_multiViewRenderer->ApplyToRenderViews([](Renderer* renderer) { renderer->InitLayout(); });
 }
 
 

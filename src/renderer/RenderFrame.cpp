@@ -261,8 +261,12 @@ bool RenderFrame::Execute(const bool log)
       }
 
       // Sort passes to satisfy dependencies, avoid useless render target switching, allow merging passes for better draw call sorting/batching, drop passes that do not contribute to the final pass
-      vector<RenderPass*> sortedPasses; // FIXME use list since we are populating through insertions
-      SortPasses(m_passes.back(), sortedPasses);
+      vector<RenderPass*> sortedPasses;
+      m_passes.back()->m_isFinalPass = true;
+      for (RenderPass* finalPass : m_passes)
+         if (finalPass->m_isFinalPass)
+            SortPasses(finalPass, sortedPasses);
+
       // Sort commands & split on command level dependencies (commands that needs a pass to be executed just before them, used for refracting parts that uses a screen copy just before using it as a shading texture)
       for (std::vector<RenderPass*>::iterator itPass = sortedPasses.begin(); itPass != sortedPasses.end(); ++itPass)
       {

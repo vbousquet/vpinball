@@ -237,8 +237,8 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    // Accelerometer inputs are accelerations (not velocities) by default
    m_accelInputIsVelocity = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "AccelVelocityInput"s, false);
 
-   bool useVR = false;
    #if defined(ENABLE_VR) || defined(ENABLE_XR)
+      bool useVR = false;
       const int vrDetectionMode = m_ptable->m_settings.LoadValueWithDefault(Settings::PlayerVR, "AskToTurnOn"s, 0);
       #if defined(ENABLE_XR)
          if (vrDetectionMode != 2) // 2 is VR off
@@ -271,8 +271,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
          m_vrDevice = useVR ? new VRDevice() : nullptr;
       #endif
    #endif
-   const StereoMode stereo3D = useVR ? STEREO_VR : (StereoMode)m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "Stereo3D"s, (int)STEREO_OFF);
-   assert(useVR == (stereo3D == STEREO_VR));
+   const StereoMode stereo3D = m_vrDevice ? STEREO_VR : (StereoMode)m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "Stereo3D"s, (int)STEREO_OFF);
 
    m_capExtDMD = (stereo3D == STEREO_VR) && m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "CaptureExternalDMD"s, false);
    m_capPUP = (stereo3D == STEREO_VR) && m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "CapturePUP"s, false);
@@ -320,7 +319,10 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
          #endif
       #endif
       
-      m_playfieldWnd = new VPX::Window(WIN32_WND_TITLE, stereo3D == STEREO_VR ? Settings::PlayerVR : Settings::Player, stereo3D == STEREO_VR ? "Preview" : "Playfield");
+      if (stereo3D == STEREO_VR)
+         m_playfieldWnd = new VPX::Window(m_vrDevice);
+      else
+         m_playfieldWnd = new VPX::Window(WIN32_WND_TITLE, Settings::Player, "Playfield");
 
       float pfRefreshRate = m_playfieldWnd->GetRefreshRate(); 
       m_maxFramerate = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "MaxFramerate"s, -1);
@@ -472,37 +474,38 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    if (viewSetup.mMode == VLM_WINDOW)
       viewSetup.SetWindowModeFromSettings(m_ptable);
 
-   try
+   m_multiViewRenderer = new MultiViewRenderer();
+   m_multiViewRenderer->SetTable(m_ptable);
+   m_multiViewRenderer->AddRenderView(m_playfieldWnd, m_videoSyncMode, stereo3D);
+   m_renderer = m_multiViewRenderer->GetRenderer(); // FIXME hack
+
+   if (stereo3D == STEREO_VR)
    {
-      m_renderer = new Renderer(m_ptable, m_playfieldWnd, m_videoSyncMode, stereo3D);
-   }
-   catch (HRESULT hr)
-   {
-      char szFoo[64];
-      sprintf_s(szFoo, sizeof(szFoo), "Renderer initialization error code: %x", hr);
-      ShowError(szFoo);
-      throw hr;
+      m_vrPreviewWnd = new VPX::Window(WIN32_WND_TITLE, Settings::PlayerVR, "Preview");
+      const VRPreviewMode vrPreviewMode = (VRPreviewMode)m_ptable->m_settings.LoadValueWithDefault(Settings::PlayerVR, "VRPreview"s, (int)VRPREVIEW_LEFT);
+      const bool vrPreviewShrink = m_ptable->m_settings.LoadValueWithDefault(Settings::PlayerVR, "ShrinkPreview"s, false);
+      m_multiViewRenderer->AddVRMirrorView(m_vrPreviewWnd, m_playfieldWnd, vrPreviewMode, vrPreviewShrink);
    }
 
    #if defined(ENABLE_BGFX)
    if (m_ptable->m_settings.LoadValueWithDefault(Settings::DMD, "ViewMode"s, 0) > 0)
    {
       m_dmdWnd = new VPX::Window(_T("Visual Pinball - DMD"), Settings::DMD, "DMD");
-      m_renderer->m_renderDevice->AddWindow(m_dmdWnd);
+      m_multiViewRenderer->AddDmd2DView(m_dmdWnd, -1);
    }
 
    if (m_ptable->m_settings.LoadValueWithDefault(Settings::Backglass, "ViewMode"s, 0) > 0)
    {
       m_backglassWnd = new VPX::Window(_T("Visual Pinball - Backglass"), Settings::Backglass, "Backglass");
-      m_renderer->m_renderDevice->AddWindow(m_backglassWnd);
+      //m_multiViewRenderer.AddBackglass2DView(m_backglassWnd);
    }
    #endif
 
-   // Disable static prerendering for VR and legacy headtracking (this won't be reenabled)
-   if (m_headTracking || (stereo3D == STEREO_VR))
-      m_renderer->DisableStaticPrePass(true);
+   // Disable static prerendering for legacy headtracking (this won't be reenabled)
+   if (m_headTracking)
+      m_multiViewRenderer->ApplyToRenderViews([](Renderer *renderer) { renderer->DisableStaticPrePass(true); });
 
-   m_renderer->m_renderDevice->m_vsyncCount = 1;
+   m_multiViewRenderer->GetRenderDevice()->m_vsyncCount = 1;
 
    PLOGI << "Initializing inputs & implicit objects"; // For profiling
 
@@ -522,7 +525,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    {
       m_ptable->m_tblMirrorEnabled = true;
       int rotation = (int)(m_ptable->mViewSetups[m_ptable->m_BG_current_set].GetRotation(m_playfieldWnd->GetWidth(), m_playfieldWnd->GetHeight())) / 90;
-      m_renderer->GetMVP().SetFlip(rotation == 0 || rotation == 2 ? ModelViewProj::FLIPX : ModelViewProj::FLIPY);
+      m_multiViewRenderer->ApplyToRenderViews([rotation](Renderer *renderer) { renderer->GetMVP().SetFlip(rotation == 0 || rotation == 2 ? ModelViewProj::FLIPX : ModelViewProj::FLIPY); renderer->InitLayout(); });
    }
    else
 #endif
@@ -542,15 +545,15 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
       default: break;
       }
       m_ptable->UpdateCurrentBGSet();
+      m_multiViewRenderer->ApplyToRenderViews([](Renderer *renderer) { renderer->InitLayout(); });
    }
 #endif
 
    // Initialize default state
    RenderState state;
    state.SetRenderState(RenderState::CULLMODE, m_ptable->m_tblMirrorEnabled ? RenderState::CULL_CW : RenderState::CULL_CCW);
-   m_renderer->m_renderDevice->CopyRenderStates(false, state);
-   m_renderer->m_renderDevice->SetDefaultRenderState();
-   m_renderer->InitLayout();
+   m_multiViewRenderer->GetRenderDevice()->CopyRenderStates(false, state);
+   m_multiViewRenderer->GetRenderDevice()->SetDefaultRenderState();
 
    m_accelerometer = Vertex2D(0.f, 0.f);
 
@@ -661,7 +664,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
                   if (tex != nullptr && node->QueryBoolAttribute("linear", &linearRGB) == tinyxml2::XML_SUCCESS)
                   {
                      PLOGI << "Texture preloading: '" << name << '\'';
-                     m_renderer->m_renderDevice->UploadTexture(tex->m_pdsBuffer, linearRGB);
+                     m_multiViewRenderer->GetRenderDevice()->UploadTexture(tex->m_pdsBuffer, linearRGB);
                   }
                }
             }
@@ -707,17 +710,17 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    for (Hitable *hitable : m_vhitables)
    {
       hitable->BeginPlay(m_vht);
-      hitable->RenderSetup(m_renderer->m_renderDevice);
+      hitable->RenderSetup(m_multiViewRenderer->GetRenderDevice());
       if (hitable->HitableGetItemType() == ItemTypeEnum::eItemBall)
          m_vball.push_back(&((Ball*)hitable)->m_hitBall);
    }
 
    // Setup anisotropic filtering
    const bool forceAniso = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "ForceAnisotropicFiltering"s, true);
-   m_renderer->m_renderDevice->SetMainTextureDefaultFiltering(forceAniso ? SF_ANISOTROPIC : SF_TRILINEAR);
+   m_multiViewRenderer->GetRenderDevice()->SetMainTextureDefaultFiltering(forceAniso ? SF_ANISOTROPIC : SF_TRILINEAR);
 
    #if defined(EXT_CAPTURE)
-   if (m_renderer->m_stereo3D == STEREO_VR)
+   if (m_vrDevice)
    {
       if (m_capExtDMD)
          StartDMDCapture();
@@ -764,7 +767,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
 
    // We need to initialize the perf counter before creating the UI which uses it
    wintimer_init();
-   m_liveUI = new LiveUI(m_renderer->m_renderDevice);
+   m_liveUI = new LiveUI(m_multiViewRenderer->GetRenderDevice());
 
    // Signal plugins before performing static prerendering. The only thing not fully initialized is the physics (is this ok ?)
    m_controllerDisplays.push_back({-1, nullptr}); // Default DMD
@@ -776,18 +779,18 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    // Open UI if requested (this also disables static prerendering, so must be done before performing it)
    if (playMode == 1)
       m_liveUI->OpenTweakMode();
-   else if (playMode == 2 && m_renderer->m_stereo3D != STEREO_VR)
+   else if (playMode == 2 && (m_vrDevice == nullptr))
       m_liveUI->OpenLiveUI();
 
    // Pre-render all non-changing elements such as static walls, rails, backdrops, etc. and also static playfield reflections
    // This is done after starting the script and firing the Init event to allow script to adjust static parts on startup
    PLOGI << "Prerendering static parts"; // For profiling
    #if defined(ENABLE_BGFX)
-   m_renderer->m_renderDevice->m_frameMutex.lock();
+      m_multiViewRenderer->GetRenderDevice()->m_frameMutex.lock();
    #endif
-   m_renderer->RenderStaticPrepass();
+   m_multiViewRenderer->ApplyToRenderViews([](Renderer* renderer) { renderer->RenderStaticPrepass(); });
    #if defined(ENABLE_BGFX)
-   m_renderer->m_renderDevice->m_frameMutex.unlock();
+      m_multiViewRenderer->GetRenderDevice()->m_frameMutex.unlock();
    #endif
 
    // Reset the perf counter to start time when physics starts
@@ -839,8 +842,10 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
 
    // Show the window (for VR, even without preview, we need to create a window).
    m_focused = true; // For some reason, we do not always receive the 'on focus' event after creation event on SDL. Just take for granted that focus is given upon showing
-   if (m_dmdWnd && false) // FIXME We only show DMD if there is actually a DMD (so when we receive the first DMD frame), allowing to share the same display for DMD & the still to write Alpha view
+   if (m_dmdWnd) // FIXME We should only show DMD if there is actually a DMD (so when we receive the first DMD frame), allowing to share the same display for DMD & the still to write Alpha view
       m_dmdWnd->Show();
+   if (m_vrPreviewWnd)
+      m_vrPreviewWnd->Show();
    m_playfieldWnd->Show();
    m_playfieldWnd->RaiseAndFocus();
 
@@ -962,7 +967,7 @@ Player::~Player()
          xmlDoc.InsertEndChild(root);
       }
 
-      vector<BaseTexture *> textures = m_renderer->m_renderDevice->m_texMan.GetLoadedTextures();
+      vector<BaseTexture *> textures = m_multiViewRenderer->GetRenderDevice()->m_texMan.GetLoadedTextures();
       for (BaseTexture *memtex : textures)
       {
          auto tex = std::find_if(m_ptable->m_vimage.begin(), m_ptable->m_vimage.end(), [&memtex](Texture *&x) { return (!x->m_szName.empty()) && (x->m_pdsBuffer == memtex); });
@@ -979,7 +984,7 @@ Player::~Player()
             node->DeleteAttribute("clampv");
             node->DeleteAttribute("filter");
             node->DeleteAttribute("prerender");
-            node->SetAttribute("linear", m_renderer->m_renderDevice->m_texMan.IsLinearRGB(memtex));
+            node->SetAttribute("linear", m_multiViewRenderer->GetRenderDevice()->m_texMan.IsLinearRGB(memtex));
             node->SetAttribute("age", 0);
          }
       }
@@ -992,7 +997,7 @@ Player::~Player()
    }
 
    // Save adjusted VR settings
-   if (m_renderer->m_stereo3D == STEREO_VR)
+   if (m_vrDevice)
       m_vrDevice->SaveVRSettings(g_pvp->m_settings);
 
    m_ptable->StopAllSounds();
@@ -1030,10 +1035,10 @@ Player::~Player()
       m_implicitPlayfieldMesh = nullptr;
    }
 
-   m_renderer->m_renderDevice->m_DMDShader->SetTextureNull(SHADER_tex_dmd);
+   m_multiViewRenderer->GetRenderDevice()->m_DMDShader->SetTextureNull(SHADER_tex_dmd);
    if (m_texdmd)
    {
-      m_renderer->m_renderDevice->m_texMan.UnloadTexture(m_texdmd);
+      m_multiViewRenderer->GetRenderDevice()->m_texMan.UnloadTexture(m_texdmd);
       delete m_texdmd;
       m_texdmd = nullptr;
    }
@@ -1041,7 +1046,7 @@ Player::~Player()
    {
       if (display.frame)
       {
-         m_renderer->m_renderDevice->m_texMan.UnloadTexture(display.frame);
+         m_multiViewRenderer->GetRenderDevice()->m_texMan.UnloadTexture(display.frame);
          delete display.frame;
          display.frame = nullptr;
       }
@@ -1060,7 +1065,7 @@ Player::~Player()
 
    delete m_pBCTarget;
    delete m_ptable;
-   delete m_renderer;
+   delete m_multiViewRenderer;
    LockForegroundWindow(false);
    delete m_playfieldWnd;
    delete m_dmdWnd;
@@ -1268,7 +1273,7 @@ HitBall *Player::CreateBall(const float x, const float y, const float z, const f
    m_ptable->m_vedit.push_back(m_pBall);
    m_vhitables.push_back(m_pBall);
    m_pBall->BeginPlay(m_vht);
-   m_pBall->RenderSetup(m_renderer->m_renderDevice);
+   m_pBall->RenderSetup(m_multiViewRenderer->GetRenderDevice());
    m_pBall->PhysicSetup(m_physics, false);
    if (!m_pactiveballDebug)
       m_pactiveballDebug = &m_pBall->m_hitBall;
@@ -1717,13 +1722,13 @@ string Player::GetPerfInfo()
       m_lastMaxChangeTime = m_time_msec;
 
    // Renderer additional information
-   info << "Triangles: " << ((m_renderer->m_renderDevice->m_frameDrawnTriangles + 999) / 1000) << "k per frame, "
-        << ((m_renderer->GetNPrerenderTris() + m_renderer->m_renderDevice->m_frameDrawnTriangles + 999) / 1000) << "k overall. DayNight " << quantizeUnsignedPercent(m_renderer->m_globalEmissionScale)
+   info << "Triangles: " << ((m_multiViewRenderer->GetRenderDevice()->m_frameDrawnTriangles + 999) / 1000) << "k per frame, "
+        << ((m_renderer->GetNPrerenderTris() + m_multiViewRenderer->GetRenderDevice()->m_frameDrawnTriangles + 999) / 1000) << "k overall. DayNight " << quantizeUnsignedPercent(m_renderer->m_globalEmissionScale)
         << "%%\n";
-   info << "Draw calls: " << m_renderer->m_renderDevice->Perf_GetNumDrawCalls() << "  (" << m_renderer->m_renderDevice->Perf_GetNumLockCalls() << " Locks)\n";
-   info << "State changes: " << m_renderer->m_renderDevice->Perf_GetNumStateChanges() << "\n";
-   info << "Texture changes: " << m_renderer->m_renderDevice->Perf_GetNumTextureChanges() << " (" << m_renderer->m_renderDevice->Perf_GetNumTextureUploads() << " Uploads)\n";
-   info << "Shader/Parameter changes: " << m_renderer->m_renderDevice->Perf_GetNumTechniqueChanges() << " / " << m_renderer->m_renderDevice->Perf_GetNumParameterChanges() << "\n";
+   info << "Draw calls: " << m_multiViewRenderer->GetRenderDevice()->Perf_GetNumDrawCalls() << "  (" << m_multiViewRenderer->GetRenderDevice()->Perf_GetNumLockCalls() << " Locks)\n";
+   info << "State changes: " << m_multiViewRenderer->GetRenderDevice()->Perf_GetNumStateChanges() << "\n";
+   info << "Texture changes: " << m_multiViewRenderer->GetRenderDevice()->Perf_GetNumTextureChanges() << " (" << m_multiViewRenderer->GetRenderDevice()->Perf_GetNumTextureUploads() << " Uploads)\n";
+   info << "Shader/Parameter changes: " << m_multiViewRenderer->GetRenderDevice()->Perf_GetNumTechniqueChanges() << " / " << m_multiViewRenderer->GetRenderDevice()->Perf_GetNumParameterChanges() << "\n";
    info << "Objects: " << (unsigned int)m_vhitables.size() << "\n";
    info << "\n";
 
@@ -1795,7 +1800,7 @@ void Player::LockForegroundWindow(const bool enable)
 
 void Player::GameLoop(std::function<void()> ProcessOSMessages)
 {
-   assert(m_renderer->m_stereo3D != STEREO_VR || (m_videoSyncMode == VideoSyncMode::VSM_NONE && m_maxFramerate > 1000)); // Stereo must be run unthrottled to let OpenVR set the frame pace according to the head set
+   assert((m_vrDevice == nullptr) || (m_videoSyncMode == VideoSyncMode::VSM_NONE && m_maxFramerate > 1000)); // Stereo must be run unthrottled to let OpenVR set the frame pace according to the head set
 
    auto sync = [this, ProcessOSMessages]()
    {
@@ -1816,7 +1821,7 @@ void Player::GameLoop(std::function<void()> ProcessOSMessages)
 
    #ifdef ENABLE_BGFX
    // Flush any pending frame
-   m_renderer->m_renderDevice->m_frameReadySem.post();
+   m_multiViewRenderer->GetRenderDevice()->m_frameReadySem.post();
 
 #ifndef __LIBVPINBALL__
    MultithreadedGameLoop(sync);
@@ -1843,16 +1848,16 @@ void Player::MultithreadedGameLoop(std::function<void()> sync)
       sync();
 
       // If rendering thread is ready, push a new frame as soon as possible
-      if (!m_renderer->m_renderDevice->m_framePending && m_renderer->m_renderDevice->m_frameMutex.try_lock())
+      if (!m_multiViewRenderer->GetRenderDevice()->m_framePending && m_multiViewRenderer->GetRenderDevice()->m_frameMutex.try_lock())
       {
          FinishFrame();
          g_frameProfiler.NewFrame(m_time_msec);
          m_lastFrameSyncOnFPS = (m_videoSyncMode != VideoSyncMode::VSM_NONE) && ((g_frameProfiler.GetSlidingAvg(FrameProfiler::PROFILE_FRAME) - 100) * m_playfieldWnd->GetRefreshRate() < 1000000);
          m_overall_frames++; // This causes the next VPinMame <-> VPX sync to update light status which can be heavy since it needs to perform PWM integration of all lights
          PrepareFrame(sync);
-         m_renderer->m_renderDevice->m_framePending = true;
-         m_renderer->m_renderDevice->m_frameReadySem.post();
-         m_renderer->m_renderDevice->m_frameMutex.unlock();
+         m_multiViewRenderer->GetRenderDevice()->m_framePending = true;
+         m_multiViewRenderer->GetRenderDevice()->m_frameReadySem.post();
+         m_multiViewRenderer->GetRenderDevice()->m_frameMutex.unlock();
       }
       else
       {
@@ -1900,10 +1905,10 @@ void Player::GPUQueueStuffingGameLoop(std::function<void()> sync)
       span* tagSpan = new span(series, 1, _T("Flip"));
       #endif
       g_frameProfiler.EnterProfileSection(FrameProfiler::PROFILE_GPU_FLIP);
-      m_renderer->m_renderDevice->Flip();
+      m_multiViewRenderer->GetRenderDevice()->Flip();
       #if defined(ENABLE_DX9) // DirectX 9 does not support native adaptive sync, so we must emulate it at the application level
       if (m_videoSyncMode == VideoSyncMode::VSM_ADAPTIVE_VSYNC && m_fps > m_maxFramerate * ADAPT_VSYNC_FACTOR)
-         m_renderer->m_renderDevice->WaitForVSync(false);
+         m_multiViewRenderer->GetRenderDevice()->WaitForVSync(false);
       #endif
       g_frameProfiler.ExitProfileSection();
 
@@ -1992,7 +1997,7 @@ void Player::FramePacingGameLoop(std::function<void()> sync)
       g_frameProfiler.EnterProfileSection(FrameProfiler::PROFILE_SLEEP);
 
       // Wait for at least one VBlank after last frame submission (adaptive sync)
-      while (m_renderer->m_renderDevice->m_vsyncCount == 0)
+      while (m_multiViewRenderer->GetRenderDevice()->m_vsyncCount == 0)
       {
          m_curFrameSyncOnVBlank = true;
          YieldProcessor();
@@ -2007,7 +2012,7 @@ void Player::FramePacingGameLoop(std::function<void()> sync)
          const int minimumFrameLength = 1000000ull / m_maxFramerate;
          const int maximumFrameLength = 5 * refreshLength;
          const int targetFrameLength = clamp(refreshLength - 2000, min(minimumFrameLength, maximumFrameLength), maximumFrameLength);
-         while (now - m_renderer->m_renderDevice->m_lastPresentFrameTick < targetFrameLength)
+         while (now - m_multiViewRenderer->GetRenderDevice()->m_lastPresentFrameTick < targetFrameLength)
          {
             m_curFrameSyncOnFPS = true;
             YieldProcessor();
@@ -2022,11 +2027,11 @@ void Player::FramePacingGameLoop(std::function<void()> sync)
       m_lastFrameSyncOnVBlank = m_curFrameSyncOnVBlank;
       m_lastFrameSyncOnFPS = m_curFrameSyncOnFPS;
       PLOGI_IF(debugLog) << "Frame Scheduled at " << usec() << ", Waited for VBlank: " << m_curFrameSyncOnVBlank << ", Waited for FPS: " << m_curFrameSyncOnFPS;
-      m_renderer->m_renderDevice->m_vsyncCount = 0;
+      m_multiViewRenderer->GetRenderDevice()->m_vsyncCount = 0;
       g_frameProfiler.ExitProfileSection(); // Out of Sleep section
       g_frameProfiler.EnterProfileSection(FrameProfiler::PROFILE_GPU_FLIP);
-      m_renderer->m_renderDevice->Flip();
-      m_renderer->m_renderDevice->WaitForVSync(true);
+      m_multiViewRenderer->GetRenderDevice()->Flip();
+      m_multiViewRenderer->GetRenderDevice()->WaitForVSync(true);
       g_frameProfiler.ExitProfileSection();
       FinishFrame();
       m_curFrameSyncOnVBlank = m_curFrameSyncOnFPS = false;
@@ -2055,7 +2060,7 @@ void Player::PrepareFrame(std::function<void()> sync)
 
    #ifdef EXT_CAPTURE
    // Trigger captures
-   if (m_renderer->m_stereo3D == STEREO_VR)
+   if (m_vrDevice)
       UpdateExtCaptures();
    #endif
 
@@ -2085,10 +2090,15 @@ void Player::PrepareFrame(std::function<void()> sync)
    ushock_output_set(HID_OUTPUT_PLUNGER, ((m_time_msec - m_LastPlungerHit) < 512) && ((m_time_msec & 512) > 0));
 
    g_frameProfiler.EnterProfileSection(FrameProfiler::PROFILE_MISC);
-   if (m_renderer->m_stereo3D != STEREO_VR)
+   if (m_vrDevice == nullptr)
       m_liveUI->Update(m_playfieldWnd->GetBackBuffer());
+   #if defined(ENABLE_VR)
    else if (m_liveUI->IsTweakMode())
-      m_liveUI->Update(m_renderer->GetOffscreenVR(0));
+   {
+      // FIXME implement LiveUI rendering on VR headset
+      //m_liveUI->Update();
+   }
+   #endif
 
 #ifdef __LIBVPINBALL__
    if (m_liveUIOverride)
@@ -2111,7 +2121,7 @@ void Player::PrepareFrame(std::function<void()> sync)
    if (m_infoMode != IF_PROFILING)
       m_renderer->m_gpu_profiler.Shutdown();
    if (GetProfilingMode() == PF_ENABLED)
-      m_renderer->m_gpu_profiler.BeginFrame(m_renderer->m_renderDevice->GetCoreDevice());
+      m_renderer->m_gpu_profiler.BeginFrame(m_multiViewRenderer->GetRenderDevice()->GetCoreDevice());
    #endif
 
    #ifdef MSVC_CONCURRENCY_VIEWER
@@ -2127,26 +2137,7 @@ void Player::PrepareFrame(std::function<void()> sync)
 
    g_frameProfiler.EnterProfileSection(FrameProfiler::PROFILE_GPU_COLLECT);
 
-   bool dmdRendered = false;
-   if (m_dmdWnd)
-   {
-      static int lastFrameId = -2;
-      ControllerDisplay dmd = GetControllerDisplay(-1);
-      if (dmd.frame && lastFrameId != dmd.frameId)
-      {
-         lastFrameId = dmd.frameId;
-         dmdRendered = true;
-         m_renderer->RenderDMD(dmd.frame, dmd.frame->m_format != BaseTexture::BW, m_dmdWnd->GetBackBuffer());
-      }
-   }
-
-   m_renderer->RenderFrame();
-
-   if (dmdRendered)
-   {
-      m_dmdWnd->Show();
-      m_renderer->m_renderDevice->AddRenderTargetDependency(m_dmdWnd->GetBackBuffer());
-   }
+   m_multiViewRenderer->Render();
 
    g_frameProfiler.ExitProfileSection();
    #ifdef MSVC_CONCURRENCY_VIEWER
@@ -2160,7 +2151,7 @@ void Player::SubmitFrame()
    span* tagSpan = new span(series, 1, _T("Submit"));
    #endif
    g_frameProfiler.EnterProfileSection(FrameProfiler::PROFILE_GPU_SUBMIT);
-   m_renderer->m_renderDevice->SubmitRenderFrame();
+   m_multiViewRenderer->GetRenderDevice()->SubmitRenderFrame();
    g_frameProfiler.ExitProfileSection();
 
    #ifdef MSVC_CONCURRENCY_VIEWER
@@ -2229,7 +2220,7 @@ void Player::FinishFrame()
    if (m_closing == CS_USER_INPUT)
    {
       m_closing = CS_PLAYING;
-      if (g_pvp->m_disable_pause_menu || m_renderer->m_stereo3D == STEREO_VR)
+      if (g_pvp->m_disable_pause_menu || m_vrDevice)
          m_closing = CS_STOP_PLAY;
       else {
 #ifdef __LIBVPINBALL__
@@ -2331,8 +2322,8 @@ Player::ControllerDisplay Player::GetControllerDisplay(int id)
       if (display.frame)
       {
          // FIXME this may be still in use when deleted
-         //m_renderer->m_renderDevice->m_DMDShader->SetTextureNull(SHADER_tex_dmd);
-         //m_renderer->m_renderDevice->m_texMan.UnloadTexture(display.frame);
+         //m_multiViewRenderer->GetRenderDevice()->m_DMDShader->SetTextureNull(SHADER_tex_dmd);
+         //m_multiViewRenderer->GetRenderDevice()->m_texMan.UnloadTexture(display.frame);
          //delete display.frame;
       }
       display.frame = new BaseTexture(msg.width, msg.height, format);
@@ -2361,7 +2352,7 @@ Player::ControllerDisplay Player::GetControllerDisplay(int id)
          for (int ofs = 0; ofs < size; ofs++)
             data[ofs] = 0xFF000000 | (msg.frame[ofs * 3 + 2] << 16) | (msg.frame[ofs * 3 + 1] << 8) | msg.frame[ofs * 3];
       }
-      m_renderer->m_renderDevice->m_texMan.SetDirty(display.frame);
+      m_multiViewRenderer->GetRenderDevice()->m_texMan.SetDirty(display.frame);
    }
 
    return display;

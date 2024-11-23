@@ -1293,7 +1293,7 @@ void Flasher::Render(const unsigned int renderMask)
 
       const int alphatest = 0; //!!
       if (alphatest)
-         g_pplayer->m_renderer->EnableAlphaTestReference(0x80);*/
+         g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->EnableAlphaTestReference(0x80);*/
 
       if (true)
       {
@@ -1324,8 +1324,8 @@ void Flasher::Render(const unsigned int renderMask)
          if (dmd.frame)
          {
             // convert color from sRGB to RGB ?
-            g_pplayer->m_renderer->SetupDMDRender(color, dmd.frame, m_d.m_modulate_vs_add, false, false);
-            m_rd->m_DMDShader->SetVector(SHADER_exposure_wcg, 1.f, 1.f, 1.f, 0.f);
+            //g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->SetupDMDRender(color, dmd.frame, m_d.m_modulate_vs_add, false, false);
+            //m_rd->m_DMDShader->SetVector(SHADER_exposure_wcg, 1.f, 1.f, 1.f, 0.f);
          }
       }
 

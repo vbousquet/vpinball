@@ -84,7 +84,7 @@ void ExtCaptureManager::Update()
          const std::lock_guard<std::mutex> guard(m_captureMutex);
          if (*capture->m_targetTexture != nullptr)
          {
-            g_pplayer->m_renderer->m_renderDevice->m_texMan.UnloadTexture(*capture->m_targetTexture);
+            g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_renderDevice->m_texMan.UnloadTexture(*capture->m_targetTexture);
             delete *capture->m_targetTexture;
             *capture->m_targetTexture = nullptr;
          }
@@ -109,7 +109,7 @@ void ExtCaptureManager::Update()
       {
          // We do not lock wait on the update thread when pushing the update information to the texture manager to limit the performance impact
          capture->m_updated = false;
-         g_pplayer->m_renderer->m_renderDevice->m_texMan.SetDirty(*capture->m_targetTexture);
+         g_pplayer->m_multiViewRenderer->GetCurrentRenderer()->m_renderDevice->m_texMan.SetDirty(*capture->m_targetTexture);
       }
    }
 

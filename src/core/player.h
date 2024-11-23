@@ -3,6 +3,7 @@
 #pragma once
 
 #include "renderer/typedefs3D.h"
+#include "renderer/MultiViewRenderer.h"
 #include "renderer/Renderer.h"
 #include "renderer/Window.h"
 #include "physics/PhysicsEngine.h"
@@ -415,8 +416,10 @@ public:
 #pragma region Rendering
 public:
    VPX::Window *m_playfieldWnd = nullptr;
+   VPX::Window *m_vrPreviewWnd = nullptr;
    VPX::Window *m_dmdWnd = nullptr;
    VPX::Window *m_backglassWnd = nullptr;
+   MultiViewRenderer* m_multiViewRenderer = nullptr;
    Renderer *m_renderer = nullptr;
    VRDevice *m_vrDevice = nullptr;
    bool m_headTracking = false;
