@@ -38,7 +38,7 @@ public:
    void RenderStaticPrepass();
 
    void RenderFrame();
-   void RenderDMD(BaseTexture* dmd, const bool isColored, RenderTarget* rt);
+   void RenderDMD(BaseTexture* dmd, const bool isColored, RenderTarget* rt, int x, int y, int w, int h);
 
    void SetupDMDRender(const vec4& color, BaseTexture* dmd, const float alpha, const bool sRGB, const bool isColored);
    void DrawStatics();

@@ -1183,25 +1183,27 @@ void Renderer::RenderFrame()
    PrepareVideoBuffers(m_renderDevice->GetOutputBackBuffer());
 }
 
-void Renderer::RenderDMD(BaseTexture* dmd, const bool isColored, RenderTarget* rt)
+void Renderer::RenderDMD(BaseTexture* dmd, const bool isColored, RenderTarget* rt, int x, int y, int w, int h)
 {
    m_renderDevice->ResetRenderState();
    m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
    m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
    m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
    m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
-   m_renderDevice->SetRenderTarget("DMDView", rt, false);
+   m_renderDevice->SetRenderTarget("DMDView", rt, true, true);
    SetupDMDRender(m_dmdViewDot, dmd, 1.f, true, isColored);
    m_renderDevice->m_DMDShader->SetVector(SHADER_exposure_wcg, m_dmdViewExposure, 1.f, 1.f, 0.f);
-   const float rtAR = static_cast<float>(rt->GetWidth()) / static_cast<float>(rt->GetHeight());
+   const float rtAR = static_cast<float>(w) / static_cast<float>(h);
    const float dmdAR = static_cast<float>(dmd->width()) / static_cast<float>(dmd->height());
-   const float w = rtAR > dmdAR ? dmdAR / rtAR : 1.f;
-   const float h = rtAR < dmdAR ? rtAR / dmdAR : 1.f;
+   const float px = static_cast<float>(x) / static_cast<float>(rt->GetWidth()) * 2.f - 1.f;
+   const float py = static_cast<float>(y) / static_cast<float>(rt->GetHeight()) * 2.f - 1.f;
+   const float pw = 2.f * (rtAR > dmdAR ? dmdAR / rtAR : 1.f) * static_cast<float>(w) / static_cast<float>(rt->GetWidth());
+   const float ph = 2.f * (rtAR < dmdAR ? rtAR / dmdAR : 1.f) * static_cast<float>(h) / static_cast<float>(rt->GetHeight());
    const Vertex3D_NoTex2 vertices[4] = {
-      {  w, -h, 0.f, 0.f, 0.f, 1.f, 1.f, 1.f },
-      { -w, -h, 0.f, 0.f, 0.f, 1.f, 0.f, 1.f },
-      {  w,  h, 0.f, 0.f, 0.f, 1.f, 1.f, 0.f },
-      { -w,  h, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f }
+      { px+pw, py,    0.f, 0.f, 0.f, 1.f, 1.f, 1.f },
+      { px,    py,    0.f, 0.f, 0.f, 1.f, 0.f, 1.f },
+      { px+pw, py+ph, 0.f, 0.f, 0.f, 1.f, 1.f, 0.f },
+      { px,    py+ph, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f }
    };
    m_renderDevice->DrawTexturedQuad(m_renderDevice->m_DMDShader, vertices);
 }

@@ -415,8 +415,9 @@ public:
 #pragma region Rendering
 public:
    VPX::Window *m_playfieldWnd = nullptr;
-   VPX::Window *m_dmdWnd = nullptr;
-   VPX::Window *m_backglassWnd = nullptr;
+   int m_lastDmdFrameId = -1;
+   VPX::RenderOutput m_dmdOutput;
+   VPX::RenderOutput m_backglassOutput;
    Renderer *m_renderer = nullptr;
    VRDevice *m_vrDevice = nullptr;
    bool m_headTracking = false;

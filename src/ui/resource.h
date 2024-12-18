@@ -1321,6 +1321,8 @@
 #define IDC_LEGACY_RENDERER             944
 #define IDC_DMD_PROFILE                 945
 #define IDC_GFX_BACKEND_LABEL           946
+#define IDC_X_LABEL                     947
+#define IDC_Y_LABEL                     948
 #define IDC_LAYBACK_EDIT                1040
 #define IDC_3D_STEREO_SEPARATION_EDIT   1041
 #define IDC_3D_STEREO_ZPD_EDIT          1042
@@ -1517,7 +1519,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        681
 #define _APS_NEXT_COMMAND_VALUE         4030
-#define _APS_NEXT_CONTROL_VALUE         947
+#define _APS_NEXT_CONTROL_VALUE         949
 #define _APS_NEXT_SYMED_VALUE           191
 #endif
 #endif

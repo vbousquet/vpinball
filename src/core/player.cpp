@@ -171,6 +171,8 @@ LRESULT CALLBACK PlayerWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
 Player::Player(PinTable *const editor_table, PinTable *const live_table, const int playMode)
    : m_pEditorTable(editor_table)
    , m_ptable(live_table)
+   , m_dmdOutput("Visual Pinball - DMD", live_table->m_settings, Settings::DMD, "DMD")
+   , m_backglassOutput("Visual Pinball - Backglass", live_table->m_settings, Settings::Backglass, "Backglass")
 {
    // For the time being, lots of access are made through the global singleton, so ensure we are unique, and define it as soon as needed
    assert(g_pplayer == nullptr);
@@ -472,17 +474,10 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    }
 
    #if defined(ENABLE_BGFX)
-   if (m_ptable->m_settings.LoadValueWithDefault(Settings::DMD, "ViewMode"s, 0) > 0)
-   {
-      m_dmdWnd = new VPX::Window(_T("Visual Pinball - DMD"), Settings::DMD, "DMD");
-      m_renderer->m_renderDevice->AddWindow(m_dmdWnd);
-   }
-
-   if (m_ptable->m_settings.LoadValueWithDefault(Settings::Backglass, "ViewMode"s, 0) > 0)
-   {
-      m_backglassWnd = new VPX::Window(_T("Visual Pinball - Backglass"), Settings::Backglass, "Backglass");
-      m_renderer->m_renderDevice->AddWindow(m_backglassWnd);
-   }
+   if (m_dmdOutput.GetMode() == VPX::RenderOutput::OM_WINDOW)
+      m_renderer->m_renderDevice->AddWindow(m_dmdOutput.GetWindow());
+   if (m_backglassOutput.GetMode() == VPX::RenderOutput::OM_WINDOW)
+      m_renderer->m_renderDevice->AddWindow(m_backglassOutput.GetWindow());
    #endif
 
    // Disable static prerendering for VR and legacy headtracking (this won't be reenabled)
@@ -825,8 +820,6 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
 
    // Show the window (for VR, even without preview, we need to create a window).
    m_focused = true; // For some reason, we do not always receive the 'on focus' event after creation event on SDL. Just take for granted that focus is given upon showing
-   if (m_dmdWnd && false) // FIXME We only show DMD if there is actually a DMD (so when we receive the first DMD frame), allowing to share the same display for DMD & the still to write Alpha view
-      m_dmdWnd->Show();
    m_playfieldWnd->Show();
    m_playfieldWnd->RaiseAndFocus();
 
@@ -1064,10 +1057,6 @@ Player::~Player()
    LockForegroundWindow(false);
    delete m_playfieldWnd;
    m_playfieldWnd = nullptr;
-   delete m_dmdWnd;
-   m_dmdWnd = nullptr;
-   delete m_backglassWnd;
-   m_backglassWnd = nullptr;
 
    delete m_vrDevice;
    m_vrDevice = nullptr;
@@ -2138,25 +2127,28 @@ void Player::PrepareFrame(std::function<void()> sync)
 
    g_frameProfiler.EnterProfileSection(FrameProfiler::PROFILE_GPU_COLLECT);
 
-   bool dmdRendered = false;
-   if (m_dmdWnd)
-   {
-      static int lastFrameId = -2;
-      ControllerDisplay dmd = GetControllerDisplay(-1);
-      if (dmd.frame && lastFrameId != dmd.frameId)
-      {
-         lastFrameId = dmd.frameId;
-         dmdRendered = true;
-         m_renderer->RenderDMD(dmd.frame, dmd.frame->m_format != BaseTexture::BW, m_dmdWnd->GetBackBuffer());
-      }
-   }
-
    m_renderer->RenderFrame();
 
-   if (dmdRendered)
+   if (m_dmdOutput.GetMode() != VPX::RenderOutput::OM_DISABLED)
    {
-      m_dmdWnd->Show();
-      m_renderer->m_renderDevice->AddRenderTargetDependency(m_dmdWnd->GetBackBuffer());
+      ControllerDisplay dmd = GetControllerDisplay(-1);
+      if (dmd.frame && (m_lastDmdFrameId != dmd.frameId || (m_dmdOutput.GetMode() == VPX::RenderOutput::OM_EMBEDDED)))
+      {
+         RenderTarget *scenePass = m_renderer->m_renderDevice->GetCurrentRenderTarget();
+         m_lastDmdFrameId = dmd.frameId;
+         if (m_dmdOutput.GetMode() == VPX::RenderOutput::OM_WINDOW)
+         {
+            m_dmdOutput.GetWindow()->Show();
+            m_renderer->RenderDMD(dmd.frame, dmd.frame->m_format != BaseTexture::BW, m_dmdOutput.GetWindow()->GetBackBuffer(), 0, 0, m_dmdOutput.GetWindow()->GetBackBuffer()->GetWidth(), m_dmdOutput.GetWindow()->GetBackBuffer()->GetHeight());
+            m_renderer->m_renderDevice->AddRenderTargetDependency(scenePass, false);
+         }
+         else if (m_dmdOutput.GetMode() == VPX::RenderOutput::OM_EMBEDDED)
+         {
+            int x, y;
+            m_dmdOutput.GetEmbeddedWindow()->GetPos(x, y);
+            m_renderer->RenderDMD(dmd.frame, dmd.frame->m_format != BaseTexture::BW, m_playfieldWnd->GetBackBuffer(), x, y, m_dmdOutput.GetEmbeddedWindow()->GetWidth(), m_dmdOutput.GetEmbeddedWindow()->GetHeight());
+         }
+      }
    }
 
    g_frameProfiler.ExitProfileSection();
