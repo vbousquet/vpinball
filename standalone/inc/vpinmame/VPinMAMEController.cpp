@@ -242,7 +242,7 @@ VPinMAMEController::VPinMAMEController()
 
 VPinMAMEController::~VPinMAMEController()
 {
-   if (PinmameIsRunning())
+   if (PinmameIsRunning() != 0)
       PinmameStop();
 
    m_running = false;
@@ -318,7 +318,7 @@ STDMETHODIMP VPinMAMEController::Run(/*[in]*/ LONG_PTR hParentWnd, /*[in,default
       if (status == PINMAME_STATUS_OK) {
          int timeout = 0;
 
-         while (!PinmameIsRunning() && timeout < 20) {
+         while ((PinmameIsRunning() == 2) && timeout < 20) {
             SDL_Delay(75);
             timeout++;
          }
@@ -358,7 +358,7 @@ STDMETHODIMP VPinMAMEController::Stop()
 {
    PinmameSetTimeFence(0.0);
 
-   if (PinmameIsRunning())
+   if (PinmameIsRunning() != 0)
       PinmameStop();
 
    if (m_pThread) {
@@ -746,7 +746,7 @@ STDMETHODIMP VPinMAMEController::get_Machines(BSTR sMachine, VARIANT* pVal)
 }
 
 STDMETHODIMP VPinMAMEController::get_Running(VARIANT_BOOL *pVal) { 
-   return PinmameIsRunning() ? VARIANT_TRUE : VARIANT_FALSE; 
+   return (PinmameIsRunning() != 0) ? VARIANT_TRUE : VARIANT_FALSE; 
 }
 
 STDMETHODIMP VPinMAMEController::get_ChangedLamps(VARIANT* pVal)

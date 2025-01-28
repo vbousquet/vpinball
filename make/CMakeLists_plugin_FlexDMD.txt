@@ -2,6 +2,9 @@
 
 # --- FlexDMD plugin ---
 
+# This plugin needs someone to setup its build script for other platforms
+if (WIN32)
+
 add_library(FlexDMDPlugin MODULE
     plugins/flexdmd/common.cpp
 	plugins/flexdmd/FlexDMD.cpp
@@ -93,30 +96,30 @@ add_library(FlexDMDPlugin MODULE
 )
 
 if (WIN32)
-if (PluginArch STREQUAL "x86_64")
-target_link_directories(FlexDMDPlugin PUBLIC plugins/flexdmd/third-party/build-libs/windows-x64)
-else()
-target_link_directories(FlexDMDPlugin PUBLIC plugins/flexdmd/third-party/build-libs/windows-x86)
-endif()
-set_target_properties(FlexDMDPlugin PROPERTIES
-   MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:DEBUG>:Debug>"
-)
-target_compile_options(FlexDMDPlugin PUBLIC
-   $<$<CONFIG:RELEASE>:$<$<COMPILE_LANGUAGE:CXX>:${OPT_COMMON}>>
-   $<$<CONFIG:RELEASE>:$<$<COMPILE_LANGUAGE:C>:${OPT_COMMON}>>
-)
-target_link_options(FlexDMDPlugin PUBLIC
-   $<$<CONFIG:RELEASE>:/INCREMENTAL:NO>
-   $<$<CONFIG:RELEASE>:/OPT:REF>
-   $<$<CONFIG:RELEASE>:/OPT:ICF>
-   $<$<CONFIG:RELEASE>:/LTCG>
-)
+	if (PluginArch STREQUAL "x86_64")
+		target_link_directories(FlexDMDPlugin PUBLIC plugins/flexdmd/third-party/build-libs/windows-x64)
+	else()
+		target_link_directories(FlexDMDPlugin PUBLIC plugins/flexdmd/third-party/build-libs/windows-x86)
+	endif()
+	set_target_properties(FlexDMDPlugin PROPERTIES
+	MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:DEBUG>:Debug>"
+	)
+	target_compile_options(FlexDMDPlugin PUBLIC
+		$<$<CONFIG:RELEASE>:$<$<COMPILE_LANGUAGE:CXX>:${OPT_COMMON}>>
+		$<$<CONFIG:RELEASE>:$<$<COMPILE_LANGUAGE:C>:${OPT_COMMON}>>
+	)
+	target_link_options(FlexDMDPlugin PUBLIC
+		$<$<CONFIG:RELEASE>:/INCREMENTAL:NO>
+		$<$<CONFIG:RELEASE>:/OPT:REF>
+		$<$<CONFIG:RELEASE>:/OPT:ICF>
+		$<$<CONFIG:RELEASE>:/LTCG>
+	)
 endif()
 
 target_link_libraries(FlexDMDPlugin
 	SDL3.lib
 	SDL3_image.lib)
-	
+
 target_include_directories(FlexDMDPlugin PUBLIC
    ${CMAKE_CURRENT_SOURCE_DIR}
    src/plugins
@@ -128,4 +131,21 @@ add_custom_command(TARGET FlexDMDPlugin POST_BUILD
    COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/plugins/flexdmd/plugin.cfg" "${PLUGINS_DIR}/flexdmd/plugin.cfg"
    COMMAND "${CMAKE_COMMAND}" -E copy "$<TARGET_FILE:FlexDMDPlugin>" "${PLUGINS_DIR}/flexdmd/plugin-flexdmd.${PluginArch}${CMAKE_SHARED_LIBRARY_SUFFIX}"
    COMMAND "${CMAKE_COMMAND}" -E rm "$<TARGET_FILE:FlexDMDPlugin>"
+   COMMAND "${CMAKE_COMMAND}" -E copy_directory ${CMAKE_SOURCE_DIR}/plugins/flexdmd/assets "${PLUGINS_DIR}/flexdmd/assets"
 )
+
+if (WIN32)
+	if (PluginArch STREQUAL "x86_64")
+		add_custom_command(TARGET FlexDMDPlugin POST_BUILD
+			COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/plugins/flexdmd/third-party/runtime-libs/windows-x64/SDL364.dll" "${PLUGINS_DIR}/flexdmd/SDL364.dll"
+			COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/plugins/flexdmd/third-party/runtime-libs/windows-x64/SDL3_image64.dll" "${PLUGINS_DIR}/flexdmd/SDL3_image64.dll"
+		)
+	elseif (PluginArch STREQUAL "x86_32")
+		add_custom_command(TARGET FlexDMDPlugin POST_BUILD
+			COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/plugins/flexdmd/third-party/runtime-libs/windows-x86/SDL3.dll" "${PLUGINS_DIR}/flexdmd/SDL3.dll"
+			COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/plugins/flexdmd/third-party/runtime-libs/windows-x86/SDL3_image.dll" "${PLUGINS_DIR}/flexdmd/SDL3_image.dll"
+		)
+	endif()
+endif()
+
+endif()

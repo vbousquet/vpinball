@@ -28,7 +28,7 @@ void onPrepareFrame(const unsigned int eventId, void* userData, void* eventData)
    // This can be used to tweak any visual parameter before building the frame (for example head tracking,...)
 }
 
-MSGPI_EXPORT void PluginLoad(const unsigned int sessionId, MsgPluginAPI* api)
+MSGPI_EXPORT void MSGPIAPI PluginLoad(const unsigned int sessionId, MsgPluginAPI* api)
 {
    msgApi = api;
    msgApi->BroadcastMsg(sessionId, getVpxApiId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_API), &vpxApi);
@@ -37,7 +37,7 @@ MSGPI_EXPORT void PluginLoad(const unsigned int sessionId, MsgPluginAPI* api)
    msgApi->SubscribeMsg(sessionId, onPrepareFrameId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_PREPARE_FRAME), onPrepareFrame, nullptr);
 }
 
-MSGPI_EXPORT void PluginUnload()
+MSGPI_EXPORT void MSGPIAPI PluginUnload()
 {
    // Cleanup is mandatory when plugin is unloaded. All registered callbacks must be unregistered.
    msgApi->UnsubscribeMsg(onGameStartId, onGameStart);
