@@ -10,9 +10,11 @@ add_library(SerumPlugin MODULE
 	plugins/serum/third-party/include/libserum/serum-decode.cpp
 	plugins/serum/third-party/include/miniz/miniz.c
 )
+
 set_source_files_properties(
    plugins/serum/third-party/include/miniz/miniz.c PROPERTIES LANGUAGE C
 )
+
 if (WIN32)
 	add_compile_options(
 	   $<$<CONFIG:RELEASE>:/Ob2>
@@ -30,25 +32,30 @@ if (WIN32)
 	   $<$<CONFIG:RELEASE>:/GT>
 	   $<$<CONFIG:RELEASE>:/GL>
 	)
+	
 	set_target_properties(SerumPlugin PROPERTIES
 	   MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:DEBUG>:Debug>"
-)
-target_compile_options(SerumPlugin PUBLIC
-   $<$<CONFIG:RELEASE>:$<$<COMPILE_LANGUAGE:CXX>:${OPT_COMMON}>>
-   $<$<CONFIG:RELEASE>:$<$<COMPILE_LANGUAGE:C>:${OPT_COMMON}>>
-)
-target_link_options(SerumPlugin PUBLIC
-   $<$<CONFIG:RELEASE>:/INCREMENTAL:NO>
-   $<$<CONFIG:RELEASE>:/OPT:REF>
-   $<$<CONFIG:RELEASE>:/OPT:ICF>
-   $<$<CONFIG:RELEASE>:/LTCG>
-)
+	)
+	
+	target_compile_options(SerumPlugin PUBLIC
+	   $<$<CONFIG:RELEASE>:$<$<COMPILE_LANGUAGE:CXX>:${OPT_COMMON}>>
+	   $<$<CONFIG:RELEASE>:$<$<COMPILE_LANGUAGE:C>:${OPT_COMMON}>>
+	)
+	
+	target_link_options(SerumPlugin PUBLIC
+	   $<$<CONFIG:RELEASE>:/INCREMENTAL:NO>
+	   $<$<CONFIG:RELEASE>:/OPT:REF>
+	   $<$<CONFIG:RELEASE>:/OPT:ICF>
+	   $<$<CONFIG:RELEASE>:/LTCG>
+	)
 endif()
+
 target_include_directories(SerumPlugin PUBLIC
    ${CMAKE_CURRENT_SOURCE_DIR}
    src/plugins
    plugins/serum/third-party/include
 )
+
 add_custom_command(TARGET SerumPlugin POST_BUILD
    COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/plugins/serum/plugin.cfg" "${PLUGINS_DIR}/serum/plugin.cfg"
    COMMAND "${CMAKE_COMMAND}" -E copy "$<TARGET_FILE:SerumPlugin>" "${PLUGINS_DIR}/serum/plugin-serum.${PluginArch}${CMAKE_SHARED_LIBRARY_SUFFIX}"

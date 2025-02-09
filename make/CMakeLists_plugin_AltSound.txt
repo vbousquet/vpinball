@@ -1,0 +1,80 @@
+# plugin CMake file to be included in main project CMakelists
+
+
+# --- AltSound plugin ---
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_C_STANDARD 99)
+
+add_library(AltSoundPlugin MODULE plugins/altsound/altsound.cpp)
+
+if (WIN32)
+	add_compile_options(
+	   $<$<CONFIG:RELEASE>:/Ob2>
+	   $<$<CONFIG:RELEASE>:/O2>
+	   $<$<CONFIG:RELEASE>:/Oi>
+	   $<$<CONFIG:RELEASE>:/arch:SSE2>
+	   $<$<CONFIG:RELEASE>:/fp:fast>
+	   $<$<CONFIG:RELEASE>:/fp:except->
+	   $<$<CONFIG:RELEASE>:/Ot>
+	   $<$<CONFIG:RELEASE>:/GF>
+	   $<$<CONFIG:RELEASE>:/GS->
+	   $<$<CONFIG:RELEASE>:/Gy>
+	   $<$<CONFIG:RELEASE>:/GR>
+	   $<$<CONFIG:RELEASE>:/Oy>
+	   $<$<CONFIG:RELEASE>:/GT>
+	   $<$<CONFIG:RELEASE>:/GL>
+	)
+	set_target_properties(AltSoundPlugin PROPERTIES
+	   MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:DEBUG>:Debug>"
+	)
+	target_compile_options(AltSoundPlugin PUBLIC
+	   $<$<CONFIG:RELEASE>:$<$<COMPILE_LANGUAGE:CXX>:${OPT_COMMON}>>
+	   $<$<CONFIG:RELEASE>:$<$<COMPILE_LANGUAGE:C>:${OPT_COMMON}>>
+	)
+	target_link_options(AltSoundPlugin PUBLIC
+	   $<$<CONFIG:RELEASE>:/INCREMENTAL:NO>
+	   $<$<CONFIG:RELEASE>:/OPT:REF>
+	   $<$<CONFIG:RELEASE>:/OPT:ICF>
+	   $<$<CONFIG:RELEASE>:/LTCG>
+	)
+endif()
+
+set(PLUGIN_INCLUDE_DIRS
+   ${CMAKE_CURRENT_SOURCE_DIR}
+   src/plugins
+   plugins/altsound
+)
+
+if(PluginPlatform STREQUAL "win")
+   list(APPEND PLUGIN_INCLUDE_DIRS
+      plugins/altsound/third-party/include
+   )
+else()
+   list(APPEND PLUGIN_INCLUDE_DIRS
+      ${CMAKE_SOURCE_DIR}/standalone/${PluginPlatform}-${PluginArch}/external/include
+      plugins/altsound/third-party/include
+   )
+endif()
+
+target_include_directories(AltSoundPlugin PUBLIC ${PLUGIN_INCLUDE_DIRS})
+
+add_custom_command(TARGET AltSoundPlugin POST_BUILD
+   COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/plugins/altsound/plugin.cfg" "${PLUGINS_DIR}/altsound/plugin.cfg"
+   COMMAND "${CMAKE_COMMAND}" -E copy "$<TARGET_FILE:AltSoundPlugin>" "${PLUGINS_DIR}/AltSound/plugin-altsound.${PluginArch}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+   COMMAND "${CMAKE_COMMAND}" -E rm "$<TARGET_FILE:AltSoundPlugin>"
+)
+
+if(PluginPlatform STREQUAL "win")
+   if (PluginArch STREQUAL "x86_64")
+      add_custom_command(TARGET AltSoundPlugin POST_BUILD
+         COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/plugins/altsound/third-party/runtime-libs/windows-x64/altsound64.dll" "${PLUGINS_DIR}/pinmame/altsound64.dll"
+         COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/plugins/altsound/third-party/runtime-libs/windows-x64/Bass64.dll" "${PLUGINS_DIR}/pinmame/Bass64.dll"
+      )
+   elseif (PluginArch STREQUAL "x86_32")
+      add_custom_command(TARGET AltSoundPlugin POST_BUILD
+         COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/plugins/altsound/third-party/runtime-libs/windows-x86/altsound.dll" "${PLUGINS_DIR}/pinmame/altsound.dll"
+         COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/plugins/altsound/third-party/runtime-libs/windows-x64/Bass.dll" "${PLUGINS_DIR}/pinmame/Bass.dll"
+      )
+   endif()
+endif()

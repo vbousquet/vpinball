@@ -148,6 +148,31 @@ if "%vsv%" == "2019" (
 
 
 REM ***************************************************************************************************
+copy /V /Y "plugin-altsound.net2022.vcxproj" "../plugin-altsound.vcxproj"
+copy /V /Y "plugin-altsound.net2022.vcxproj.filters" "../plugin-altsound.vcxproj.filters"
+
+if "%vsv%" == "2015" (
+	cscript "simplereplace.wsf" //nologo /search:"<VCProjectVersion>17.0</VCProjectVersion>" /replace:"<VCProjectVersion>14.0</VCProjectVersion>" /in:"../plugin-altsound.vcxproj" /out:"../plugin-altsound.vcxproj"
+	cscript "simplereplace.wsf" //nologo /search:"v143" /replace:"v140_xp" /in:"../plugin-altsound.vcxproj" /out:"../plugin-altsound.vcxproj"
+	cscript "simplereplace.wsf" //nologo /search:"<WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>" /replace:"" /in:"../plugin-altsound.vcxproj" /out:"../plugin-altsound.vcxproj"
+    cscript "simplereplace.wsf" //nologo /search:"<LanguageStandard>stdcpp20</LanguageStandard>" /replace:"" /in:"../plugin-altsound.vcxproj" /out:"../plugin-altsound.vcxproj"
+	rem perhaps we should remove as well <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+)
+
+if "%vsv%" == "2017" (
+	cscript "simplereplace.wsf" //nologo /search:"<VCProjectVersion>17.0</VCProjectVersion>" /replace:"<VCProjectVersion>15.0</VCProjectVersion>" /in:"../plugin-altsound.vcxproj" /out:"../plugin-altsound.vcxproj"
+	cscript "simplereplace.wsf" //nologo /search:"v143" /replace:"v141_xp" /in:"../plugin-altsound.vcxproj" /out:"../plugin-altsound.vcxproj"
+	cscript "simplereplace.wsf" //nologo /search:"<WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>" /replace:"" /in:"../plugin-altsound.vcxproj" /out:"../plugin-altsound.vcxproj"
+    cscript "simplereplace.wsf" //nologo /search:"<LanguageStandard>stdcpp20</LanguageStandard>" /replace:"" /in:"../plugin-altsound.vcxproj" /out:"../plugin-altsound.vcxproj"
+	rem perhaps we should remove as well <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+)
+
+if "%vsv%" == "2019" (
+	cscript "simplereplace.wsf" //nologo /search:"v143" /replace:"v142" /in:"../plugin-altsound.vcxproj" /out:"../plugin-altsound.vcxproj"
+)
+
+
+REM ***************************************************************************************************
 copy /V /Y "plugin-pinmame.net2022.vcxproj" "../plugin-pinmame.vcxproj"
 copy /V /Y "plugin-pinmame.net2022.vcxproj.filters" "../plugin-pinmame.vcxproj.filters"
 
