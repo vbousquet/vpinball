@@ -1486,7 +1486,16 @@ void Flasher::Render(const unsigned int renderMask)
 
       case FlasherData::ALPHASEG:
       {
-         // Not yet implemented
+         Texture *const glass = m_ptable->GetImage(m_d.m_szImageA);
+         if (m_d.m_modulate_vs_add < 1.f)
+            m_rd->EnableAlphaBlend(m_d.m_addBlend);
+         else
+            m_rd->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
+         const int renderStyle = clamp(m_d.m_renderStyle, 0, 7);
+         float segs[16] = { 1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f, 1.f };
+         g_pplayer->m_renderer->SetupAlphaSegRender(renderStyle, false, color, segs, m_d.m_modulate_vs_add, false, glass, m_d.m_glassAmbient, m_d.m_glassRoughness, m_d.m_glassPadLeft, m_d.m_glassPadRight, m_d.m_glassPadTop, m_d.m_glassPadBottom);
+         // We also apply the depth bias shift, not for backward compatibility (as alphaseg display did not exist before 10.8.1) but for consistency between DMD and Display mode
+         m_rd->DrawMesh(m_rd->m_DMDShader, true, pos, m_d.m_depthBias - 10000.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numPolys * 3);
          break;
       }
    }

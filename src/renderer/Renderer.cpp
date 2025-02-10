@@ -1220,6 +1220,30 @@ void Renderer::RenderDMD(int profile, const vec4& tint, BaseTexture* dmd, Render
    m_renderDevice->DrawTexturedQuad(m_renderDevice->m_DMDShader, vertices);
 }
 
+void Renderer::SetupAlphaSegRender(int profile, const bool isBackdrop, const vec4& color, float* segs, const float alpha, const bool sRGB, 
+   Texture* const glass, const COLORREF glassAmbient, const float glassRougness, const float padLeft, const float padRight, const float padTop, const float padBottom)
+{
+   static Texture test;
+   static bool init = false;
+   if (!init)
+   {
+      init = true;
+      test.LoadFromFile(g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "7seg-clock.png");
+      test.m_alphaTestValue = (float)(-1.0 / 255.0);
+      test.m_pdsBuffer->m_format = BaseTexture::RGB;
+      test.m_pdsBuffer->AddAlpha();
+   }
+   const float brightness = 2.0f;
+   m_renderDevice->m_DMDShader->SetVector(SHADER_vColor_Intensity, color.x * brightness, color.y * brightness, color.z * brightness, brightness);
+   m_renderDevice->m_DMDShader->SetTexture(SHADER_dmdBackGlow, &test);
+   m_renderDevice->m_DMDShader->SetTechnique(
+      glass == nullptr ? isBackdrop ? sRGB ? SHADER_TECHNIQUE_basic_AlphaSeg_srgb             : SHADER_TECHNIQUE_basic_AlphaSeg
+                                    : sRGB ? SHADER_TECHNIQUE_basic_AlphaSeg_srgb_world       : SHADER_TECHNIQUE_basic_AlphaSeg_world
+                       : isBackdrop ? sRGB ? SHADER_TECHNIQUE_basic_AlphaSeg_glass_srgb       : SHADER_TECHNIQUE_basic_AlphaSeg_glass
+                                    : sRGB ? SHADER_TECHNIQUE_basic_AlphaSeg_glass_srgb_world : SHADER_TECHNIQUE_basic_AlphaSeg_glass_world);
+
+}
+
 void Renderer::SetupDMDRender(int profile, const bool isBackdrop, const vec4& color, BaseTexture* dmd, const float alpha, const bool sRGB, 
       Texture* const glass, const COLORREF glassAmbient, const float glassRougness, const float padLeft, const float padRight, const float padTop, const float padBottom)
 {

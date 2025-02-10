@@ -1,17 +1,17 @@
 
 
-$gen_ball = $true
-$gen_basic = $true
-$gen_blur = $true
+$gen_ball = $false
+$gen_basic = $false
+$gen_blur = $false
 $gen_dmd = $true
-$gen_flasher = $true
-$gen_light = $true
-$gen_motionblur = $true
-$gen_postprocess = $true
-$gen_stereo = $true
-$gen_tonemap = $true
-$gen_antialiasing = $true
-$gen_imgui = $true
+$gen_flasher = $false
+$gen_light = $false
+$gen_motionblur = $false
+$gen_postprocess = $false
+$gen_stereo = $false
+$gen_tonemap = $false
+$gen_antialiasing = $false
+$gen_imgui = $false
 
 $debug = $false
 
@@ -133,6 +133,7 @@ if ($gen_dmd)
 			foreach ($variant in @("GLASS", "NOGLASS"))
 			{
 				Process-Shader "fs_dmd2.sc" "dmd.h" ("fs_dmd2_" + $variant.ToLower() + "_" + $variant2.ToLower() + "_" + $variant3.ToLower() + "_") "fragment" @($variant, $variant2, $variant3)
+				Process-Shader "fs_alphaseg.sc" "dmd.h" ("fs_alphaseg_" + $variant.ToLower() + "_" + $variant2.ToLower() + "_" + $variant3.ToLower() + "_") "fragment" @($variant, $variant2, $variant3)
 			}
 		}	
 		foreach ($variant2 in @("TEX", "NOTEX"))
