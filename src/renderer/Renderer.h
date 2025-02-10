@@ -40,7 +40,15 @@ public:
    void RenderFrame();
    void RenderDMD(int profile, const vec4& tint, BaseTexture* dmd, RenderTarget* rt, int x, int y, int w, int h);
 
-   void SetupDMDRender(int profile, const bool isBackdrop, const vec4& color, BaseTexture* dmd, const float alpha, const bool sRGB, 
+   enum ColorSpace
+   {
+      Linear,
+      Reinhard,
+      Reinhard_sRGB
+   };
+   void SetupAlphaSegRender(int profile, const bool isBackdrop, const vec4& color, float* segs, const float alpha, const ColorSpace colorSpace,
+      Texture* const glass, const COLORREF glassAmbient, const float glassRougness, const float padLeft, const float padRight, const float padTop, const float padBottom);
+   void SetupDMDRender(int profile, const bool isBackdrop, const vec4& color, BaseTexture* dmd, const float alpha, const ColorSpace colorSpace, 
       Texture* const glass, const COLORREF glassAmbient, const float glassRougness, const float padLeft, const float padRight, const float padTop, const float padBottom);
    void DrawStatics();
    void DrawDynamics(bool onlyBalls);

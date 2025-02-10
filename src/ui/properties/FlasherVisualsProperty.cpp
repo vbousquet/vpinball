@@ -52,10 +52,10 @@ void FlasherVisualsProperty::UpdateVisuals(const int dispid /*=-1*/)
       if ((m_pvsel->ElementAt(i) == nullptr) || (m_pvsel->ElementAt(i)->GetItemType() != eItemFlasher))
          continue;
       Flasher *const flash = (Flasher *)m_pvsel->ElementAt(i);
+      FlasherData::RenderMode mode = clamp(flash->m_d.m_renderMode, FlasherData::FLASHER, FlasherData::ALPHASEG);
 
       if (dispid == IDC_STYLE_COMBO || dispid == -1)
       {
-         FlasherData::RenderMode mode = clamp(flash->m_d.m_renderMode, FlasherData::FLASHER, FlasherData::ALPHASEG);
          switch (mode)
          {
          case FlasherData::FLASHER: m_modeCombo.SetCurSel(0); break;
@@ -151,7 +151,7 @@ void FlasherVisualsProperty::UpdateVisuals(const int dispid /*=-1*/)
       if (dispid == IDC_IMAGE_LINK_EDIT || dispid == -1)
          m_linkEdit.SetWindowText(flash->m_d.m_imageSrcLink.c_str());
 
-      if (dispid == IDC_GLASS_IMAGE || dispid == -1)
+      if ((mode != FlasherData::FLASHER) && (dispid == IDC_GLASS_IMAGE || dispid == -1))
          PropertyDialog::UpdateTextureComboBox(flash->GetPTable()->GetImageList(), m_glassImageCombo, flash->m_d.m_szImageA);
       if (dispid == IDC_GLASS_DOT_LIGHT || dispid == -1)
          PropertyDialog::SetFloatTextbox(m_glassRoughnessEdit, flash->m_d.m_glassRoughness);
@@ -166,7 +166,7 @@ void FlasherVisualsProperty::UpdateVisuals(const int dispid /*=-1*/)
       if (dispid == IDC_GLASS_PAD_RIGHT || dispid == -1)
          PropertyDialog::SetFloatTextbox(m_glassPadRightEdit, flash->m_d.m_glassPadRight);
 
-      if (dispid == DISPID_Image || dispid == -1)
+      if ((mode == FlasherData::FLASHER) && (dispid == DISPID_Image || dispid == -1))
          PropertyDialog::UpdateTextureComboBox(flash->GetPTable()->GetImageList(), m_imageACombo, flash->m_d.m_szImageA);
       if (dispid == DISPID_Image2 || dispid == -1)
       {

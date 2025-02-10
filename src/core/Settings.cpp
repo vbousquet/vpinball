@@ -131,7 +131,7 @@ void Settings::Validate(const bool addDefaults)
       Validate(Section::DMD, prefix + "ScaleFX",       false, addDefaults);
       Validate(Section::DMD, prefix + "DotTint",       dotColor,   0x00000000, 0x00FFFFFF, addDefaults);
       Validate(Section::DMD, prefix + "UnlitDotColor", 0x00202020, 0x00000000, 0x00FFFFFF, addDefaults);
-      Validate(Section::DMD, prefix + "DotBrightness", 5.0f,   0.001f, 10.f, addDefaults);
+      Validate(Section::DMD, prefix + "DotBrightness", 5.0f,   0.001f, 100.f, addDefaults);
       Validate(Section::DMD, prefix + "DotSize",       0.85f,  0.001f, 1.f, addDefaults);
       Validate(Section::DMD, prefix + "DotSharpness",  0.80f,  0.f,    1.f, addDefaults);
       Validate(Section::DMD, prefix + "DotRounding",   0.85f,  0.f,    1.f, addDefaults);

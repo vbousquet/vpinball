@@ -1204,7 +1204,7 @@ void Renderer::RenderDMD(int profile, const vec4& tint, BaseTexture* dmd, Render
    m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
    m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
    m_renderDevice->SetRenderTarget("DMDView"s, rt, true, true);
-   SetupDMDRender(profile, true, tint, dmd, 1.f, true, nullptr, 0x000000, 0.f, 0.f, 0.f, 0.f, 0.f);
+   SetupDMDRender(profile, true, tint, dmd, 1.f, ColorSpace::Reinhard_sRGB, nullptr, 0x000000, 0.f, 0.f, 0.f, 0.f, 0.f);
    const float rtAR = static_cast<float>(w) / static_cast<float>(h);
    const float dmdAR = static_cast<float>(dmd->width()) / static_cast<float>(dmd->height());
    const float pw = 2.f * (rtAR > dmdAR ? dmdAR / rtAR : 1.f) * static_cast<float>(w) / static_cast<float>(rt->GetWidth());
@@ -1220,7 +1220,44 @@ void Renderer::RenderDMD(int profile, const vec4& tint, BaseTexture* dmd, Render
    m_renderDevice->DrawTexturedQuad(m_renderDevice->m_DMDShader, vertices);
 }
 
-void Renderer::SetupDMDRender(int profile, const bool isBackdrop, const vec4& color, BaseTexture* dmd, const float alpha, const bool sRGB, 
+void Renderer::SetupAlphaSegRender(int profile, const bool isBackdrop, const vec4& color, float* segs, const float alpha, const ColorSpace colorSpace, 
+   Texture* const glass, const COLORREF glassAmbient, const float glassRougness, const float padLeft, const float padRight, const float padTop, const float padBottom)
+{
+   static Texture test;
+   static bool init = false;
+   if (!init)
+   {
+      init = true;
+      test.LoadFromFile(g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "14seg-dc.png");
+      //test.LoadFromFile(g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "7seg-clock.png");
+      test.m_pdsBuffer->m_format = BaseTexture::RGBA; // needed as the image is loaded as sRGBA
+      test.m_alphaTestValue = (float)(-1.0 / 255.0);
+   }
+   const float brightness = 6.0f;
+
+   m_renderDevice->m_DMDShader->SetVector(SHADER_vColor_Intensity, 
+      color.x * brightness, color.y * brightness, color.z * brightness, // Lit segment color
+      0.f * brightness); // Back glow
+   m_renderDevice->m_DMDShader->SetVector(SHADER_staticColor_Alpha, 
+      InvsRGB(0.2f), InvsRGB(0.2f), InvsRGB(0.2f), // Unlit color (ambient)
+      static_cast<float>(colorSpace)); // Output colorspace
+   m_renderDevice->m_DMDShader->SetVector(SHADER_w_h_height, 
+      glass != nullptr ? 1.f : 0.f, // Apply glass
+      0.f, 0.f, 0.f); // Unused yet
+   if (glass)
+   {
+      m_renderDevice->m_DMDShader->SetTexture(SHADER_displayGlass, glass);
+      m_renderDevice->m_DMDShader->SetVector(SHADER_glassAmbient_Roughness,
+         GetRValue(glassAmbient) / 255.f, GetGValue(glassAmbient) / 255.f, GetBValue(glassAmbient) / 255.f, // Glass ambient color
+         glassRougness); // Glass roughness (more rough leads to more display light shattering)
+   }
+   m_renderDevice->m_DMDShader->SetFloat4v(SHADER_alphaSegState, reinterpret_cast<Vertex4D*>(segs), 4);
+   m_renderDevice->m_DMDShader->SetVector(SHADER_glassPad, padLeft, padRight, padTop, padBottom);
+   m_renderDevice->m_DMDShader->SetTexture(SHADER_displayTex, &test, SF_BILINEAR);
+   m_renderDevice->m_DMDShader->SetTechnique(isBackdrop ? SHADER_TECHNIQUE_display_AlphaSeg : SHADER_TECHNIQUE_display_AlphaSeg_world);
+}
+
+void Renderer::SetupDMDRender(int profile, const bool isBackdrop, const vec4& color, BaseTexture* dmd, const float alpha, const ColorSpace colorSpace, 
       Texture* const glass, const COLORREF glassAmbient, const float glassRougness, const float padLeft, const float padRight, const float padTop, const float padBottom)
 {
    // Legacy DMD renderer
@@ -1314,34 +1351,34 @@ void Renderer::SetupDMDRender(int profile, const bool isBackdrop, const vec4& co
       const float brightness = color.w * m_dmdDotColor[profile].w;
       const vec4 dotColor = dmd->m_format == BaseTexture::BW ? vec4(color.x * m_dmdDotColor[profile].x, color.y * m_dmdDotColor[profile].y, color.z * m_dmdDotColor[profile].z, 0.f)
                                                              : vec4(color.x, color.y, color.z, 0.f);
-      m_renderDevice->m_DMDShader->SetVector(SHADER_w_h_height, 
-         m_dmdDotProperties[profile].x /* size */, 
-         m_dmdDotProperties[profile].y /* sharpness */,
-         m_dmdDotProperties[profile].z /* rounding */,
-         dmd->m_format != BaseTexture::BW ? 1.f : 0.f /* luminance or RGB */);
-      m_renderDevice->m_DMDShader->SetVector(SHADER_vColor_Intensity, dotColor.x * brightness, dotColor.y * brightness, dotColor.z * brightness, brightness); // dot color (only used if we received brightness data, premultiplied by overall brightness) and overall brightness (used for colored date)
-      m_renderDevice->m_DMDShader->SetVector(SHADER_staticColor_Alpha, m_dmdUnlitDotColor[profile].x, m_dmdUnlitDotColor[profile].y, m_dmdUnlitDotColor[profile].z, 0.f /* unused */);
+      m_renderDevice->m_DMDShader->SetVector(SHADER_vColor_Intensity, 
+         dotColor.x * brightness, dotColor.y * brightness, dotColor.z * brightness, // Dot color (applied for luminance as well as sRGB frames)
+         m_dmdUnlitDotColor[profile].w); // Back glow
+      m_renderDevice->m_DMDShader->SetVector(SHADER_staticColor_Alpha, 
+         m_dmdUnlitDotColor[profile].x, m_dmdUnlitDotColor[profile].y, m_dmdUnlitDotColor[profile].z, // Unlit color (ambient)
+         static_cast<float>(colorSpace)); // Output colorspace
       m_renderDevice->m_DMDShader->SetVector(SHADER_vRes_Alpha_time, 
-         (float)dmd->width(), (float)dmd->height(), 
-         m_dmdDotProperties[profile].w /* dot glow */ * brightness,
-         m_dmdUnlitDotColor[profile].w /* back glow */ * brightness);
-
-      m_renderDevice->m_DMDShader->SetTechnique(
-         glass == nullptr ? isBackdrop ? sRGB ? SHADER_TECHNIQUE_basic_DMD2_srgb             : SHADER_TECHNIQUE_basic_DMD2
-                                       : sRGB ? SHADER_TECHNIQUE_basic_DMD2_srgb_world       : SHADER_TECHNIQUE_basic_DMD2_world
-                          : isBackdrop ? sRGB ? SHADER_TECHNIQUE_basic_DMD2_glass_srgb       : SHADER_TECHNIQUE_basic_DMD2_glass
-                                       : sRGB ? SHADER_TECHNIQUE_basic_DMD2_glass_srgb_world : SHADER_TECHNIQUE_basic_DMD2_glass_world);
+         static_cast<float>(dmd->width()), static_cast<float>(dmd->height()), // DMD size in dots
+         m_dmdDotProperties[profile].x / 2.0f, // Dot size (radius, so divided by 2)
+         m_dmdDotProperties[profile].z * m_dmdDotProperties[profile].x / 2.0f); // Dot rounding, scaled by dot radius
+      m_renderDevice->m_DMDShader->SetVector(SHADER_w_h_height, 
+         glass != nullptr ? 1.f : 0.f, // Apply glass
+         0.f, // Unused yet
+         -(0.025f /* Antialiasing */ + m_dmdDotProperties[profile].x * (1.0f - m_dmdDotProperties[profile].x) /* Dot border darkening */), // Dot internal SDF threshold
+         dmd->m_format != BaseTexture::BW ? 1.f : 0.f); // luminance or (s)RGB
       m_renderDevice->m_DMDShader->SetTexture(SHADER_tex_dmd, dmd);
       if (glass)
       {
-         m_renderDevice->m_DMDShader->SetTexture(SHADER_dmdGlass, glass);
-         m_renderDevice->m_DMDShader->SetVector(SHADER_glassAmbient_Roughness, GetRValue(glassAmbient) / 255.f, GetGValue(glassAmbient) / 255.f, GetBValue(glassAmbient) / 255.f, glassRougness);
+         m_renderDevice->m_DMDShader->SetTexture(SHADER_displayGlass, glass);
+         m_renderDevice->m_DMDShader->SetVector(SHADER_glassAmbient_Roughness,
+            GetRValue(glassAmbient) / 255.f, GetGValue(glassAmbient) / 255.f, GetBValue(glassAmbient) / 255.f, // Glass ambient color
+            glassRougness); // Glass roughness (more rough leads to more display light shattering)
       }
       m_renderDevice->m_DMDShader->SetVector(SHADER_glassPad, padLeft, padRight, padTop, padBottom);
-      m_renderDevice->AddRenderTargetDependency(m_dmdBlurs[slot][1]);
-      m_renderDevice->m_DMDShader->SetTexture(SHADER_dmdDotGlow, m_dmdBlurs[slot][1]->GetColorSampler());
       m_renderDevice->AddRenderTargetDependency(m_dmdBlurs[slot][3]);
-      m_renderDevice->m_DMDShader->SetTexture(SHADER_dmdBackGlow, m_dmdBlurs[slot][3]->GetColorSampler()); // why don't we directly blur from 1 to 3 ?
+      m_renderDevice->m_DMDShader->SetTexture(SHADER_dmdGlowTex, m_dmdBlurs[slot][3]->GetColorSampler()); // why don't we directly blur from 1 to 3 ?*/
+      m_renderDevice->m_DMDShader->SetTexture(SHADER_displayTex, dmd);
+      m_renderDevice->m_DMDShader->SetTechnique(isBackdrop ? SHADER_TECHNIQUE_display_DMD : SHADER_TECHNIQUE_display_DMD_world);
    }
 }
 
