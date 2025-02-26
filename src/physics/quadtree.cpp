@@ -4,38 +4,10 @@
 #include "quadtree.h"
 
 #ifdef ENABLE_SSE_OPTIMIZATIONS
-#define QUADTREE_SSE_LEAFTEST
+   #define QUADTREE_SSE_LEAFTEST
 #else
-#pragma message ("Warning: No SSE quadtree tests")
+   #pragma message ("Warning: No SSE quadtree tests")
 #endif
-
-HitQuadtree::~HitQuadtree()
-{
-   Reset(vector<HitObject*>());
-}
-
-void HitQuadtree::Reset(const vector<HitObject*>& vho)
-{
-#ifndef USE_EMBREE
-   if (lefts_rights_tops_bottoms_zlows_zhighs != nullptr)
-      _aligned_free(lefts_rights_tops_bottoms_zlows_zhighs);
-   lefts_rights_tops_bottoms_zlows_zhighs = 0;
-
-   if (!m_leaf)
-      delete[] m_children;
-   m_leaf = true;
-   m_children = nullptr;
-   m_unique = nullptr;
-
-#else
-   rtcReleaseScene(m_scene);
-   rtcReleaseDevice(m_embree_device);
-   m_embree_device = rtcNewDevice(nullptr);
-   m_scene = nullptr;
-#endif
-
-   m_vho = vho;
-}
 
 #ifdef USE_EMBREE
 #include <mutex>
@@ -61,9 +33,76 @@ void EmbreeBoundsFunc(const struct RTCBoundsFunctionArguments* const args)
 }
 #endif
 
+
+
+HitQuadtree::HitQuadtree()
+{
+#ifndef USE_EMBREE
+   m_unique = nullptr;
+   m_leaf = true;
+   lefts_rights_tops_bottoms_zlows_zhighs = 0;
+   
+#else
+   m_embree_device = rtcNewDevice(nullptr);
+   m_scene = nullptr;
+#endif
+}
+   
+HitQuadtree::~HitQuadtree()
+{
+#ifndef USE_EMBREE
+   if (lefts_rights_tops_bottoms_zlows_zhighs != nullptr)
+      _aligned_free(lefts_rights_tops_bottoms_zlows_zhighs);
+   lefts_rights_tops_bottoms_zlows_zhighs = 0;
+
+   if (!m_leaf)
+      delete[] m_children;
+   m_leaf = true;
+   m_children = nullptr;
+   m_unique = nullptr;
+
+#else
+   if (m_scene)
+      rtcReleaseScene(m_scene);
+   rtcReleaseDevice(m_embree_device);
+   m_embree_device = rtcNewDevice(nullptr);
+   m_scene = nullptr;
+#endif
+}
+
+void HitQuadtree::Reset(const vector<HitObject*>& vho)
+{
+   m_vAllHO = vho;
+   Update();
+}
+
+void HitQuadtree::Insert(HitObject* ho)
+{
+   m_vAllHO.push_back(ho);
+   ho->CalcHitBBox();
+   Initialize();
+}
+
+void HitQuadtree::Remove(HitObject* ho)
+{
+   vector<HitObject*>::const_iterator it = std::find(m_vAllHO.begin(), m_vAllHO.end(), ho);
+   if (it != m_vAllHO.end())
+      m_vAllHO.erase(it);
+   Initialize();
+}
+
+void HitQuadtree::Update()
+{
+   // need to update here, as only done lazily for balls
+   for (size_t i = 0; i < m_vAllHO.size(); ++i)
+      m_vAllHO[i]->CalcHitBBox();
+   Initialize();
+}
+
 void HitQuadtree::Initialize()
 {
-   m_nLevels = 0;
+   m_vho = m_vAllHO;
+
 #ifdef USE_EMBREE
    if (m_scene)
        rtcReleaseScene(m_scene);
@@ -73,10 +112,10 @@ void HitQuadtree::Initialize()
    rtcSetSceneFlags(m_scene, RTC_SCENE_FLAG_ROBUST);
 
    const RTCGeometry geom = rtcNewGeometry(m_embree_device, RTC_GEOMETRY_TYPE_USER);
-   rtcSetGeometryUserPrimitiveCount(geom, (*m_pvho).size());
+   rtcSetGeometryUserPrimitiveCount(geom, m_vho.size());
 
-   rtcSetGeometryUserData(geom, m_pvho);
-   rtcSetGeometryBoundsFunction(geom, &EmbreeBoundsFunc, m_pvho);
+   rtcSetGeometryUserData(geom, &m_vho);
+   rtcSetGeometryBoundsFunction(geom, &EmbreeBoundsFunc, &m_vho);
    rtcSetGeometryIntersectFunction(geom, nullptr); // no ray tracing
    rtcSetGeometryOccludedFunction(geom, nullptr); // no shadow ray tracing
    rtcSetGeometryIntersectFilterFunction(geom, nullptr); // no trace filter
@@ -92,55 +131,37 @@ void HitQuadtree::Initialize()
    //rtcGetSceneBounds(m_scene, &b);
 
    CHECK_EMBREE(m_embree_device);
+   
 #else
-   FRect bounds; // FRect3D for an octree
-   bounds.Clear();
+   if (lefts_rights_tops_bottoms_zlows_zhighs != nullptr)
+      _aligned_free(lefts_rights_tops_bottoms_zlows_zhighs);
+   lefts_rights_tops_bottoms_zlows_zhighs = nullptr;
 
+   if (!m_leaf)
+      delete[] m_children;
+   m_leaf = true;
+   m_children = nullptr;
+   m_unique = nullptr;
+
+   FRect bounds;
+   bounds.Clear();
    for (size_t i = 0; i < m_vho.size(); ++i)
       bounds.Extend(m_vho[i]->m_hitBBox);
-
-   Initialize(bounds);
-#endif
-}
-
-// Ported at: VisualPinball.Engine/Physics/HitQuadTree.cs
-
-void HitQuadtree::Initialize(const FRect& bounds)
-{
-   m_nLevels = 0;
-#ifdef USE_EMBREE
-   m_pvho = &m_vho;
-   Initialize();
-#else
+   
    CreateNextLevel(bounds, 0, 0);
 #endif
 }
 
-#ifdef USE_EMBREE
-void HitQuadtree::FillFromVector(vector<HitObject*>& vho)
-{
-   m_pvho = &vho;
-   for (size_t i = 0; i < vho.size(); ++i)
-      vho[i]->CalcHitBBox(); // need to update here, as only done lazily for some objects (i.e. balls!)
 
-   Initialize();
-}
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Base implementation (not using Embree, with optional SSE path)
 
-void HitQuadtree::Update()
-{
-   FillFromVector(*m_pvho);
-}
-
-#else
-
-// Ported at: VisualPinball.Engine/Physics/HitQuadTree.cs
+#ifndef USE_EMBREE
 
 void HitQuadtree::CreateNextLevel(const FRect& bounds, const unsigned int level, unsigned int level_empty)
 {
    if (m_vho.size() <= 4) //!! magic
       return;
-
-   m_nLevels++;
 
    m_leaf = false;
 
@@ -228,21 +249,16 @@ void HitQuadtree::InitSseArrays()
    const size_t padded = ((m_vho.size() + 3) / 4) * 4;
    if (lefts_rights_tops_bottoms_zlows_zhighs == nullptr && padded > 0)
    {
-#ifdef DISABLE_ZTEST
-      constexpr size_t mul = 4;
-#else
-      constexpr size_t mul = 6;
-#endif
-      lefts_rights_tops_bottoms_zlows_zhighs = (float*)_aligned_malloc(padded * (mul * sizeof(float)), 16);
+      #ifdef DISABLE_ZTEST
+         constexpr unsigned int offs = 4 * sizeof(float);
+      #else
+         constexpr unsigned int offs = 6 * sizeof(float);
+      #endif
+      lefts_rights_tops_bottoms_zlows_zhighs = (float*)_aligned_malloc(padded * offs, 16);
 
       // fill array in chunks of 4xSIMD data: 4xleft,4xright,4xtop,4xbottom,4xzlow,4xzhigh, 4xleft ... ... ...
 
       const unsigned int end = (unsigned int)m_vho.size() & 0xFFFFFFFCu;
-#ifdef DISABLE_ZTEST
-      constexpr unsigned int offs = 16;
-#else
-      constexpr unsigned int offs = 24;
-#endif
       for (unsigned int j = 0,j2 = 0; j < end; j+=4,j2+=offs)
       {
          const FRect3D& r0 = m_vho[j  ]->m_hitBBox;
@@ -265,16 +281,16 @@ void HitQuadtree::InitSseArrays()
          lefts_rights_tops_bottoms_zlows_zhighs[j2+13] = r1.bottom;
          lefts_rights_tops_bottoms_zlows_zhighs[j2+14] = r2.bottom;
          lefts_rights_tops_bottoms_zlows_zhighs[j2+15] = r3.bottom;
-#ifndef DISABLE_ZTEST
-         lefts_rights_tops_bottoms_zlows_zhighs[j2+16] = r0.zlow;
-         lefts_rights_tops_bottoms_zlows_zhighs[j2+17] = r1.zlow;
-         lefts_rights_tops_bottoms_zlows_zhighs[j2+18] = r2.zlow;
-         lefts_rights_tops_bottoms_zlows_zhighs[j2+19] = r3.zlow;
-         lefts_rights_tops_bottoms_zlows_zhighs[j2+20] = r0.zhigh;
-         lefts_rights_tops_bottoms_zlows_zhighs[j2+21] = r1.zhigh;
-         lefts_rights_tops_bottoms_zlows_zhighs[j2+22] = r2.zhigh;
-         lefts_rights_tops_bottoms_zlows_zhighs[j2+23] = r3.zhigh;
-#endif
+         #ifndef DISABLE_ZTEST
+            lefts_rights_tops_bottoms_zlows_zhighs[j2+16] = r0.zlow;
+            lefts_rights_tops_bottoms_zlows_zhighs[j2+17] = r1.zlow;
+            lefts_rights_tops_bottoms_zlows_zhighs[j2+18] = r2.zlow;
+            lefts_rights_tops_bottoms_zlows_zhighs[j2+19] = r3.zlow;
+            lefts_rights_tops_bottoms_zlows_zhighs[j2+20] = r0.zhigh;
+            lefts_rights_tops_bottoms_zlows_zhighs[j2+21] = r1.zhigh;
+            lefts_rights_tops_bottoms_zlows_zhighs[j2+22] = r2.zhigh;
+            lefts_rights_tops_bottoms_zlows_zhighs[j2+23] = r3.zhigh;
+         #endif
       }
 
       // fill the remainder of the array with the remaining data and invalid BBoxes for padding
@@ -285,11 +301,11 @@ void HitQuadtree::InitSseArrays()
          const FRect3D r1 = end + 1 < m_vho.size() ? m_vho[end + 1]->m_hitBBox : FRect3D(FLT_MAX, -FLT_MAX, FLT_MAX, -FLT_MAX, FLT_MAX, -FLT_MAX);
          const FRect3D r2 = end + 2 < m_vho.size() ? m_vho[end + 2]->m_hitBBox : FRect3D(FLT_MAX, -FLT_MAX, FLT_MAX, -FLT_MAX, FLT_MAX, -FLT_MAX);
          const FRect3D r3 = FRect3D(FLT_MAX, -FLT_MAX, FLT_MAX, -FLT_MAX, FLT_MAX, -FLT_MAX);
-#ifdef DISABLE_ZTEST
-         const unsigned int j2 = end * 4;
-#else
-         const unsigned int j2 = end * 6;
-#endif
+         #ifdef DISABLE_ZTEST
+            const unsigned int j2 = end * 4;
+         #else
+            const unsigned int j2 = end * 6;
+         #endif
          lefts_rights_tops_bottoms_zlows_zhighs[j2   ] = r0.left; 
          lefts_rights_tops_bottoms_zlows_zhighs[j2+ 1] = r1.left;
          lefts_rights_tops_bottoms_zlows_zhighs[j2+ 2] = r2.left;
@@ -306,20 +322,19 @@ void HitQuadtree::InitSseArrays()
          lefts_rights_tops_bottoms_zlows_zhighs[j2+13] = r1.bottom;
          lefts_rights_tops_bottoms_zlows_zhighs[j2+14] = r2.bottom;
          lefts_rights_tops_bottoms_zlows_zhighs[j2+15] = r3.bottom;
-#ifndef DISABLE_ZTEST
-         lefts_rights_tops_bottoms_zlows_zhighs[j2+16] = r0.zlow;
-         lefts_rights_tops_bottoms_zlows_zhighs[j2+17] = r1.zlow;
-         lefts_rights_tops_bottoms_zlows_zhighs[j2+18] = r2.zlow;
-         lefts_rights_tops_bottoms_zlows_zhighs[j2+19] = r3.zlow;
-         lefts_rights_tops_bottoms_zlows_zhighs[j2+20] = r0.zhigh;
-         lefts_rights_tops_bottoms_zlows_zhighs[j2+21] = r1.zhigh;
-         lefts_rights_tops_bottoms_zlows_zhighs[j2+22] = r2.zhigh;
-         lefts_rights_tops_bottoms_zlows_zhighs[j2+23] = r3.zhigh;
-#endif
+         #ifndef DISABLE_ZTEST
+            lefts_rights_tops_bottoms_zlows_zhighs[j2+16] = r0.zlow;
+            lefts_rights_tops_bottoms_zlows_zhighs[j2+17] = r1.zlow;
+            lefts_rights_tops_bottoms_zlows_zhighs[j2+18] = r2.zlow;
+            lefts_rights_tops_bottoms_zlows_zhighs[j2+19] = r3.zlow;
+            lefts_rights_tops_bottoms_zlows_zhighs[j2+20] = r0.zhigh;
+            lefts_rights_tops_bottoms_zlows_zhighs[j2+21] = r1.zhigh;
+            lefts_rights_tops_bottoms_zlows_zhighs[j2+22] = r2.zhigh;
+            lefts_rights_tops_bottoms_zlows_zhighs[j2+23] = r3.zhigh;
+         #endif
       }
    }
 }
-#endif
 
 // OUTDATED INFO?!
 // Hit logic needs to be expanded, during static and pseudo-static conditions, multiple hits (multi-face contacts)
@@ -338,24 +353,16 @@ void HitQuadtree::InitSseArrays()
 // slot is not in the random time generator algorithm, it is offset by STATICTIME so not to compete with the fast moving
 // collisions
 
-#ifndef USE_EMBREE
+#ifndef QUADTREE_SSE_LEAFTEST // Without SSE optimization
 void HitQuadtree::HitTestBall(const HitBall* const pball, CollisionEvent& coll) const
 {
-#ifdef QUADTREE_SSE_LEAFTEST
-
-   HitTestBallSse(pball, coll);
-
-#else // without SSE optimization
-
-// Ported at: VisualPinball.Engine/Physics/HitQuadTree.cs
-
    const float rcHitRadiusSqr = pball->HitRadiusSqr();
 
    for (unsigned i=0; i<m_vho.size(); i++)
    {
-#ifdef DEBUGPHYSICS
-      g_pplayer->c_tested++;
-#endif
+      #ifdef DEBUGPHYSICS
+         g_pplayer->c_tested++;
+      #endif
       if ((pball != m_vho[i]) // ball can not hit itself
          && fRectIntersect3D(pball->m_hitBBox, m_vho[i]->m_hitBBox)
          && fRectIntersect3D(pball->m_d.m_pos, rcHitRadiusSqr, m_vho[i]->m_hitBBox))
@@ -369,9 +376,9 @@ void HitQuadtree::HitTestBall(const HitBall* const pball, CollisionEvent& coll) 
       const bool left = (pball->m_hitBBox.left <= m_vcenter.x);
       const bool right = (pball->m_hitBBox.right >= m_vcenter.x);
 
-#ifdef DEBUGPHYSICS
-      g_pplayer->c_tested++;
-#endif
+      #ifdef DEBUGPHYSICS
+         g_pplayer->c_tested++;
+      #endif
       if (pball->m_hitBBox.top <= m_vcenter.y) // Top
       {
          if (left)  m_children[0].HitTestBall(pball, coll);
@@ -383,11 +390,10 @@ void HitQuadtree::HitTestBall(const HitBall* const pball, CollisionEvent& coll) 
          if (right) m_children[3].HitTestBall(pball, coll);
       }
    }
-#endif
 }
 
-#ifdef QUADTREE_SSE_LEAFTEST
-void HitQuadtree::HitTestBallSse(const HitBall* const pball, CollisionEvent& coll) const
+#else // with SSE optimization
+void HitQuadtree::HitTestBall(const HitBall* const pball, CollisionEvent& coll) const
 {
    const HitQuadtree* stack[128]; //!! should be enough, but better implement test in construction to not exceed this
    unsigned int stackpos = 0;
@@ -400,15 +406,15 @@ void HitQuadtree::HitTestBallSse(const HitBall* const pball, CollisionEvent& col
    const __m128 bright = _mm_set1_ps(pball->m_hitBBox.right);
    const __m128 btop = _mm_set1_ps(pball->m_hitBBox.top);
    const __m128 bbottom = _mm_set1_ps(pball->m_hitBBox.bottom);
-#ifndef DISABLE_ZTEST
-   const __m128 bzlow = _mm_set1_ps(pball->m_hitBBox.zlow);
-   const __m128 bzhigh = _mm_set1_ps(pball->m_hitBBox.zhigh);
-#endif
+   #ifndef DISABLE_ZTEST
+      const __m128 bzlow = _mm_set1_ps(pball->m_hitBBox.zlow);
+      const __m128 bzhigh = _mm_set1_ps(pball->m_hitBBox.zhigh);
+   #endif
    const __m128 posx = _mm_set1_ps(pball->m_d.m_pos.x);
    const __m128 posy = _mm_set1_ps(pball->m_d.m_pos.y);
-#ifndef DISABLE_ZTEST
-   const __m128 posz = _mm_set1_ps(pball->m_d.m_pos.z);
-#endif
+   #ifndef DISABLE_ZTEST
+      const __m128 posz = _mm_set1_ps(pball->m_d.m_pos.z);
+   #endif
    const __m128 rsqr = _mm_set1_ps(pball->HitRadiusSqr());
 
    const bool traversal_order = (rand_mt_01() < 0.5f); // swaps test order in leafs randomly
@@ -429,19 +435,19 @@ void HitQuadtree::HitTestBallSse(const HitBall* const pball, CollisionEvent& col
             // loop implements 4 collision checks at once
             // (rc1.right >= rc2.left && rc1.bottom >= rc2.top && rc1.left <= rc2.right && rc1.top <= rc2.bottom && rc1.zlow <= rc2.zhigh && rc1.zhigh >= rc2.zlow)
             const size_t start = traversal_order ? 0 : (size - 1);
-#ifdef DISABLE_ZTEST
-            const size_t dt2 = dt * 4;
-            constexpr size_t mul = 4;
-#else
-            const size_t dt2 = dt * 6;
-            constexpr size_t mul = 6;
-#endif
+            #ifdef DISABLE_ZTEST
+               const size_t dt2 = dt * 4;
+               constexpr size_t mul = 4;
+            #else
+               const size_t dt2 = dt * 6;
+               constexpr size_t mul = 6;
+            #endif
             const size_t end = traversal_order ? size : -1;
             for (size_t i = start, i2 = start*mul; i != end; i += dt, i2 += dt2)
             {
-#ifdef DEBUGPHYSICS
-               g_pplayer->m_physics->c_tested++; //!! +=4? or is this more fair?
-#endif
+               #ifdef DEBUGPHYSICS
+                  g_pplayer->m_physics->c_tested++; //!! +=4? or is this more fair?
+               #endif
                // comparisons set bits if bounds miss. if all bits are set, there is no collision. otherwise continue comparisons
                // bits set, there is a bounding box collision
                __m128 cmp = _mm_cmpge_ps(bright, p[i2]); // right vs left
@@ -460,30 +466,30 @@ void HitQuadtree::HitTestBallSse(const HitBall* const pball, CollisionEvent& col
                mask &= _mm_movemask_ps(cmp);
                if (mask == 0) continue;
 
-#ifndef DISABLE_ZTEST
-               cmp = _mm_cmpge_ps(bzhigh, p[i2+4]); // zhigh vs zlow
-               mask &= _mm_movemask_ps(cmp);
-               if (mask == 0) continue;
+               #ifndef DISABLE_ZTEST
+                  cmp = _mm_cmpge_ps(bzhigh, p[i2+4]); // zhigh vs zlow
+                  mask &= _mm_movemask_ps(cmp);
+                  if (mask == 0) continue;
 
-               cmp = _mm_cmple_ps(bzlow, p[i2+5]); // zlow vs zhigh
-               mask &= _mm_movemask_ps(cmp);
-               if (mask == 0) continue;
-#endif
+                  cmp = _mm_cmple_ps(bzlow, p[i2+5]); // zlow vs zhigh
+                  mask &= _mm_movemask_ps(cmp);
+                  if (mask == 0) continue;
+               #endif
                // test actual sphere against box(es)
                const __m128 zero = _mm_setzero_ps();
                __m128 ex = _mm_add_ps(_mm_max_ps(_mm_sub_ps(p[i2  ]/*left*/, posx), zero), _mm_max_ps(_mm_sub_ps(posx, p[i2+1]/*right */), zero));
                __m128 ey = _mm_add_ps(_mm_max_ps(_mm_sub_ps(p[i2+2]/*top */, posy), zero), _mm_max_ps(_mm_sub_ps(posy, p[i2+3]/*bottom*/), zero));
-#ifndef DISABLE_ZTEST
-               __m128 ez = _mm_add_ps(_mm_max_ps(_mm_sub_ps(p[i2+4]/*zlow*/, posz), zero), _mm_max_ps(_mm_sub_ps(posz, p[i2+5]/*zhigh */), zero));
-#endif
+               #ifndef DISABLE_ZTEST
+                  __m128 ez = _mm_add_ps(_mm_max_ps(_mm_sub_ps(p[i2+4]/*zlow*/, posz), zero), _mm_max_ps(_mm_sub_ps(posz, p[i2+5]/*zhigh */), zero));
+               #endif
                ex = _mm_mul_ps(ex, ex);
                ey = _mm_mul_ps(ey, ey);
-#ifndef DISABLE_ZTEST
-               ez = _mm_mul_ps(ez, ez);
-               const __m128 d = _mm_add_ps(_mm_add_ps(ex, ey), ez);
-#else
-               const __m128 d = _mm_add_ps(ex, ey);
-#endif
+               #ifndef DISABLE_ZTEST
+                  ez = _mm_mul_ps(ez, ez);
+                  const __m128 d = _mm_add_ps(_mm_add_ps(ex, ey), ez);
+               #else
+                  const __m128 d = _mm_add_ps(ex, ey);
+               #endif
                const __m128 cmp2 = _mm_cmple_ps(d, rsqr);
                const int mask2 = _mm_movemask_ps(cmp2);
                if (mask2 == 0) continue;
@@ -506,9 +512,9 @@ void HitQuadtree::HitTestBallSse(const HitBall* const pball, CollisionEvent& col
 
          if (!current->m_leaf)
          {
-#ifdef DEBUGPHYSICS
-            g_pplayer->m_physics->c_traversed++;
-#endif
+            #ifdef DEBUGPHYSICS
+               g_pplayer->m_physics->c_traversed++;
+            #endif
             const bool left = (pball->m_hitBBox.left <= current->m_vcenter.x);
             const bool right = (pball->m_hitBBox.right >= current->m_vcenter.x);
 
@@ -532,26 +538,22 @@ void HitQuadtree::HitTestBallSse(const HitBall* const pball, CollisionEvent& col
 
    } while (current);
 }
-#endif
-#endif
+#endif // SSE vs non SSE implementation
 
 void HitQuadtree::HitTestXRay(const HitBall* const pball, vector<HitTestResult>& pvhoHit, CollisionEvent& coll) const
 {
-#ifdef USE_EMBREE
-   ShowError("HitTestXRay not implemented yet");
-#else
    const float rcHitRadiusSqr = pball->HitRadiusSqr();
 
    for (size_t i = 0; i < m_vho.size(); i++)
    {
-#ifdef DEBUGPHYSICS
-      g_pplayer->m_physics->c_tested++;
-#endif
+      #ifdef DEBUGPHYSICS
+         g_pplayer->m_physics->c_tested++;
+      #endif
       if ((pball != m_vho[i]) && fRectIntersect3D(pball->m_hitBBox, m_vho[i]->m_hitBBox) && fRectIntersect3D(pball->m_d.m_pos, rcHitRadiusSqr, m_vho[i]->m_hitBBox))
       {
-#ifdef DEBUGPHYSICS
-         g_pplayer->m_physics->c_deepTested++;
-#endif
+         #ifdef DEBUGPHYSICS
+            g_pplayer->m_physics->c_deepTested++;
+         #endif
          const float newtime = m_vho[i]->HitTest(pball->m_d, coll.m_hittime, coll);
          if (newtime >= 0.f)
          {
@@ -566,9 +568,9 @@ void HitQuadtree::HitTestXRay(const HitBall* const pball, vector<HitTestResult>&
       const bool left = (pball->m_hitBBox.left <= m_vcenter.x);
       const bool right = (pball->m_hitBBox.right >= m_vcenter.x);
 
-#ifdef DEBUGPHYSICS
-      g_pplayer->m_physics->c_tested++;
-#endif
+      #ifdef DEBUGPHYSICS
+         g_pplayer->m_physics->c_tested++;
+      #endif
       if (pball->m_hitBBox.top <= m_vcenter.y) // Top
       {
          if (left)  m_children[0].HitTestXRay(pball, pvhoHit, coll);
@@ -580,10 +582,47 @@ void HitQuadtree::HitTestXRay(const HitBall* const pball, vector<HitTestResult>&
          if (right) m_children[3].HitTestXRay(pball, pvhoHit, coll);
       }
    }
-#endif
 }
 
+void HitQuadtree::DumpTree(const int indentLevel)
+{
+   #if !defined(NDEBUG) && defined(PRINT_DEBUG_COLLISION_TREE)
+      char indent[256];
+      for (int i = 0; i <= indentLevel; ++i)
+         indent[i] = (i == indentLevel) ? '\0' : ' ';
+      char msg[256];
+      sprintf_s(msg, sizeof(msg), "[%f %f], items=%u", m_vcenter.x, m_vcenter.y, m_vho.size());
+      strncat_s(indent, msg, sizeof(indent)-strnlen_s(indent, sizeof(indent))-1);
+      OutputDebugString(indent);
+      if (!m_leaf)
+      {
+         m_children[0].DumpTree(indentLevel + 1);
+         m_children[1].DumpTree(indentLevel + 1);
+         m_children[2].DumpTree(indentLevel + 1);
+         m_children[3].DumpTree(indentLevel + 1);
+      }
+   #endif
+}
+
+#endif
+
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Embree implementation (prototype, not fully tested not complete)
+
 #ifdef USE_EMBREE
+void HitQuadtree::HitTestXRay(const HitBall* const pball, vector<HitTestResult>& pvhoHit, CollisionEvent& coll) const
+{
+   ShowError("HitTestXRay not implemented yet");
+}
+
+void HitQuadtree::DumpTree(const int indentLevel)
+{
+   // Unimplemented for Embree
+}
+
 void EmbreeBoundsFuncBalls(const struct RTCBoundsFunctionArguments* const args)
 {
    const HitBall* const ball = (*((const vector<HitBall*>*)args->geometryUserPtr))[args->primID];
@@ -601,7 +640,6 @@ struct VPCollisions
    const vector<HitObject*> *vho;
    const vector<HitBall*> *ball;
 };
-
 
 void EmbreeCollideBalls(void* const userPtr, RTCCollision* const collisions, const unsigned int num_collisions)
 {
@@ -663,7 +701,7 @@ void HitQuadtree::HitTestBall(vector<HitBall*> ball) const
    CHECK_EMBREE(m_embree_device);
 
    VPCollisions vpc;
-   vpc.vho = m_pvho;
+   vpc.vho = &m_vho;
    vpc.ball = &ball;
    rtcCollide(m_scene, scene, &EmbreeCollideBalls, &vpc);
 

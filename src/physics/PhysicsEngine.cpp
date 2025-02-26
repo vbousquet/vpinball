@@ -49,51 +49,41 @@ PhysicsEngine::PhysicsEngine(PinTable *const table) : m_nudgeFilterX("x"), m_nud
 
    ReadNudgeSettings(table->m_settings);
 
+   // Collect all hit objects
    for (IEditable *const pe : table->m_vedit)
    {
       Hitable * const ph = pe->GetIHitable();
       if (ph)
       {
-#ifdef DEBUGPHYSICS
-         if(pe->GetScriptable())
-         {
-            CComBSTR bstr;
-            pe->GetScriptable()->get_Name(&bstr);
-            char * bstr2 = MakeChar(bstr);
-            g_pplayer->m_progressDialog.SetProgress("Initializing Object-Physics "s + bstr2 + "...");
-            delete [] bstr2;
-         }
-#endif
+         #ifdef DEBUGPHYSICS
+            if(pe->GetScriptable())
+            {
+               CComBSTR bstr;
+               pe->GetScriptable()->get_Name(&bstr);
+               char * bstr2 = MakeChar(bstr);
+               g_pplayer->m_progressDialog.SetProgress("Initializing Object-Physics "s + bstr2 + "...");
+               delete [] bstr2;
+            }
+         #endif
          ph->PhysicSetup(this, false);
       }
    }
-
-   PLOGI << "Initializing octree"; // For profiling
-
    AddCabinetBoundingHitShapes(table);
-
-   for (HitObject *const pho : m_vho)
+   for (HitObject *const pho : m_pendingHitObjects)
    {
-      pho->CalcHitBBox(); // maybe needed to update here, as only done lazily for some objects (i.e. balls!)
-      m_hitoctree.AddElement(pho);
-
       if (pho->GetType() == eFlipper)
-         m_vFlippers.push_back((HitFlipper*)pho);
-
+         m_vFlippers.push_back(static_cast<HitFlipper*>(pho));
       MoverObject * const pmo = pho->GetMoverObject();
       if (pmo && pmo->AddToList()) // Spinner, Gate, Flipper, Plunger (ball is added separately on each create ball)
          m_vmover.push_back(pmo);
    }
 
-   const FRect3D tableBounds = table->GetBoundingBox();
-   m_hitoctree.Initialize(FRect(tableBounds.left,tableBounds.right,tableBounds.top,tableBounds.bottom));
-#if !defined(NDEBUG) && defined(PRINT_DEBUG_COLLISION_TREE)
-   m_hitoctree.DumpTree(0);
-#endif
-
-   // initialize hit structure for dynamic objects
-   m_hitoctree_dynamic.FillFromVector(m_vho_dynamic);
-
+   PLOGI << "Initializing octree"; // For profiling
+   m_hitoctree.Reset(m_pendingHitObjects);
+   m_pendingHitObjects.clear();
+   #if !defined(NDEBUG) && defined(PRINT_DEBUG_COLLISION_TREE)
+      m_hitoctree.DumpTree(0);
+   #endif
 
 #ifdef DEBUGPHYSICS
    c_hitcnts = 0;
@@ -120,34 +110,28 @@ PhysicsEngine::~PhysicsEngine()
    if (m_uiQuadtreeUpdateThread.joinable())
       m_uiQuadtreeUpdateThread.join();
 
-   vector<IEditable *> editables;
-   for (size_t i = 0; i < m_vho.size(); i++)
-   {
-      if (m_vho[i]->m_editable && FindIndexOf(editables, m_vho[i]->m_editable) == -1)
-      {
-         editables.push_back(m_vho[i]->m_editable);
-         if (m_vho[i]->m_editable->GetIHitable())
-            m_vho[i]->m_editable->GetIHitable()->PhysicRelease(this, false);
-      }
-      delete m_vho[i];
-   }
-   m_vho.clear();
-
-   editables.clear();
-   for (size_t i = 0; i < m_pendingUIHitObjects.size(); i++)
-   {
-      if (m_pendingUIHitObjects[i]->m_editable && FindIndexOf(editables, m_pendingUIHitObjects[i]->m_editable) == -1)
-      {
-         editables.push_back(m_pendingUIHitObjects[i]->m_editable);
-         if (m_pendingUIHitObjects[i]->m_editable->GetIHitable())
-            m_pendingUIHitObjects[i]->m_editable->GetIHitable()->PhysicRelease(this, true);
-      }
-      delete m_pendingUIHitObjects[i];
-   }
-   m_pendingUIHitObjects.clear();
-   
+   ReleaseVHO(m_pendingHitObjects, false);
+   ReleaseVHO(m_hitoctree.GetHitObjects(), false);
+   ReleaseVHO(m_pendingUIHitObjects, true);
+   if (m_UIOctree)
+      ReleaseVHO(m_UIOctree->GetHitObjects(), true);
    delete m_UIOctree;
    delete m_pendingUIOctree;
+}
+
+void PhysicsEngine::ReleaseVHO(const vector<HitObject *> &vho, bool isUI)
+{
+   vector<IEditable *> editables;
+   for (size_t i = 0; i < vho.size(); i++)
+   {
+      if (vho[i]->m_editable && FindIndexOf(editables, vho[i]->m_editable) == -1)
+      {
+         editables.push_back(vho[i]->m_editable);
+         if (vho[i]->m_editable->GetIHitable())
+            vho[i]->m_editable->GetIHitable()->PhysicRelease(this, isUI);
+      }
+      delete vho[i];
+   }
 }
 
 void PhysicsEngine::SetGravity(float slopeDeg, float strength)
@@ -157,15 +141,20 @@ void PhysicsEngine::SetGravity(float slopeDeg, float strength)
    m_gravity.z = -cosf(ANGTORAD(slopeDeg)) * strength;
 }
 
-// Ported at: VisualPinball.Engine/VPT/Table/TableHitGenerator.cs
+void PhysicsEngine::AddCollider(HitObject *collider, IEditable *editable, const bool isUI)
+{
+   assert(isUI || (m_hitoctree.GetObjectCount() == 0)); // For the time being, collider can only be added during game quadtree initialization (UI quadtree is dynamic)
+   (isUI ? m_pendingUIHitObjects : m_pendingHitObjects).push_back(collider);
+   collider->m_editable = editable;
+}
 
 void PhysicsEngine::AddCabinetBoundingHitShapes(PinTable *const table)
 {
    // simple outer borders:
-   m_vho.push_back(new LineSeg(Vertex2D(table->m_right, table->m_top),    Vertex2D(table->m_right, table->m_bottom), 0.f, table->m_glassTopHeight));
-   m_vho.push_back(new LineSeg(Vertex2D(table->m_left,  table->m_bottom), Vertex2D(table->m_left,  table->m_top),    0.f, table->m_glassBottomHeight));
-   m_vho.push_back(new LineSeg(Vertex2D(table->m_right, table->m_bottom), Vertex2D(table->m_left,  table->m_bottom), 0.f, table->m_glassBottomHeight));
-   m_vho.push_back(new LineSeg(Vertex2D(table->m_left,  table->m_top),    Vertex2D(table->m_right, table->m_top),    0.f, table->m_glassTopHeight));
+   m_pendingHitObjects.push_back(new LineSeg(Vertex2D(table->m_right, table->m_top),    Vertex2D(table->m_right, table->m_bottom), 0.f, table->m_glassTopHeight));
+   m_pendingHitObjects.push_back(new LineSeg(Vertex2D(table->m_left,  table->m_bottom), Vertex2D(table->m_left,  table->m_top),    0.f, table->m_glassBottomHeight));
+   m_pendingHitObjects.push_back(new LineSeg(Vertex2D(table->m_right, table->m_bottom), Vertex2D(table->m_left,  table->m_bottom), 0.f, table->m_glassBottomHeight));
+   m_pendingHitObjects.push_back(new LineSeg(Vertex2D(table->m_left,  table->m_top),    Vertex2D(table->m_right, table->m_top),    0.f, table->m_glassTopHeight));
 
    // glass:
    Vertex3Ds * const rgv3D = new Vertex3Ds[4];
@@ -173,7 +162,7 @@ void PhysicsEngine::AddCabinetBoundingHitShapes(PinTable *const table)
    rgv3D[1] = Vertex3Ds(table->m_right, table->m_top, table->m_glassTopHeight);
    rgv3D[2] = Vertex3Ds(table->m_right, table->m_bottom, table->m_glassBottomHeight);
    rgv3D[3] = Vertex3Ds(table->m_left, table->m_bottom, table->m_glassBottomHeight);
-   m_vho.push_back(new Hit3DPoly(rgv3D, 4)); //!!
+   m_pendingHitObjects.push_back(new Hit3DPoly(rgv3D, 4)); //!!
 
    /*
    // playfield:
@@ -187,7 +176,7 @@ void PhysicsEngine::AddCabinetBoundingHitShapes(PinTable *const table)
    ph3dpoly->m_elasticity = table->m_overridePhysics ? table->m_fOverrideElasticity : table->m_elasticity;
    ph3dpoly->m_elasticityFalloff = table->m_overridePhysics ? table->m_fOverrideElasticityFalloff : table->m_elasticityFalloff;
    ph3dpoly->m_scatter = ANGTORAD(table->m_overridePhysics ? table->m_fOverrideScatterAngle : table->m_scatter);
-   m_vho.push_back(ph3dpoly);
+   m_pendingHitObjects.push_back(ph3dpoly);
    */
 
    // playfield:
@@ -207,22 +196,13 @@ void PhysicsEngine::AddCabinetBoundingHitShapes(PinTable *const table)
 void PhysicsEngine::AddBall(HitBall *const ball)
 {
    m_vmover.push_back(&ball->m_mover); // balls are always added separately to this list!
-   m_vho_dynamic.push_back(ball);
-   m_hitoctree_dynamic.FillFromVector(m_vho_dynamic);
+   m_hitoctree_dynamic.Insert(ball);
 }
 
 void PhysicsEngine::RemoveBall(HitBall *const ball)
 {
    RemoveFromVectorSingle<MoverObject *>(m_vmover, &ball->m_mover);
-   RemoveFromVectorSingle<HitObject *>(m_vho_dynamic, ball);
-   m_hitoctree_dynamic.FillFromVector(m_vho_dynamic);
-}
-
-void PhysicsEngine::AddCollider(HitObject * collider, IEditable * editable, const bool isUI)
-{
-   assert(isUI || (m_hitoctree.GetObjectCount() == 0)); // For the time being, collider can only be added during game quadtree initialization (UI quadtree is dynamic)
-   (isUI ? m_pendingUIHitObjects : m_vho).push_back(collider);
-   collider->m_editable = editable;
+   m_hitoctree_dynamic.Remove(ball);
 }
 
 bool PhysicsEngine::RecordContact(const CollisionEvent& newColl)
@@ -498,8 +478,9 @@ void PhysicsEngine::ReinitEditable(IEditable* editable)
 
 void PhysicsEngine::UpdateUIQuadtree(PhysicsEngine* ph)
 {
-   assert(ph->m_pendingUIOctree == nullptr);
+   assert((ph->m_pendingUIOctree == nullptr) && (ph->m_UIOctree != nullptr));
    ph->m_pendingUIOctree = new HitQuadtree();
+   vector<HitObject *> newUIHitObjects;
    while (true)
    {
       ph->m_uiQuadtreeUpdateWaiting.acquire();
@@ -509,23 +490,22 @@ void PhysicsEngine::UpdateUIQuadtree(PhysicsEngine* ph)
       //auto start = std::chrono::high_resolution_clock::now();
       //std::chrono::duration<double> elapsed;
 
-      ph->m_newUIHitObjects = ph->m_UIHitObjects;
+      newUIHitObjects = ph->m_UIOctree->GetHitObjects();
       // Move outdated hit object to the end of the vector, copy them for later disposal, then remove from our updated list
       for (auto ed : ph->m_vUIUpdatedEditable)
       {
-         auto splitOutdated = std::partition(ph->m_newUIHitObjects.begin(), ph->m_newUIHitObjects.end(), [ed](HitObject *ho) { return ho->m_editable != ed; });
-         ph->m_outdatedUIHitObjects.insert(ph->m_outdatedUIHitObjects.end(), splitOutdated, ph->m_newUIHitObjects.end());
-         ph->m_newUIHitObjects.erase(splitOutdated, ph->m_newUIHitObjects.end());
+         auto splitOutdated = std::partition(newUIHitObjects.begin(), newUIHitObjects.end(), [ed](HitObject *ho) { return ho->m_editable != ed; });
+         ph->m_outdatedUIHitObjects.insert(ph->m_outdatedUIHitObjects.end(), splitOutdated, newUIHitObjects.end());
+         newUIHitObjects.erase(splitOutdated, newUIHitObjects.end());
       }
       // Add new Hit Objects corresponding to the updated IEditable
       for (HitObject *const pho : ph->m_pendingUIHitObjects)
          pho->CalcHitBBox(); // Should only be needed for balls which are not part of this quadtree, but still there until this is cleaned out
-      ph->m_newUIHitObjects.insert(ph->m_newUIHitObjects.end(), ph->m_pendingUIHitObjects.begin(), ph->m_pendingUIHitObjects.end());
+      newUIHitObjects.insert(newUIHitObjects.end(), ph->m_pendingUIHitObjects.begin(), ph->m_pendingUIHitObjects.end());
       ph->m_pendingUIHitObjects.clear();
       // Reset quadtree with the new hit object list
-      ph->m_pendingUIOctree->Reset(ph->m_newUIHitObjects);
-      const FRect3D bbox = g_pplayer->m_ptable->GetBoundingBox();
-      ph->m_pendingUIOctree->Initialize(FRect(bbox.left, bbox.right, bbox.top, bbox.bottom));
+      ph->m_pendingUIOctree->Reset(newUIHitObjects);
+      newUIHitObjects.clear();
 
       //elapsed = std::chrono::high_resolution_clock::now() - start;
       //PLOGD << "Initialize: " << elapsed.count() << " seconds (" << ph->m_newUIHitObjects.size() << " objects)";
@@ -539,19 +519,14 @@ HitQuadtree* PhysicsEngine::GetUIQuadTree()
    if (m_UIOctree == nullptr)
    {
       assert(m_pendingUIHitObjects.empty());
-      m_UIOctree = new HitQuadtree();
       for (IEditable *const pe : g_pplayer->m_ptable->m_vedit)
          if (pe->GetIHitable())
             pe->GetIHitable()->PhysicSetup(this, true);
-      for (HitObject *const pho : m_pendingUIHitObjects)
-      {
+      for (HitObject *const pho : m_pendingUIHitObjects) // Not really needed as BBOX are lazy only for balls
          pho->CalcHitBBox();
-         m_UIOctree->AddElement(pho);
-      }
-      m_UIHitObjects = m_pendingUIHitObjects;
+      m_UIOctree = new HitQuadtree();
+      m_UIOctree->Reset(m_pendingUIHitObjects);
       m_pendingUIHitObjects.clear();
-      const FRect3D bbox = g_pplayer->m_ptable->GetBoundingBox();
-      m_UIOctree->Initialize(FRect(bbox.left, bbox.right, bbox.top, bbox.bottom));
    }
    if (m_uiQuadtreeUpdateReady.try_acquire())
    {
@@ -560,8 +535,6 @@ HitQuadtree* PhysicsEngine::GetUIQuadTree()
       HitQuadtree* tmp = m_UIOctree;
       m_UIOctree = m_pendingUIOctree;
       m_pendingUIOctree = tmp;
-      m_UIHitObjects = m_newUIHitObjects;
-      m_newUIHitObjects.clear();
       // Release hit objects of the updated parts
       for (auto ho : m_outdatedUIHitObjects)
          delete ho;

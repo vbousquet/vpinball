@@ -11,31 +11,59 @@ HitKD::HitKD()
    m_max_items = 0;
    m_num_nodes = 0;
    m_rootNode.m_hitoct = this;
-#ifdef KDTREE_SSE_LEAFTEST
-   l_r_t_b_zl_zh = nullptr;
-#endif
+   #ifdef KDTREE_SSE_LEAFTEST
+      l_r_t_b_zl_zh = nullptr;
+   #endif
 }
 
 HitKD::~HitKD()
 {
-#ifdef KDTREE_SSE_LEAFTEST
-   if (l_r_t_b_zl_zh)
-      _aligned_free(l_r_t_b_zl_zh);
-#endif
+   #ifdef KDTREE_SSE_LEAFTEST
+      if (l_r_t_b_zl_zh)
+         _aligned_free(l_r_t_b_zl_zh);
+   #endif
 }
 
-void HitKD::Init(vector<HitObject*> &vho)
+void HitKD::Reset(const vector<HitObject*> &vho)
 {
-   m_org_vho = &vho;
-   m_num_items = (unsigned int)vho.size();
+   m_vho = vho;
+   Update();
+}
+
+void HitKD::Insert(HitObject* ho)
+{
+   m_vho.push_back(ho);
+   ho->CalcHitBBox();
+   Initialize();
+}
+
+void HitKD::Remove(HitObject* ho)
+{
+   vector<HitObject*>::const_iterator it = std::find(m_vho.begin(), m_vho.end(), ho);
+   if (it != m_vho.end())
+      m_vho.erase(it);
+   Initialize();
+}
+
+void HitKD::Update()
+{
+   // need to update here, as only done lazily for balls
+   for (size_t i = 0; i < m_vho.size(); ++i)
+      m_vho[i]->CalcHitBBox();
+   Initialize();
+}
+
+void HitKD::Initialize()
+{
+   m_num_items = static_cast<unsigned int>(m_vho.size());
 
    if (m_num_items > m_max_items)
    {
-#ifdef KDTREE_SSE_LEAFTEST
-      if (l_r_t_b_zl_zh)
-         _aligned_free(l_r_t_b_zl_zh);
-      l_r_t_b_zl_zh = (float*)_aligned_malloc(sizeof(float) * ((m_num_items + 3) & 0xFFFFFFFC) * 6, 16);
-#endif
+      #ifdef KDTREE_SSE_LEAFTEST
+         if (l_r_t_b_zl_zh)
+            _aligned_free(l_r_t_b_zl_zh);
+         l_r_t_b_zl_zh = (float*)_aligned_malloc(sizeof(float) * ((m_num_items + 3) & 0xFFFFFFFC) * 6, 16);
+      #endif
       m_max_items = m_num_items;
 
       m_org_idx.clear();
@@ -57,6 +85,24 @@ void HitKD::Init(vector<HitObject*> &vho)
 
    m_rootNode.Reset();
    m_rootNode.m_hitoct = this;
+
+   m_rootNode.m_rectbounds.Clear();
+
+   m_rootNode.m_start = 0;
+   m_rootNode.m_items = m_num_items;
+
+   for (unsigned int i = 0; i < m_num_items; ++i)
+   {
+      HitObject * const pho = m_vho[i];
+      pho->CalcHitBBox(); // need to update here, as only done lazily for some objects (i.e. balls!)
+      m_rootNode.m_rectbounds.Extend(pho->m_hitBBox);
+
+      m_org_idx[i] = i;
+   }
+
+   m_nLevels = 0;
+   m_rootNode.CreateNextLevel(0, 0);
+   InitSseArrays();
 }
 
 void HitKD::Finalize()
@@ -75,13 +121,12 @@ HitKDNode* HitKD::AllocTwoNodes()
    }
 }
 
-
 // build SSE boundary arrays of the local hit-object/m_vho HitRect list, generated for -full- list completely in the end!
 void HitKD::InitSseArrays()
 {
 #ifdef KDTREE_SSE_LEAFTEST
    const unsigned int padded = (m_num_items + 3) & 0xFFFFFFFC;
-   if (!l_r_t_b_zl_zh)
+   if (l_r_t_b_zl_zh == nullptr)
       l_r_t_b_zl_zh = (float*)_aligned_malloc(sizeof(float) * padded * 6, 16);
 
    for (unsigned int j = 0; j < m_num_items; ++j)
@@ -107,29 +152,7 @@ void HitKD::InitSseArrays()
 #endif
 }
 
-void HitKD::FillFromVector(vector<HitObject*> &vho)
-{
-   Init(vho);
-
-   m_rootNode.m_rectbounds.Clear();
-
-   m_rootNode.m_start = 0;
-   m_rootNode.m_items = m_num_items;
-
-   for (unsigned int i = 0; i < m_num_items; ++i)
-   {
-      HitObject * const pho = vho[i];
-      pho->CalcHitBBox(); // need to update here, as only done lazily for some objects (i.e. balls!)
-      m_rootNode.m_rectbounds.Extend(pho->m_hitBBox);
-
-      m_org_idx[i] = i;
-   }
-
-   m_nLevels = 0;
-   m_rootNode.CreateNextLevel(0, 0);
-   InitSseArrays();
-}
-
+// FIXME dead code. Remove ?
 void HitKD::FillFromIndices()
 {
    m_rootNode.m_rectbounds.Clear();
@@ -149,6 +172,7 @@ void HitKD::FillFromIndices()
    InitSseArrays();
 }
 
+// FIXME dead code. Remove ?
 void HitKD::FillFromIndices(const FRect3D& initialBounds)
 {
    m_rootNode.m_rectbounds = initialBounds;
@@ -163,16 +187,11 @@ void HitKD::FillFromIndices(const FRect3D& initialBounds)
    InitSseArrays();
 }
 
-void HitKD::Update()
-{
-   FillFromVector(*m_org_vho);
-}
-
 // Ported at: VisualPinball.Unity/VisualPinball.Unity/Physics/Collision/KdNode.cs
 
 void HitKDNode::CreateNextLevel(const unsigned int level, unsigned int level_empty)
 {
-   const unsigned int org_items = (m_items & 0x3FFFFFFF);
+   const unsigned int org_items = (m_items & 0x3FFFFFFF); // Number of items in this node (bit 30..31 is split axis)
 
    if (org_items <= 4 || //!! magic
       level >= 128 / 2)
@@ -244,9 +263,10 @@ void HitKDNode::CreateNextLevel(const unsigned int level, unsigned int level_emp
       for (unsigned int i = m_start; i < m_start + org_items; ++i)
       {
          const HitObject * const pho = m_hitoct->GetItemAt(i);
-
-         if (pho->m_hitBBox.right < vcenter.x)    m_children[0].m_items++;
-         else if (pho->m_hitBBox.left > vcenter.x)     m_children[1].m_items++;
+         if (pho->m_hitBBox.right < vcenter.x)
+            m_children[0].m_items++;
+         else if (pho->m_hitBBox.left > vcenter.x)
+            m_children[1].m_items++;
       }
    }
    else if (axis == 1)
@@ -254,9 +274,10 @@ void HitKDNode::CreateNextLevel(const unsigned int level, unsigned int level_emp
       for (unsigned int i = m_start; i < m_start + org_items; ++i)
       {
          const HitObject * const pho = m_hitoct->GetItemAt(i);
-
-         if (pho->m_hitBBox.bottom < vcenter.y)   m_children[0].m_items++;
-         else if (pho->m_hitBBox.top > vcenter.y)      m_children[1].m_items++;
+         if (pho->m_hitBBox.bottom < vcenter.y)
+            m_children[0].m_items++;
+         else if (pho->m_hitBBox.top > vcenter.y)
+            m_children[1].m_items++;
       }
    }
    else // axis == 2
@@ -264,9 +285,10 @@ void HitKDNode::CreateNextLevel(const unsigned int level, unsigned int level_emp
       for (unsigned int i = m_start; i < m_start + org_items; ++i)
       {
          const HitObject * const pho = m_hitoct->GetItemAt(i);
-
-         if (pho->m_hitBBox.zhigh < vcenter.z)    m_children[0].m_items++;
-         else if (pho->m_hitBBox.zlow > vcenter.z)     m_children[1].m_items++;
+         if (pho->m_hitBBox.zhigh < vcenter.z)
+            m_children[0].m_items++;
+         else if (pho->m_hitBBox.zlow > vcenter.z)
+            m_children[1].m_items++;
       }
    }
 
@@ -377,14 +399,9 @@ void HitKDNode::CreateNextLevel(const unsigned int level, unsigned int level_emp
 // slot is not in the random time generator algorithm, it is offset by STATICTIME so not to compete with the fast moving
 // collisions
 
+#ifndef KDTREE_SSE_LEAFTEST // without SSE optimization
 void HitKDNode::HitTestBall(const HitBall* const pball, CollisionEvent& coll) const
 {
-#ifdef KDTREE_SSE_LEAFTEST
-
-   HitTestBallSse(pball, coll);
-
-#else // without SSE optimization
-
    const unsigned int org_items = (m_items&0x3FFFFFFF);
    const unsigned int axis = (m_items>>30);
 
@@ -392,9 +409,9 @@ void HitKDNode::HitTestBall(const HitBall* const pball, CollisionEvent& coll) co
 
    for (unsigned i=m_start; i<m_start+org_items; i++)
    {
-#ifdef DEBUGPHYSICS
-      g_pplayer->c_tested++;
-#endif
+      #ifdef DEBUGPHYSICS
+         g_pplayer->c_tested++;
+      #endif
       HitObject * const pho = m_hitoct->GetItemAt(i);
       if ((pball != pho) // ball can not hit itself
 		  /*&& fRectIntersect3D(pball->m_hitBBox, pho->m_hitBBox)*/ //!! do bbox test before to save alu-instructions? or not to save registers? -> currently not, as just sphere vs sphere
@@ -406,9 +423,9 @@ void HitKDNode::HitTestBall(const HitBall* const pball, CollisionEvent& coll) co
 
    if (m_children) // not a leaf
    {
-#ifdef DEBUGPHYSICS
-      g_pplayer->c_traversed++;
-#endif
+      #ifdef DEBUGPHYSICS
+         g_pplayer->c_traversed++;
+      #endif
       if (axis == 0)
       {
          const float vcenter = (m_rectbounds.left+m_rectbounds.right)*0.5f;
@@ -417,30 +434,27 @@ void HitKDNode::HitTestBall(const HitBall* const pball, CollisionEvent& coll) co
          if (pball->m_hitBBox.right >= vcenter)
             m_children[1].HitTestBall(pball, coll);
       }
+      else f (axis == 1)
+      {
+         const float vcenter = (m_rectbounds.top+m_rectbounds.bottom)*0.5f;
+         if (pball->m_hitBBox.top <= vcenter)
+            m_children[0].HitTestBall(pball, coll);
+         if (pball->m_hitBBox.bottom >= vcenter)
+            m_children[1].HitTestBall(pball, coll);
+      }
       else
-         if (axis == 1)
-         {
-            const float vcenter = (m_rectbounds.top+m_rectbounds.bottom)*0.5f;
-            if (pball->m_hitBBox.top <= vcenter)
-               m_children[0].HitTestBall(pball, coll);
-            if (pball->m_hitBBox.bottom >= vcenter)
-               m_children[1].HitTestBall(pball, coll);
-         }
-         else
-         {
-            const float vcenter = (m_rectbounds.zlow+m_rectbounds.zhigh)*0.5f;
-
-            if (pball->m_hitBBox.zlow <= vcenter)
-               m_children[0].HitTestBall(pball, coll);
-            if (pball->m_hitBBox.zhigh >= vcenter)
-               m_children[1].HitTestBall(pball, coll);
-         }
+      {
+         const float vcenter = (m_rectbounds.zlow+m_rectbounds.zhigh)*0.5f;
+         if (pball->m_hitBBox.zlow <= vcenter)
+            m_children[0].HitTestBall(pball, coll);
+         if (pball->m_hitBBox.zhigh >= vcenter)
+            m_children[1].HitTestBall(pball, coll);
+      }
    }
-#endif
 }
 
-#ifdef KDTREE_SSE_LEAFTEST
-void HitKDNode::HitTestBallSse(const HitBall* const pball, CollisionEvent& coll) const
+#else // With SSE optimization
+void HitKDNode::HitTestBall(const HitBall* const pball, CollisionEvent& coll) const
 {
    const HitKDNode* stack[128]; //!! should be enough, but better implement test in construction to not exceed this
    unsigned int stackpos = 0;
@@ -485,9 +499,9 @@ void HitKDNode::HitTestBallSse(const HitBall* const pball, CollisionEvent& coll)
       const unsigned int end = traversal_order ? size : (current->m_start / 4 - 1);
       for (unsigned int i = start; i != end; i += dt)
       {
-#ifdef DEBUGPHYSICS
-         g_pplayer->m_physics->c_tested++; //!! +=4? or is this more fair?
-#endif
+         #ifdef DEBUGPHYSICS
+            g_pplayer->m_physics->c_tested++; //!! +=4? or is this more fair?
+         #endif
          // comparisons set bits if bounds miss. if all bits are set, there is no collision. otherwise continue comparisons
          // bits set, there is a bounding box collision
          /*__m128 cmp = _mm_cmpge_ps(bright, pL[i]);
@@ -560,28 +574,27 @@ void HitKDNode::HitTestBallSse(const HitBall* const pball, CollisionEvent& coll)
 
       if (current->m_children) // not a leaf
       {
-#ifdef DEBUGPHYSICS
-         g_pplayer->m_physics->c_traversed++;
-#endif
+         #ifdef DEBUGPHYSICS
+            g_pplayer->m_physics->c_traversed++;
+         #endif
          if (axis == 0)
          {
             const float vcenter = (current->m_rectbounds.left + current->m_rectbounds.right)*0.5f;
             if (pball->m_hitBBox.left <= vcenter) stack[++stackpos] = current->m_children;
             if (pball->m_hitBBox.right >= vcenter) stack[++stackpos] = current->m_children + 1;
          }
+         else if (axis == 1)
+         {
+            const float vcenter = (current->m_rectbounds.top + current->m_rectbounds.bottom)*0.5f;
+            if (pball->m_hitBBox.top <= vcenter) stack[++stackpos] = current->m_children;
+            if (pball->m_hitBBox.bottom >= vcenter) stack[++stackpos] = current->m_children + 1;
+         }
          else
-            if (axis == 1)
-            {
-               const float vcenter = (current->m_rectbounds.top + current->m_rectbounds.bottom)*0.5f;
-               if (pball->m_hitBBox.top <= vcenter) stack[++stackpos] = current->m_children;
-               if (pball->m_hitBBox.bottom >= vcenter) stack[++stackpos] = current->m_children + 1;
-            }
-            else
-            {
-               const float vcenter = (current->m_rectbounds.zlow + current->m_rectbounds.zhigh)*0.5f;
-               if (pball->m_hitBBox.zlow <= vcenter) stack[++stackpos] = current->m_children;
-               if (pball->m_hitBBox.zhigh >= vcenter) stack[++stackpos] = current->m_children + 1;
-            }
+         {
+            const float vcenter = (current->m_rectbounds.zlow + current->m_rectbounds.zhigh)*0.5f;
+            if (pball->m_hitBBox.zlow <= vcenter) stack[++stackpos] = current->m_children;
+            if (pball->m_hitBBox.zhigh >= vcenter) stack[++stackpos] = current->m_children + 1;
+         }
       }
 
       //current = stack[stackpos];
@@ -602,17 +615,17 @@ void HitKDNode::HitTestXRay(const HitBall* const pball, vector<HitTestResult> &p
 
    for (unsigned i = m_start; i < m_start + org_items; i++)
    {
-#ifdef DEBUGPHYSICS
-      g_pplayer->m_physics->c_tested++;
-#endif
+      #ifdef DEBUGPHYSICS
+         g_pplayer->m_physics->c_tested++;
+      #endif
       HitObject * const pho = m_hitoct->GetItemAt(i);
       if ((pball != pho) && // ball cannot hit itself
          /*fRectIntersect3D(pball->m_hitBBox, pho->m_hitBBox) &&*/ //!! do bbox test before to save alu-instructions? or not to save registers? -> currently not, as just sphere vs sphere
          fRectIntersect3D(pball->m_d.m_pos, rcHitRadiusSqr, pho->m_hitBBox))
       {
-#ifdef DEBUGPHYSICS
-         g_pplayer->m_physics->c_deepTested++;
-#endif
+         #ifdef DEBUGPHYSICS
+            g_pplayer->m_physics->c_deepTested++;
+         #endif
          const float newtime = pho->HitTest(pball->m_d, coll.m_hittime, coll);
          if (newtime >= 0)
          {
@@ -624,9 +637,9 @@ void HitKDNode::HitTestXRay(const HitBall* const pball, vector<HitTestResult> &p
 
    if (m_children) // not a leaf
    {
-#ifdef DEBUGPHYSICS
-      g_pplayer->m_physics->c_traversed++;
-#endif
+      #ifdef DEBUGPHYSICS
+         g_pplayer->m_physics->c_traversed++;
+      #endif
       if (axis == 0)
       {
          const float vcenter = (m_rectbounds.left + m_rectbounds.right)*0.5f;
@@ -635,23 +648,22 @@ void HitKDNode::HitTestXRay(const HitBall* const pball, vector<HitTestResult> &p
          if (pball->m_hitBBox.right >= vcenter)
             m_children[1].HitTestXRay(pball, pvhoHit, coll);
       }
+      else if (axis == 1)
+      {
+         const float vcenter = (m_rectbounds.top + m_rectbounds.bottom)*0.5f;
+         if (pball->m_hitBBox.top <= vcenter)
+            m_children[0].HitTestXRay(pball, pvhoHit, coll);
+         if (pball->m_hitBBox.bottom >= vcenter)
+            m_children[1].HitTestXRay(pball, pvhoHit, coll);
+      }
       else
-         if (axis == 1)
-         {
-            const float vcenter = (m_rectbounds.top + m_rectbounds.bottom)*0.5f;
-            if (pball->m_hitBBox.top <= vcenter)
-               m_children[0].HitTestXRay(pball, pvhoHit, coll);
-            if (pball->m_hitBBox.bottom >= vcenter)
-               m_children[1].HitTestXRay(pball, pvhoHit, coll);
-         }
-         else
-         {
-            const float vcenter = (m_rectbounds.zlow + m_rectbounds.zhigh)*0.5f;
+      {
+         const float vcenter = (m_rectbounds.zlow + m_rectbounds.zhigh)*0.5f;
 
-            if (pball->m_hitBBox.zlow <= vcenter)
-               m_children[0].HitTestXRay(pball, pvhoHit, coll);
-            if (pball->m_hitBBox.zhigh >= vcenter)
-               m_children[1].HitTestXRay(pball, pvhoHit, coll);
-         }
+         if (pball->m_hitBBox.zlow <= vcenter)
+            m_children[0].HitTestXRay(pball, pvhoHit, coll);
+         if (pball->m_hitBBox.zhigh >= vcenter)
+            m_children[1].HitTestXRay(pball, pvhoHit, coll);
+      }
    }
 }

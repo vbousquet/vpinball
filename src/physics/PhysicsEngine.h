@@ -46,13 +46,15 @@ public:
    int GetPerfLengthMax() const { return m_phys_max; }
    string GetPerfInfo(bool resetMax);
 
-   const vector<HitObject *>& GetHitObjects() const { return m_vho; }
-   const vector<HitObject *>& GetUIObjects() { GetUIQuadTree(); return m_UIHitObjects; }
+   const vector<HitObject *> &GetHitObjects() const { return m_hitoctree.GetHitObjects(); }
+   const vector<HitObject *>& GetUIObjects() { return GetUIQuadTree()->GetHitObjects(); }
 
 private:
    void AddCabinetBoundingHitShapes(PinTable *const table);
    void PhysicsSimulateCycle(float dtime); // Perform continuous collision detection for the given amount of delta time
 
+   void ReleaseVHO(const vector<HitObject *> &vho, bool isUI);
+   
    Vertex3Ds m_gravity;
    
    unsigned int m_physicsMaxLoops;
@@ -73,9 +75,10 @@ private:
 
    vector<MoverObject *> m_vmover; // moving objects for physics simulation
 
-   vector<HitObject *> m_vho;
+   vector<HitObject *> m_pendingHitObjects; // Hit objects pending insertion in quadtree, collected through AddCollider method
+   vector<HitObject *> m_pendingUIHitObjects; // Hit objects pending insertion in UI quadtree, collected through AddCollider method
+
    /*HitKD*/ HitQuadtree m_hitoctree;
-   vector<HitObject *> m_vho_dynamic;
 #ifdef USE_EMBREE
    HitQuadtree m_hitoctree_dynamic; // should be generated from scratch each time something changes
 #else
@@ -83,16 +86,13 @@ private:
 #endif
 
    HitQuadtree* GetUIQuadTree(); // Trigger UI quadtree creation/update
-   vector<HitObject *> m_UIHitObjects; // All UI hit object in m_UIOctree
    HitQuadtree *m_UIOctree = nullptr; // Active UI quadtree
    // The following fields implement asynchronous UI quadtree update
-   vector<HitObject *> m_newUIHitObjects; // All UI hit object in m_pendingUIOctree after update
    HitQuadtree *m_pendingUIOctree = nullptr; // UI quadtree updated by the update thread
    bool m_UIQuadTreeUpdateInProgress = false;
    std::binary_semaphore m_uiQuadtreeUpdateWaiting { 0 };
    std::binary_semaphore m_uiQuadtreeUpdateReady { 0 };
    vector<IEditable *> m_vUIOutdatedEditable; // Objects requesting an update
-   vector<HitObject *> m_pendingUIHitObjects; // Hit objects pending insertion in UI quadtree, collected through AddCollider method
    vector<HitObject *> m_outdatedUIHitObjects; // Hit objects that are pending disposal
    vector<IEditable *> m_vUIUpdatedEditable; // Objects that have been updated by update thread
    std::thread m_uiQuadtreeUpdateThread;
