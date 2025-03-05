@@ -321,7 +321,7 @@ PSC_CLASS_END(FlexDMD)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Plugin interface
 
-static MsgPluginAPI* msgApi = nullptr;
+static const MsgPluginAPI* msgApi = nullptr;
 static ScriptablePluginAPI* scriptApi = nullptr;
 
 static uint32_t endpointId, nextDmdId;
@@ -612,7 +612,7 @@ static void OnFlexDestroyed(FlexDMD* pFlex)
       OnShowChanged(pFlex);
 }
 
-MSGPI_EXPORT void MSGPIAPI PluginLoad(const uint32_t sessionId, MsgPluginAPI* api)
+MSGPI_EXPORT void MSGPIAPI PluginLoad(const uint32_t sessionId, const MsgPluginAPI* api)
 {
    msgApi = api;
    endpointId = sessionId;

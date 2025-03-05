@@ -130,6 +130,27 @@
     <Filter Include="third-party\simple-uri-parser">
       <UniqueIdentifier>{d2ad50dc-81bf-4ece-9513-85e36260bc19}</UniqueIdentifier>
     </Filter>
+    <Filter Include="b2s">
+      <UniqueIdentifier>{65d862b5-9d98-49dc-9208-0c9c25121494}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="b2s\classes">
+      <UniqueIdentifier>{e024b3fb-64eb-4c85-9830-3f7440f08010}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="b2s\controls">
+      <UniqueIdentifier>{a44f9f6f-b8fe-4f1c-80a7-820c0eb47d06}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="b2s\collections">
+      <UniqueIdentifier>{a8259d69-6625-44e6-bb86-6aa601a91178}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="b2s\plugin">
+      <UniqueIdentifier>{ac2b48a5-970d-42de-b1cf-ee184cdb3f46}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="b2s\dream7">
+      <UniqueIdentifier>{2f1e7f88-5e13-46ef-ab8b-e0b6068a7ffb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="b2s\forms">
+      <UniqueIdentifier>{562d4171-9392-4d0e-a3eb-6a15c7195191}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src/audio/pinsound.cpp">
@@ -698,6 +719,141 @@
     </ClCompile>
     <ClCompile Include="src\physics\AsyncDynamicQuadTree.cpp">
       <Filter>physics</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\B2SPlugin.cpp">
+      <Filter>b2s</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\plugin\Plugin.cpp">
+      <Filter>b2s\plugin</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\plugin\PluginHost.cpp">
+      <Filter>b2s\plugin</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\dream7\Dream7Display.cpp">
+      <Filter>b2s\dream7</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\dream7\Segment.cpp">
+      <Filter>b2s\dream7</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\dream7\SegmentList.cpp">
+      <Filter>b2s\dream7</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\dream7\SegmentNumber.cpp">
+      <Filter>b2s\dream7</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\dream7\SegmentStyle.cpp">
+      <Filter>b2s\dream7</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\controls\B2SBaseBox.cpp">
+      <Filter>b2s\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\controls\B2SLEDBox.cpp">
+      <Filter>b2s\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\controls\B2SPictureBox.cpp">
+      <Filter>b2s\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\controls\B2SReelBox.cpp">
+      <Filter>b2s\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\controls\Control.cpp">
+      <Filter>b2s\controls</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\collections\AnimationCollection.cpp">
+      <Filter>b2s\collections</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\collections\ControlCollection.cpp">
+      <Filter>b2s\collections</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\collections\IlluminationGroupCollection.cpp">
+      <Filter>b2s\collections</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\collections\ReelDisplayReelBoxCollection.cpp">
+      <Filter>b2s\collections</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\collections\RunningAnimationsCollection.cpp">
+      <Filter>b2s\collections</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\collections\ZOrderCollection.cpp">
+      <Filter>b2s\collections</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\collections\PictureBoxCollection.cpp">
+      <Filter>b2s\collections</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\collections\ReelBoxCollection.cpp">
+      <Filter>b2s\collections</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\classes\B2SData.cpp">
+      <Filter>b2s\classes</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\classes\B2SReelDisplay.cpp">
+      <Filter>b2s\classes</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\classes\B2SSettings.cpp">
+      <Filter>b2s\classes</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\collections\GenericDictionaryIgnoreCase.cpp">
+      <Filter>b2s\collections</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\forms\Form.cpp">
+      <Filter>b2s\forms</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\forms\FormBackglass.cpp">
+      <Filter>b2s\forms</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\forms\FormDMD.cpp">
+      <Filter>b2s\forms</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\forms\FormWindow.cpp">
+      <Filter>b2s\forms</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\classes\AnimationInfo.cpp">
+      <Filter>b2s\classes</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\classes\B2SAnimation.cpp">
+      <Filter>b2s\classes</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\classes\B2SAnimationBase.cpp">
+      <Filter>b2s\classes</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\classes\B2SCollectData.cpp">
+      <Filter>b2s\classes</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\classes\B2SPlayer.cpp">
+      <Filter>b2s\classes</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\classes\B2SScreen.cpp">
+      <Filter>b2s\classes</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\classes\CollectData.cpp">
+      <Filter>b2s\classes</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\classes\ControlInfo.cpp">
+      <Filter>b2s\classes</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\classes\EntryAction.cpp">
+      <Filter>b2s\classes</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\classes\LEDAreaInfo.cpp">
+      <Filter>b2s\classes</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\classes\LEDDisplayDigitLocation.cpp">
+      <Filter>b2s\classes</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\classes\PictureBoxAnimation.cpp">
+      <Filter>b2s\classes</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\classes\PictureBoxAnimationEntry.cpp">
+      <Filter>b2s\classes</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\classes\Sound.cpp">
+      <Filter>b2s\classes</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\classes\Timer.cpp">
+      <Filter>b2s\classes</Filter>
+    </ClCompile>
+    <ClCompile Include="plugins\b2s\Server.cpp">
+      <Filter>b2s</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -1819,6 +1975,141 @@
     </ClInclude>
     <ClInclude Include="src\physics\AsyncDynamicQuadTree.h">
       <Filter>physics</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\common.h">
+      <Filter>b2s</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\Server.h">
+      <Filter>b2s</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\plugin\Plugin.h">
+      <Filter>b2s\plugin</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\plugin\PluginHost.h">
+      <Filter>b2s\plugin</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\dream7\Dream7Display.h">
+      <Filter>b2s\dream7</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\dream7\SegmentStyle.h">
+      <Filter>b2s\dream7</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\dream7\Segment.h">
+      <Filter>b2s\dream7</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\dream7\SegmentList.h">
+      <Filter>b2s\dream7</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\dream7\SegmentNumber.h">
+      <Filter>b2s\dream7</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\controls\B2SBaseBox.h">
+      <Filter>b2s\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\controls\B2SLEDBox.h">
+      <Filter>b2s\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\controls\B2SPictureBox.h">
+      <Filter>b2s\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\controls\B2SReelBox.h">
+      <Filter>b2s\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\controls\Control.h">
+      <Filter>b2s\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\collections\AnimationCollection.h">
+      <Filter>b2s\collections</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\collections\ControlCollection.h">
+      <Filter>b2s\collections</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\collections\IlluminationGroupCollection.h">
+      <Filter>b2s\collections</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\collections\ReelDisplayReelBoxCollection.h">
+      <Filter>b2s\collections</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\collections\RunningAnimationsCollection.h">
+      <Filter>b2s\collections</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\collections\ZOrderCollection.h">
+      <Filter>b2s\collections</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\collections\PictureBoxCollection.h">
+      <Filter>b2s\collections</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\collections\ReelBoxCollection.h">
+      <Filter>b2s\collections</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\classes\B2SSettings.h">
+      <Filter>b2s\classes</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\classes\B2SData.h">
+      <Filter>b2s\classes</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\classes\B2SReelDisplay.h">
+      <Filter>b2s\classes</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\collections\GenericDictionaryIgnoreCase.h">
+      <Filter>b2s\collections</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\forms\Form.h">
+      <Filter>b2s\forms</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\forms\FormBackglass.h">
+      <Filter>b2s\forms</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\forms\FormDMD.h">
+      <Filter>b2s\forms</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\forms\FormWindow.h">
+      <Filter>b2s\forms</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\classes\AnimationInfo.h">
+      <Filter>b2s\classes</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\classes\B2SAnimation.h">
+      <Filter>b2s\classes</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\classes\B2SAnimationBase.h">
+      <Filter>b2s\classes</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\classes\B2SCollectData.h">
+      <Filter>b2s\classes</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\classes\B2SPlayer.h">
+      <Filter>b2s\classes</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\classes\B2SScreen.h">
+      <Filter>b2s\classes</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\classes\CollectData.h">
+      <Filter>b2s\classes</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\classes\ControlInfo.h">
+      <Filter>b2s\classes</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\classes\EntryAction.h">
+      <Filter>b2s\classes</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\classes\LEDAreaInfo.h">
+      <Filter>b2s\classes</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\classes\LEDDisplayDigitLocation.h">
+      <Filter>b2s\classes</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\classes\PictureBoxAnimation.h">
+      <Filter>b2s\classes</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\classes\PictureBoxAnimationEntry.h">
+      <Filter>b2s\classes</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\classes\Sound.h">
+      <Filter>b2s\classes</Filter>
+    </ClInclude>
+    <ClInclude Include="plugins\b2s\classes\Timer.h">
+      <Filter>b2s\classes</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

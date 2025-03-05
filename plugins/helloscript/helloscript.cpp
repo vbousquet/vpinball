@@ -5,7 +5,7 @@
 #include "ScriptablePlugin.h"
 #include <cstring>
 
-static MsgPluginAPI* msgApi = nullptr;
+static const MsgPluginAPI* msgApi = nullptr;
 static VPXPluginAPI* vpxApi = nullptr;
 static ScriptablePluginAPI* scriptApi = nullptr;
 
@@ -28,7 +28,7 @@ ScriptClassDef helloScriptClass { { "DummyClass" }, []() { return static_cast<vo
       { { "Property2" }, { "void" }, 1, { { "float" } }, put_Property2 },
    } };
 
-MSGPI_EXPORT void MSGPIAPI PluginLoad(const uint32_t sessionId, MsgPluginAPI* api)
+MSGPI_EXPORT void MSGPIAPI PluginLoad(const uint32_t sessionId, const MsgPluginAPI* api)
 {
    msgApi = api;
    endpointId = sessionId;

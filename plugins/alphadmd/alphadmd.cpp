@@ -29,7 +29,7 @@
 // and segment API. It listen for alphanumeric source and, when found, broadcast
 // corresponding DMD sources (128x32 and 256x64 variants)
 
-static MsgPluginAPI* msgApi = nullptr;
+static const MsgPluginAPI* msgApi = nullptr;
 static uint32_t endpointId;
 static unsigned int onDmdSrcChangedId, getDmdSrcId, getRenderDmdId, getIdentifyDmdId;
 static unsigned int onSegSrcChangedId, getSegSrcId, getSegId;
@@ -539,7 +539,7 @@ static void UpdateSegSources()
 
 static void onSegSrcChanged(const unsigned int eventId, void* userData, void* msgData) { UpdateSegSources(); }
 
-MSGPI_EXPORT void MSGPIAPI PluginLoad(const uint32_t sessionId, MsgPluginAPI* api)
+MSGPI_EXPORT void MSGPIAPI PluginLoad(const uint32_t sessionId, const MsgPluginAPI* api)
 {
    msgApi = api;
    endpointId = sessionId;

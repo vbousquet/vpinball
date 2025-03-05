@@ -3,11 +3,11 @@
 #include "MsgPlugin.h"
 #include "VPXPlugin.h"
 
-MsgPluginAPI* msgApi = nullptr;
-VPXPluginAPI* vpxApi = nullptr;
+static const MsgPluginAPI* msgApi = nullptr;
+static VPXPluginAPI* vpxApi = nullptr;
 
-uint32_t endpointId;
-unsigned int getVpxApiId, onGameStartId, onGameEndId, onPrepareFrameId;
+static uint32_t endpointId;
+static unsigned int getVpxApiId, onGameStartId, onGameEndId, onPrepareFrameId;
 
 void onGameStart(const unsigned int eventId, void* userData, void* eventData)
 {
@@ -29,7 +29,7 @@ void onPrepareFrame(const unsigned int eventId, void* userData, void* eventData)
    // This can be used to tweak any visual parameter before building the frame (for example head tracking,...)
 }
 
-MSGPI_EXPORT void MSGPIAPI PluginLoad(const uint32_t sessionId, MsgPluginAPI* api)
+MSGPI_EXPORT void MSGPIAPI PluginLoad(const uint32_t sessionId, const MsgPluginAPI* api)
 {
    msgApi = api;
    msgApi->BroadcastMsg(sessionId, getVpxApiId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_API), &vpxApi);

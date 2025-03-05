@@ -519,7 +519,6 @@ void ScoreView::Render(const VPX::RenderOutput& output)
    #ifdef ENABLE_BGFX
    if (output.GetMode() == VPX::RenderOutput::OM_WINDOW)
    {
-      output.GetWindow()->Show();
       scoreRT = output.GetWindow()->GetBackBuffer();
       scoreX = scoreY = 0;
       scoreW = scoreRT->GetWidth();

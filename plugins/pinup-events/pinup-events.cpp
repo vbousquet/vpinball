@@ -27,13 +27,13 @@
 // stretched to fit 128x32 frame, shaded using 0xFF4500 color (C# Colors.OrangeRed), 
 // with non linear shading for 2 bitplane frames.
 
-MsgPluginAPI* msgApi = nullptr;
-uint32_t endpointId;
-unsigned int getDmdSrcId, getDmdId, onGameStartId, onGameEndId, onSerumTriggerId;
+static const MsgPluginAPI* msgApi = nullptr;
+static uint32_t endpointId;
+static unsigned int getDmdSrcId, getDmdId, onGameStartId, onGameEndId, onSerumTriggerId;
 
 static HMODULE dmdDevicePupDll = nullptr;
 static unsigned int lastFrameId = 0;
-CtlResId dmdId; 
+static CtlResId dmdId; 
 static std::chrono::high_resolution_clock::time_point lastFrameTick;
 
 typedef int (*pup_open)();
@@ -239,7 +239,7 @@ void onGameEnd(const unsigned int eventId, void* userData, void* eventData)
    }
 }
 
-MSGPI_EXPORT void MSGPIAPI PluginLoad(const uint32_t sessionId, MsgPluginAPI* api)
+MSGPI_EXPORT void MSGPIAPI PluginLoad(const uint32_t sessionId, const MsgPluginAPI* api)
 {
    msgApi = api;
    endpointId = sessionId; 

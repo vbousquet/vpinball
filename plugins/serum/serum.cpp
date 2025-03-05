@@ -25,7 +25,7 @@
 // - PinMame/onGameEnd
 // - Controller/GetDMD: msgData is a request/response struct
 
-static MsgPluginAPI* msgApi = nullptr;
+static const MsgPluginAPI* msgApi = nullptr;
 static uint32_t endpointId;
 static unsigned int onDmdSrcChangedId, getDmdSrcId, getRenderDmdId, getIdentifyDmdId, onGameStartId, onGameEndId, onDmdTrigger;
 
@@ -298,7 +298,7 @@ void onGameEnd(const unsigned int eventId, void* userData, void* msgData)
    }
 }
 
-MSGPI_EXPORT void MSGPIAPI PluginLoad(const uint32_t sessionId, MsgPluginAPI* api)
+MSGPI_EXPORT void MSGPIAPI PluginLoad(const uint32_t sessionId, const MsgPluginAPI* api)
 {
    msgApi = api;
    endpointId = sessionId;

@@ -187,7 +187,7 @@ PSC_CLASS_END(Controller)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Plugin interface
 
-static MsgPluginAPI* msgApi = nullptr;
+static const MsgPluginAPI* msgApi = nullptr;
 static ScriptablePluginAPI* scriptApi = nullptr;
 
 static uint32_t endpointId;
@@ -512,7 +512,7 @@ static void OnControllerDestroyed(Controller*)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Plugin lifecycle
 
-MSGPI_EXPORT void MSGPIAPI PluginLoad(const uint32_t sessionId, MsgPluginAPI* api)
+MSGPI_EXPORT void MSGPIAPI PluginLoad(const uint32_t sessionId, const MsgPluginAPI* api)
 {
    controller = nullptr;
    endpointId = sessionId;

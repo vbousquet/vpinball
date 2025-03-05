@@ -1282,6 +1282,8 @@ static void SetNVIDIAThreadOptimization(NvThreadOptimization threadedOptimizatio
 }
 #endif
 
+extern void RegisterB2SPlugin();
+
 extern "C" int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR /*lpCmdLine*/, int /*nShowCmd*/)
 {
    #if defined(ENABLE_OPENGL) && !defined(__STANDALONE__)
@@ -1332,6 +1334,7 @@ extern "C" int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, 
             PLOGI << "Plugin " << plugin.m_id << " was found but is disabled (" << plugin.m_library << ")";
          }
       });
+      RegisterB2SPlugin();
 
       // Run the application
       retval = theApp.Run();

@@ -174,6 +174,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    m_renderProfiler->NewFrame(0);
    g_frameProfiler = &m_logicProfiler;
 
+   g_pvp->ShowWindow(SW_HIDE);
    m_progressDialog.Create(g_pvp->GetHwnd());
    m_progressDialog.ShowWindow(g_pvp->m_open_minimized ? SW_HIDE : SW_SHOWNORMAL);
    m_progressDialog.SetProgress("Creating Player..."s, 1);
@@ -488,13 +489,20 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    #if defined(ENABLE_BGFX)
    if (m_vrDevice == nullptr) // Anciliary windows are not yet supported while in VR mode
    {
+      if (m_backglassOutput.GetMode() == VPX::RenderOutput::OM_WINDOW)
+      {
+         m_renderer->m_renderDevice->AddWindow(m_backglassOutput.GetWindow());
+         m_backglassOutput.GetWindow()->Show();
+      }
+
       m_scoreView.Load(PathFromFilename(m_ptable->m_szFileName));
       if (!m_scoreView.HasLayouts())
          m_scoreView.Load(g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR);
       if (m_scoreviewOutput.GetMode() == VPX::RenderOutput::OM_WINDOW)
+      {
          m_renderer->m_renderDevice->AddWindow(m_scoreviewOutput.GetWindow());
-      if (m_backglassOutput.GetMode() == VPX::RenderOutput::OM_WINDOW)
-         m_renderer->m_renderDevice->AddWindow(m_backglassOutput.GetWindow());
+         m_scoreviewOutput.GetWindow()->Show();
+      }
    }
    #endif
 
@@ -1208,52 +1216,60 @@ void Player::OnFocusChanged(const bool isGameFocused)
    // A lost focus event happens during player destruction when the main window is destroyed
    if (m_closing == CS_CLOSED)
       return;
-   if (isGameFocused)
-   {
-      PLOGI << "Focus gained";
-   }
-   else
-   {
-      #ifdef _MSC_VER
-         string focusedWnd = "undefined"s;
-         HWND foregroundWnd = GetForegroundWindow();
-         if (foregroundWnd)
-         {
-            DWORD foregroundProcessId;
-            DWORD foregroundThreadId = GetWindowThreadProcessId(foregroundWnd, &foregroundProcessId);
-            if (foregroundProcessId)
-            {
-               HANDLE foregroundProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION /* PROCESS_QUERY_INFORMATION | PROCESS_VM_READ */, FALSE, foregroundProcessId);
-               if (foregroundProcess)
-               {
-                  char szFileName[MAXSTRING];
-                  if (GetProcessImageFileName(foregroundProcess, szFileName, MAXSTRING))
-                     focusedWnd = szFileName;
-               }
-            }
-            char title[1000];
-            GetWindowText(foregroundWnd, title, 1000);
-            PLOGI << "Focus lost. Current focused window: " << focusedWnd << ", with title: '" << title << '\'';
-         }
-         else
-      #endif
-      {
-         PLOGI << "Focus lost.";
-      }
+   
+   #ifdef ENABLE_SDL_VIDEO
+   const bool focused = SDL_GetKeyboardFocus() == g_pplayer->m_playfieldWnd->GetCore();
+   #else
+   const bool focused = isGameFocused;
+   #endif
 
-      #if defined(_MSC_VER) && !defined(DEBUG)
-         // FIXME Hacky handling of auxiliary windows (B2S, DMD, Pup,...) stealing focus under Windows: keep focused during first 5 seconds
-         // Note that m_liveUI might be null, such as when a message box pops up before the UI finishes initializing
-         if (m_time_msec < 5000 && m_liveUI != nullptr && !m_liveUI->IsOpened() && !m_debuggerDialog.IsWindow())
-            m_playfieldWnd->RaiseAndFocus();
-      #endif
-   }
    const bool wasPlaying = IsPlaying();
-   const bool willPlay = m_playing && isGameFocused;
+   const bool willPlay = m_playing && focused;
    if (wasPlaying != willPlay)
    {
+      if (focused)
+      {
+         PLOGI << "Focus gained";
+      }
+      else
+      {
+         #ifdef _MSC_VER
+            string focusedWnd = "undefined"s;
+            HWND foregroundWnd = GetForegroundWindow();
+            if (foregroundWnd)
+            {
+               DWORD foregroundProcessId;
+               DWORD foregroundThreadId = GetWindowThreadProcessId(foregroundWnd, &foregroundProcessId);
+               if (foregroundProcessId)
+               {
+                  HANDLE foregroundProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION /* PROCESS_QUERY_INFORMATION | PROCESS_VM_READ */, FALSE, foregroundProcessId);
+                  if (foregroundProcess)
+                  {
+                     char szFileName[MAXSTRING];
+                     if (GetProcessImageFileName(foregroundProcess, szFileName, MAXSTRING))
+                        focusedWnd = szFileName;
+                  }
+               }
+               char title[1000];
+               GetWindowText(foregroundWnd, title, 1000);
+               PLOGI << "Focus lost. Input focus: " << focusedWnd << ", with title: '" << title << '\'';
+            }
+            else
+         #endif
+         {
+            PLOGI << "Focus lost";
+         }
+
+         #if defined(_MSC_VER) && !defined(DEBUG)
+            // FIXME Hacky handling of auxiliary windows (B2S, DMD, Pup,...) stealing focus under Windows: keep focused during first 5 seconds
+            // Note that m_liveUI might be null, such as when a message box pops up before the UI finishes initializing
+            if (m_time_msec < 5000 && m_liveUI != nullptr && !m_liveUI->IsOpened() && !m_debuggerDialog.IsWindow())
+               m_playfieldWnd->RaiseAndFocus();
+         #endif
+      }
+
       ApplyPlayingState(willPlay);
-      m_focused = isGameFocused;
+      m_focused = focused;
    }
 }
 
@@ -2190,8 +2206,15 @@ void Player::PrepareFrame(const std::function<void()>& sync)
 
    m_renderer->RenderFrame();
 
-   if ((m_vrDevice == nullptr) && (m_scoreviewOutput.GetMode() != VPX::RenderOutput::OM_DISABLED))
-      m_scoreView.Render(m_scoreviewOutput);
+   if (m_vrDevice == nullptr)
+   {
+      if (m_backglassOutput.GetMode() != VPX::RenderOutput::OM_DISABLED)
+      {
+         
+      }
+      if (m_scoreviewOutput.GetMode() != VPX::RenderOutput::OM_DISABLED)
+         m_scoreView.Render(m_scoreviewOutput);
+   }
 
    m_logicProfiler.ExitProfileSection();
    #ifdef MSVC_CONCURRENCY_VIEWER

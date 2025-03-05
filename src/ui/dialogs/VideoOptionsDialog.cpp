@@ -253,27 +253,6 @@ protected:
    virtual void SaveSettings(Settings& settings, bool saveAll);
 };
 
-class AlphaViewOptPage final : public VideoOptionPropPage
-{
-public:
-   AlphaViewOptPage(Settings& appSettings, Settings& tableSettings);
-   virtual ~AlphaViewOptPage() override { }
-
-   AlphaViewOptPage(const AlphaViewOptPage&) = delete;
-   AlphaViewOptPage& operator=(const AlphaViewOptPage&) = delete;
-
-protected:
-   virtual BOOL OnInitDialog();
-   virtual BOOL OnCommand(WPARAM wParam, LPARAM lParam);
-   virtual BOOL OnApply() override;
-
-   virtual void LoadSettings(Settings& settings);
-   virtual void SaveSettings(Settings& settings, bool saveAll);
-
-private:
-   CComboBox m_viewMode;
-};
-
 class BackglassViewOptPage final : public VideoOptionPropPage
 {
 public:
@@ -285,7 +264,6 @@ public:
 
 protected:
    virtual BOOL OnInitDialog();
-   virtual BOOL OnCommand(WPARAM wParam, LPARAM lParam);
    virtual BOOL OnApply() override;
 
    virtual void LoadSettings(Settings& settings);
@@ -312,8 +290,7 @@ VideoOptionProperties::VideoOptionProperties(HWND hParent /* = nullptr*/)
    AddPage(new PFViewOptPage(m_appSettings, m_tableSettings));
    #if defined(ENABLE_BGFX)
       AddPage(new ScoreViewOptPage(m_appSettings, m_tableSettings));
-      // AddPage(new AlphaViewOptPage(m_appSettings, m_tableSettings));
-      // AddPage(new BackglassViewOptPage(m_appSettings, m_tableSettings));
+      AddPage(new BackglassViewOptPage(m_appSettings, m_tableSettings));
    #endif
 }
 
@@ -2081,65 +2058,6 @@ BOOL ScoreViewOptPage::OnApply()
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Alpha segment View Options
-
-#pragma region AlphaViewOptPage
-
-AlphaViewOptPage::AlphaViewOptPage(Settings& appSettings, Settings& tableSettings)
-   : VideoOptionPropPage(IDD_ALPHAVIEW_OPT, _T("Alpha View"), appSettings, tableSettings)
-{
-}
-
-BOOL AlphaViewOptPage::OnInitDialog()
-{
-   VideoOptionPropPage::OnInitDialog();
-   AttachItem(IDC_BG_SET, m_viewMode);
-   m_viewMode.SetRedraw(false);
-   m_viewMode.AddString("Disabled");
-   m_viewMode.SetRedraw(true);
-   InitDisplayControls(Settings::Alpha, "Alpha"s, true);
-   LoadSettings(GetEditedSettings());
-   return TRUE;
-}
-
-void AlphaViewOptPage::LoadSettings(Settings& settings)
-{
-   BeginLoad();
-   m_viewMode.SetCurSel(settings.LoadValueWithDefault(Settings::Alpha, "ViewMode"s, 0));
-   LoadDisplaySettings();
-   EndLoad();
-}
-
-void AlphaViewOptPage::SaveSettings(Settings& settings, bool saveAll)
-{
-   settings.SaveValue(Settings::Alpha, "ViewMode"s, max(m_viewMode.GetCurSel(), 0), !saveAll);
-   SaveDisplaySettings();
-}
-
-BOOL AlphaViewOptPage::OnApply()
-{
-   ApplyChanges();
-   return TRUE;
-}
-
-BOOL AlphaViewOptPage::OnCommand(WPARAM wParam, LPARAM lParam)
-{
-   switch (LOWORD(wParam))
-   {
-   case IDC_BG_SET:
-      if (HIWORD(wParam) == CBN_SELCHANGE)
-         PropChanged();
-      break;
-   default: return VideoOptionPropPage::OnCommand(wParam, lParam);
-   }
-   return TRUE;
-}
-
-#pragma endregion
-
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
 // Backglass View Options
 
 #pragma region BackglassViewOptPage
@@ -2152,10 +2070,6 @@ BackglassViewOptPage::BackglassViewOptPage(Settings& appSettings, Settings& tabl
 BOOL BackglassViewOptPage::OnInitDialog()
 {
    VideoOptionPropPage::OnInitDialog();
-   AttachItem(IDC_BG_SET, m_viewMode);
-   m_viewMode.SetRedraw(false);
-   m_viewMode.AddString("Disabled");
-   m_viewMode.SetRedraw(true);
    InitDisplayControls(Settings::Backglass, "Backglass"s, true);
    LoadSettings(GetEditedSettings());
    return TRUE;
@@ -2164,33 +2078,18 @@ BOOL BackglassViewOptPage::OnInitDialog()
 void BackglassViewOptPage::LoadSettings(Settings& settings)
 {
    BeginLoad();
-   m_viewMode.SetCurSel(settings.LoadValueWithDefault(Settings::Backglass, "ViewMode"s, 0));
    LoadDisplaySettings();
    EndLoad();
 }
 
 void BackglassViewOptPage::SaveSettings(Settings& settings, bool saveAll)
 {
-   settings.SaveValue(Settings::Backglass, "ViewMode"s, max(m_viewMode.GetCurSel(), 0), !saveAll);
    SaveDisplaySettings();
 }
 
 BOOL BackglassViewOptPage::OnApply()
 {
    ApplyChanges();
-   return TRUE;
-}
-
-BOOL BackglassViewOptPage::OnCommand(WPARAM wParam, LPARAM lParam)
-{
-   switch (LOWORD(wParam))
-   {
-   case IDC_BG_SET:
-      if (HIWORD(wParam) == CBN_SELCHANGE)
-         PropChanged();
-      break;
-   default: return VideoOptionPropPage::OnCommand(wParam, lParam);
-   }
    return TRUE;
 }
 
