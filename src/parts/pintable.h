@@ -548,7 +548,6 @@ public:
    HRESULT StopSound(BSTR Sound);
    void StopAllSounds();
 
-   void DeleteFromLayer(IEditable *obj);
    void UpdateCollection(const int index);
    void MoveCollectionUp(CComObject<Collection> *pcol);
    void MoveCollectionDown(CComObject<Collection> *pcol);
@@ -711,7 +710,6 @@ public:
    string m_envImage;
 
    vector<IEditable *> m_vedit;
-   vector<IEditable *> m_layer[MAX_LAYERS];
    vector<ISelect *> m_allHitElements;
 
    vector<Texture *> m_vimage;

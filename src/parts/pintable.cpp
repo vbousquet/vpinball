@@ -1572,18 +1572,6 @@ void PinTable::FVerifySaveToClose()
 #endif
 }
 
-void PinTable::DeleteFromLayer(IEditable *obj)
-{
-   for (int i = 0; i < MAX_LAYERS; i++)
-   {
-      if (FindIndexOf(m_layer[i], obj) != -1)
-      {
-         RemoveFromVectorSingle(m_layer[i], obj);
-         break;
-      }
-   }
-}
-
 void PinTable::UpdatePropertyImageList()
 { 
 #ifndef __STANDALONE__
@@ -4113,7 +4101,7 @@ HRESULT PinTable::LoadGameFromFilename(const string& szFileName, VPXFileFeedback
          }
 
          // Since 10.8.1, Flashers are allowed on 2D backdrop, with advanced rendering capabilities.
-         /* This code woudl replace DMD textbox by flahser. It is deactivated since it would break scripting (but does anyone scripted this ?)
+         /* This code woudl replace DMD textbox by flasher. It is deactivated since it would break scripting (but does anyone scripted this ?)
          for (size_t i = 0; i < m_vedit.size(); ++i)
          {
             if (m_vedit[i]->GetItemType() == ItemTypeEnum::eItemTextbox)
@@ -4174,33 +4162,23 @@ HRESULT PinTable::LoadGameFromFilename(const string& szFileName, VPXFileFeedback
       m_pbTempScreenshot = nullptr;
    }
 
+#ifndef __STANDALONE__
+   m_vpinball->GetLayersListDialog()->ClearList();
+   for (IEditable* const piedit : m_vedit)
+   {
+      ISelect * const psel = piedit->GetISelect();
+      if (psel != nullptr)
+      {
+         if (psel->m_layerName.empty())
+            psel->m_layerName = "Layer_" + std::to_string(psel->m_oldLayerIndex+1);
+         m_vpinball->GetLayersListDialog()->AddLayer(psel->m_layerName, piedit);
+      }
+   }
+#endif
+
    feedback.Done();
 
    pstgRoot->Release();
-
-#ifndef __STANDALONE__
-   m_vpinball->GetLayersListDialog()->ClearList();
-#endif
-   // copy all elements into their layers
-   for (int i = 0; i < MAX_LAYERS; i++)
-   {
-      m_layer[i].clear();
-
-      for (size_t t = 0; t < m_vedit.size(); t++)
-      {
-         IEditable * const piedit = m_vedit[t];
-         ISelect * const psel = piedit->GetISelect();
-         if (psel->m_oldLayerIndex == i)
-         {
-             m_layer[i].push_back(piedit);
-             if (psel->m_layerName.empty())
-                 psel->m_layerName = "Layer_" + std::to_string(i+1);
-#ifndef __STANDALONE__
-             m_vpinball->GetLayersListDialog()->AddLayer(psel->m_layerName, piedit);
-#endif
-         }
-      }
-   }
 
    return hr;
 }
