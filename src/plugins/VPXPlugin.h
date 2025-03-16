@@ -35,6 +35,7 @@
 #define VPXPI_EVT_ON_GAME_START         "OnGameStart"         // Broadcasted during player creation, before script initialization
 #define VPXPI_EVT_ON_GAME_END           "OnGameEnd"           // Broadcasted during player shutdown
 #define VPXPI_EVT_ON_PREPARE_FRAME      "OnPrepareFrame"      // Broadcasted when player starts preparing a new frame
+#define VPXPI_EVT_ON_UPDATE_PHYSICS     "OnUpdatePhysics"     // Broadcasted when player update physics (happens often, so must be used with care)
 #define VPXPI_EVT_ON_SETTINGS_CHANGED   "OnSettingsChanged"   // Broadcasted when settings have been changed
 
 
@@ -100,4 +101,7 @@ typedef struct VPXPluginAPI
    void (MSGPIAPI *GetActiveViewSetup)(VPXViewSetupDef* view);
    void (MSGPIAPI *SetActiveViewSetup)(VPXViewSetupDef* view);
 
+   // Input management
+   void(MSGPIAPI* GetInputState)(uint64_t* keyState, float* nudgeX, float* nudgeY, float* plunger);
+   void(MSGPIAPI* SetInputState)(const uint64_t keyState, const float nudgeX, const float nudgeY, const float plunger);
 } VPXPluginAPI;

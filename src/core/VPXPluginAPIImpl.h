@@ -50,6 +50,10 @@ private:
    static void GetActiveViewSetup(VPXViewSetupDef* view);
    static void SetActiveViewSetup(VPXViewSetupDef* view);
 
+   static void GetInputState(uint64_t* keyState, float* nudgeX, float* nudgeY, float* plunger);
+   static void SetInputState(const uint64_t keyState, const float nudgeX, const float nudgeY, const float plunger);
+
+
    // Plugin logging API
    static void OnGetLoggingPluginAPI(const unsigned int msgId, void* userData, void* msgData);
    static void PluginLog(unsigned int level, const char* message);

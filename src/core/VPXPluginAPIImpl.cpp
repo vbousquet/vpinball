@@ -118,6 +118,20 @@ void VPXPluginAPIImpl::SetActiveViewSetup(VPXViewSetupDef* view)
 
 
 ///////////////////////////////////////////////////////////////////////////////
+// Input API
+
+void VPXPluginAPIImpl::GetInputState(uint64_t* keyState, float* nudgeX, float* nudgeY, float* plunger)
+{
+   g_pplayer->m_pininput.GetInputState(keyState, nudgeX, nudgeY, plunger);
+}
+
+void VPXPluginAPIImpl::SetInputState(const uint64_t keyState, const float nudgeX, const float nudgeY, const float plunger)
+{
+   g_pplayer->m_pininput.SetInputState(keyState, nudgeX, nudgeY, plunger);
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
 // Shared logging support for plugin API
 
 void VPXPluginAPIImpl::PluginLog(unsigned int level, const char* message)
@@ -351,6 +365,9 @@ VPXPluginAPIImpl::VPXPluginAPIImpl()
    m_api.DisableStaticPrerendering = DisableStaticPrerendering;
    m_api.GetActiveViewSetup = GetActiveViewSetup;
    m_api.SetActiveViewSetup = SetActiveViewSetup;
+
+   m_api.GetInputState = GetInputState;
+   m_api.SetInputState = SetInputState;
 
    m_vpxPlugin = MsgPluginManager::GetInstance().RegisterPlugin("vpx", "VPX", "Visual Pinball X", "", "", "https://github.com/vpinball/vpinball", 
          [](const uint32_t pluginId, const MsgPluginAPI* api) {},

@@ -499,6 +499,31 @@ const DIDEVICEOBJECTDATA *PinInput::GetTail(/*const U32 curr_sim_msec*/)
 // End of Direct Input specific code
 //
 
+void PinInput::GetInputState(uint64_t* keyState, float* nudgeX, float* nudgeY, float* plunger) const
+{
+   *keyState = 0;
+   for (int i = 0; i < EnumAssignKeys::eCKeys; i++)
+   {
+      if (m_keyPressedState[i])
+         *keyState |= static_cast<uint64_t>(1) << i;
+   }
+   const Vertex2D &acc = g_pplayer->GetRawAccelerometer();
+   *nudgeX = acc.x;
+   *nudgeY = acc.y;
+   *plunger = 0.f;
+}
+
+void PinInput::SetInputState(uint64_t keyState, float nudgeX, float nudgeY, float plunger)
+{
+   for (int i = 0; i < EnumAssignKeys::eCKeys; i++)
+   {
+      bool isPressed = (keyState & (static_cast<uint64_t>(1) << i)) != 0;
+      if (m_keyPressedState[i] != isPressed)
+         FireKeyEvent(isPressed ? DISPID_GameEvents_KeyDown : DISPID_GameEvents_KeyUp, g_pplayer->m_rgKeys[i]);
+   }
+   g_pplayer->SetRawAccelerometer(Vertex2D(nudgeX, nudgeY));
+}
+
 void PinInput::GetInputDeviceData(/*const U32 curr_time_msec*/)
 {
    DIDEVICEOBJECTDATA didod[INPUT_BUFFER_SIZE]; // Receives buffered data 

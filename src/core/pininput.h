@@ -119,6 +119,9 @@ public:
 
    void GetInputDeviceData(/*const U32 curr_time_msec*/);
 
+   void GetInputState(uint64_t* keyState, float* nudgeX, float* nudgeY, float* plunger) const;
+   void SetInputState(uint64_t keyState, float nudgeX, float nudgeY, float plunger);
+
    #ifdef _WIN32
    #ifdef USE_DINPUT8
    LPDIRECTINPUTDEVICE8 GetJoystick(int index);
