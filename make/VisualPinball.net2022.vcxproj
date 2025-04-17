@@ -1139,6 +1139,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="../../src/audio/pinsound.cpp" />
+    <ClCompile Include="../../src/backglass/B2SDataModel.cpp" />
+    <ClCompile Include="../../src/backglass/B2SRenderer.cpp" />
+    <ClCompile Include="../../src/backglass/ScoreView.cpp" />
     <ClCompile Include="../../src/core/stdafx.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
@@ -1157,7 +1160,6 @@
     <ClCompile Include="../../src/core/TableDB.cpp" />
     <ClCompile Include="../../src/core/VPXPluginAPIImpl.cpp" />
     <ClCompile Include="../../src/core/ResURIResolver.cpp" />
-    <ClCompile Include="../../src/core/ScoreView.cpp" />
     <ClCompile Include="../../src/math/math.cpp" />
     <ClCompile Include="../../src/math/matrix.cpp" />
     <ClCompile Include="../../src/renderer/Backglass.cpp" />
@@ -1663,8 +1665,10 @@
     <Image Include="../../src\ui\res\ball.ico" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="../../src/backglass/B2SDataModel.h" />
+    <ClInclude Include="../../src/backglass/B2SRenderer.h" />
+    <ClInclude Include="../../src\backglass\ScoreView.h" />
     <ClInclude Include="../../src\core\ResURIResolver.h" />
-    <ClInclude Include="../../src\core\ScoreView.h" />
     <ClInclude Include="../../src\input\DirectInputJoystickHandler.h" />
     <ClInclude Include="../../src\input\DirectInputKeyboardHandler.h" />
     <ClInclude Include="../../src\input\DirectInputMouseHandler.h" />

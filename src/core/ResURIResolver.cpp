@@ -10,8 +10,60 @@ ResURIResolver::ResURIResolver()
 
 void ResURIResolver::ClearCache()
 {
+   m_outputCache.clear();
    m_texCache.clear();
    m_segCache.clear();
+}
+
+float ResURIResolver::GetOutput(const string &link)
+{
+   const auto &cache = m_outputCache.find(link);
+   if (g_pplayer == nullptr) // For the time being, this API may only be used in the player
+      return 0.f;
+   if (cache != m_outputCache.end())
+      return cache->second(link);
+   if (link.empty())
+      return 0.f;
+
+   outputCacheLambda lambda = nullptr;
+   const auto uri = uri::parse_uri(link);
+   if (uri.error != uri::Error::None)
+   {
+      PLOGE << "Invalid resource URI: " << link;
+   }
+   else if (uri.scheme == "display")
+   {
+      // TODO implement pixel access
+   }
+   else if (uri.scheme == "plugin")
+   {
+      uint32_t endpointId = 0;
+      auto plugin = MsgPluginManager::GetInstance().GetPlugin(uri.authority.host);
+      if (plugin.get())
+         endpointId = plugin->m_endpointId;
+      if ((endpointId != 0) && (uri.path == "/getstate"))
+      {
+         auto src = uri.query.find("src"s);
+         if (src != uri.query.end() && src->second == "output")
+         {
+            int displayId = 0;
+            auto dispId = uri.query.find("id"s);
+            if (dispId != uri.query.end())
+               try_parse_int(dispId->second, displayId);
+            int ouputId = 0;
+            auto outId = uri.query.find("io"s);
+            if (outId != uri.query.end())
+               try_parse_int(outId->second, ouputId);
+            // TODO implement property access (luminance, tint, ...)
+            lambda = [endpointId, displayId, ouputId](const string &) -> float { return g_pplayer->GetControllerOutput({ endpointId, static_cast<uint32_t>(displayId) }, ouputId); };
+         }
+      }
+   }
+
+   if (lambda == nullptr)
+      lambda = [](const string &) -> float { return 0.f; };
+   m_outputCache[link] = lambda;
+   return lambda(link);
 }
 
 BaseTexture *ResURIResolver::GetDisplay(const string &link)

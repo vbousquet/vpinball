@@ -1275,7 +1275,7 @@ void Flasher::Render(const unsigned int renderMask)
       matWorldViewProj[0]._42 = 1.0f;
       const int eyes = m_rd->GetCurrentRenderTarget()->m_nLayers;
       if (eyes > 1)
-         memcpy(&matWorldViewProj[1].m[0][0], &matWorldViewProj[0].m[0][0], 4 * 4 * sizeof(float));
+         matWorldViewProj[1] = matWorldViewProj[0];
       m_rd->m_flasherShader->SetMatrix(SHADER_matWorldViewProj, &matWorldViewProj[0], eyes);
       m_rd->m_DMDShader->SetMatrix(SHADER_matWorldViewProj, &matWorldViewProj[0], eyes);
    }

@@ -462,13 +462,24 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    #if defined(ENABLE_BGFX)
    if (m_vrDevice == nullptr) // Anciliary windows are not yet supported while in VR mode
    {
-      m_scoreView.Load(PathFromFilename(m_ptable->m_szFileName));
-      if (!m_scoreView.HasLayouts())
-         m_scoreView.Load(g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR);
       if (m_scoreviewOutput.GetMode() == VPX::RenderOutput::OM_WINDOW)
          m_renderer->m_renderDevice->AddWindow(m_scoreviewOutput.GetWindow());
       if (m_backglassOutput.GetMode() == VPX::RenderOutput::OM_WINDOW)
          m_renderer->m_renderDevice->AddWindow(m_backglassOutput.GetWindow());
+
+      if (m_backglassOutput.GetMode() != VPX::RenderOutput::OM_DISABLED)
+      {
+         string b2sFilename = find_path_case_insensitive(TitleAndPathFromFilename(m_ptable->m_szFileName.c_str()) + ".directb2s");
+         if (!b2sFilename.empty())
+            m_b2sRenderer.Load(b2sFilename);
+      }
+
+      if (m_scoreviewOutput.GetMode() != VPX::RenderOutput::OM_DISABLED)
+      {
+         m_scoreView.Load(PathFromFilename(m_ptable->m_szFileName));
+         if (!m_scoreView.HasLayouts())
+            m_scoreView.Load(g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR);
+      }
    }
    #endif
 
@@ -661,6 +672,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
       if (hitable->GetItemType() == ItemTypeEnum::eItemBall)
          m_vball.push_back(&static_cast<Ball *>(hitable)->m_hitBall);
    }
+   m_b2sRenderer.RenderSetup(m_renderer->m_renderDevice, &m_backglassOutput);
 
    // Setup anisotropic filtering
    const bool forceAniso = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "ForceAnisotropicFiltering"s, true);
@@ -726,6 +738,11 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    m_getSegMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_GETSEG_MSG);
    m_onSegChangedMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_ONSEG_SRC_CHG_MSG);
    MsgPluginManager::GetInstance().GetMsgAPI().SubscribeMsg(VPXPluginAPIImpl::GetInstance().GetVPXEndPointId(), m_onSegChangedMsgId, OnSegChanged, this);
+   m_getIOSrcMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_GETIO_SRC_MSG);
+   m_getInputsMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_GETINPUTS_MSG);
+   m_getOutputsMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_GETOUTPUTS_MSG);
+   m_onIOChangedMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_ONIO_SRC_CHG_MSG);
+   MsgPluginManager::GetInstance().GetMsgAPI().SubscribeMsg(VPXPluginAPIImpl::GetInstance().GetVPXEndPointId(), m_onIOChangedMsgId, OnIOChanged, this);
    m_onAudioUpdatedMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_ONAUDIO_UPDATE_MSG);
    MsgPluginManager::GetInstance().GetMsgAPI().SubscribeMsg(VPXPluginAPIImpl::GetInstance().GetVPXEndPointId(), m_onAudioUpdatedMsgId, OnAudioUpdated, this);
    m_onGameStartMsgId = VPXPluginAPIImpl::GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_GAME_START);
@@ -849,6 +866,11 @@ Player::~Player()
    }
 
    // Release plugin message Ids
+   MsgPluginManager::GetInstance().GetMsgAPI().UnsubscribeMsg(m_onIOChangedMsgId, OnIOChanged);
+   VPXPluginAPIImpl::ReleaseMsgID(m_onIOChangedMsgId);
+   VPXPluginAPIImpl::ReleaseMsgID(m_getIOSrcMsgId);
+   VPXPluginAPIImpl::ReleaseMsgID(m_getInputsMsgId);
+   VPXPluginAPIImpl::ReleaseMsgID(m_getOutputsMsgId);
    MsgPluginManager::GetInstance().GetMsgAPI().UnsubscribeMsg(m_onSegChangedMsgId, OnSegChanged);
    VPXPluginAPIImpl::ReleaseMsgID(m_onSegChangedMsgId);
    VPXPluginAPIImpl::ReleaseMsgID(m_getSegSrcMsgId);
@@ -996,6 +1018,7 @@ Player::~Player()
       renderable->GetIHitable()->RenderRelease();
    for (auto hitable : m_vhitables)
       hitable->GetIHitable()->TimerRelease();
+   m_b2sRenderer.RenderRelease();
    assert(m_vballDelete.empty());
    m_vball.clear();
 
@@ -1950,6 +1973,9 @@ void Player::PrepareFrame(const std::function<void()>& sync)
    if ((m_vrDevice == nullptr) && (m_scoreviewOutput.GetMode() != VPX::RenderOutput::OM_DISABLED))
       m_scoreView.Render(m_scoreviewOutput);
 
+   if ((m_vrDevice == nullptr) && (m_backglassOutput.GetMode() != VPX::RenderOutput::OM_DISABLED))
+      m_b2sRenderer.Render();
+
    m_logicProfiler.ExitProfileSection();
    #ifdef MSVC_CONCURRENCY_VIEWER
    delete tagSpan;
@@ -2135,6 +2161,86 @@ void Player::OnAudioUpdated(const unsigned int msgId, void* userData, void* msgD
    }
 }
 
+void Player::OnIOChanged(const unsigned int msgId, void *userData, void *msgData)
+{
+   for (auto cache : static_cast<Player *>(userData)->m_controllerOutputs)
+   {
+      delete cache.inputSrcDefs;
+      delete cache.outputSrcDefs;
+   }
+   static_cast<Player *>(userData)->m_controllerOutputs.clear();
+   static_cast<Player *>(userData)->m_resURIResolver.ClearCache();
+}
+
+float Player::GetControllerOutput(CtlResId id, const unsigned int outputId)
+{
+   IOSrcId *source = nullptr;
+
+   if (id.id == 0)
+   {
+      if (m_defaultIOId.id == 0)
+      {
+         GetIOSrcMsg getSrcMsg = { 1024, 0, new IOSrcId[1024] };
+         VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(m_getIOSrcMsgId, &getSrcMsg);
+         if (getSrcMsg.count == 0)
+         {
+            delete[] getSrcMsg.entries;
+            return 0.f;
+         }
+         m_defaultIOId = getSrcMsg.entries[0].id;
+         delete[] getSrcMsg.entries;
+      }
+      id = m_defaultIOId;
+   }
+
+   auto existingSource = std::ranges::find_if(m_controllerOutputs.begin(), m_controllerOutputs.end(), [id](const IOSrcId &cd) { return cd.id.id == id.id; });
+   if (existingSource != m_controllerOutputs.end())
+      source = &(*existingSource);
+   else
+   {
+      GetIOSrcMsg getSrcMsg = { 1024, 0, new IOSrcId[1024] };
+      VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(m_getIOSrcMsgId, &getSrcMsg);
+      m_controllerOutputs.push_back({ id, 0 });
+      source = &m_controllerOutputs.back();
+      for (unsigned int i = 0; i < getSrcMsg.count; i++)
+      {
+         if (getSrcMsg.entries[i].id.id == id.id)
+         {
+            *source = getSrcMsg.entries[i];
+            if (source->inputSrcDefs)
+            {
+               source->inputSrcDefs = new IOSrcDef[source->nInputs];
+               memcpy(source->inputSrcDefs, getSrcMsg.entries[i].inputSrcDefs, source->nInputs * sizeof(IOSrcDef));
+            }
+            if (source->outputSrcDefs)
+            {
+               source->outputSrcDefs = new IOSrcDef[source->nOutputs];
+               memcpy(source->outputSrcDefs, getSrcMsg.entries[i].outputSrcDefs, source->nOutputs * sizeof(IOSrcDef));
+            }
+         }
+      }
+      delete[] getSrcMsg.entries;
+   }
+
+   for (int i = 0; i < source->nOutputs; i++)
+   {
+      if (source->outputSrcDefs[i].mappingId == outputId)
+      {
+         GetIOMsg getIOMsg = { id, nullptr };
+         VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(m_getOutputsMsgId, &getIOMsg);
+         if (getIOMsg.state != nullptr)
+            switch (source->outputSrcDefs[i].dataFormat)
+            {
+            case CTLPI_IO_FORMAT_FLOAT: return *reinterpret_cast<float*>(static_cast<uint8_t*>(getIOMsg.state) + i * source->outputStride);
+            default: assert(false); break; // TODO implement
+            }
+         break;
+      }
+   }
+
+   return 0.f;
+}
+
 void Player::OnSegChanged(const unsigned int msgId, void *userData, void *msgData)
 {
    static_cast<Player *>(userData)->m_defaultSegSelected = false;
@@ -2152,7 +2258,7 @@ Player::ControllerSegDisplay Player::GetControllerSegDisplay(CtlResId id)
          auto pCD = std::ranges::find_if(m_controllerSegDisplays.begin(), m_controllerSegDisplays.end(), [&](const ControllerSegDisplay &cd) { return cd.segId.id == m_defaultSegId.id; });
          if (pCD == m_controllerSegDisplays.end())
          {
-            assert(false); // This is not supposed to happen (we identify default by storing m_defaultSefId instead of the controller display only to manage vector resize operation)
+            assert(false); // This is not supposed to happen (we identify default by storing m_defaultSegId instead of the controller display only to manage vector resize operation)
             m_defaultSegSelected = false;
          }
          else
@@ -2199,7 +2305,7 @@ Player::ControllerSegDisplay Player::GetControllerSegDisplay(CtlResId id)
       auto pCD = std::ranges::find_if(m_controllerSegDisplays.begin(), m_controllerSegDisplays.end(), [id](const ControllerSegDisplay &cd) { return cd.segId.id == id.id; });
       if (pCD == m_controllerSegDisplays.end())
       {
-         // Search for the requested display
+         // Search for the requested display (evnetually resulting in an empty entry if not found)
          GetSegSrcMsg getSrcMsg = { 1024, 0, new SegSrcId[1024] };
          VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(m_getSegSrcMsgId, &getSrcMsg);
          m_controllerSegDisplays.push_back({id, 0, nullptr});

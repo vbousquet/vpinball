@@ -358,6 +358,106 @@ static void onGetSeg(const unsigned int eventId, void* userData, void* msgData)
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// IO state
+
+static bool hasIO = false;
+static unsigned int onIOSrcChangedId, getIOSrcId, getInputsId, getOutputsId;
+static IOSrcDef* outputSrcDefs = nullptr;
+static float* outputStates = nullptr;
+static double outputUpdateTimestamp = 0.f;
+
+static void UpdateOutputState(pinmame_tDeviceStates* deviceStates)
+{
+   delete[] outputSrcDefs;
+   outputSrcDefs = new IOSrcDef[deviceStates->nDevices];
+   pinmame_tDeviceState* state = deviceStates->states;
+   for (int i = 0; i < deviceStates->nDevices; i++)
+   {
+      outputSrcDefs[i].name = nullptr;
+      outputSrcDefs[i].mappingId = state->mapping;
+      outputSrcDefs[i].dataFormat = CTLPI_IO_FORMAT_FLOAT;
+      state = reinterpret_cast<pinmame_tDeviceState*>(reinterpret_cast<uint8_t*>(state) + deviceStates->stateByteSize);
+   }
+   delete[] outputStates;
+   outputStates = new float[deviceStates->nDevices];
+}
+
+static void onGetIOSrc(const unsigned int eventId, void* userData, void* msgData)
+{
+   if (!hasIO || (controller == nullptr))
+      return;
+   GetIOSrcMsg& msg = *static_cast<GetIOSrcMsg*>(msgData);
+
+   auto block = controller->GetStateBlock(PINMAME_STATE_REQMASK_GPOUTPUT_BINARY_STATE | PINMAME_STATE_REQMASK_GPOUTPUT_DEVICE_STATE | PINMAME_STATE_REQMASK_LAMP_DEVICE_STATE);
+   if (block == nullptr || block->controlledDeviceStates == nullptr)
+      return;
+
+   if (msg.count < msg.maxEntryCount)
+   {
+      UpdateOutputState(block->controlledDeviceStates);
+
+      msg.entries[msg.count].id = { endpointId, 0 };
+
+      msg.entries[msg.count].nInputs = 0;
+      msg.entries[msg.count].inputSrcDefs = nullptr;
+      msg.entries[msg.count].inputStride = 0;
+      msg.entries[msg.count].SetInput = nullptr;
+
+      msg.entries[msg.count].nOutputs = block->controlledDeviceStates->nDevices;
+      msg.entries[msg.count].outputStride = sizeof(float);
+      msg.entries[msg.count].outputSrcDefs = outputSrcDefs;
+
+      msg.count++;
+   }
+}
+
+static void onGetInputs(const unsigned int eventId, void* userData, void* msgData)
+{
+   if (!hasIO || (controller == nullptr))
+      return;
+   GetIOMsg* const msg = static_cast<GetIOMsg*>(msgData);
+   if ((msg->state != nullptr) || (msg->blockId.endpointId != endpointId))
+      return;
+   // Not implemented
+}
+
+static void onGetOutputs(const unsigned int eventId, void* userData, void* msgData)
+{
+   if (!hasIO || (controller == nullptr))
+      return;
+   GetIOMsg* const msg = static_cast<GetIOMsg*>(msgData);
+   if ((msg->state != nullptr) || (msg->blockId.endpointId != endpointId))
+      return;
+
+   auto block = controller->GetStateBlock(PINMAME_STATE_REQMASK_GPOUTPUT_BINARY_STATE | PINMAME_STATE_REQMASK_GPOUTPUT_DEVICE_STATE | PINMAME_STATE_REQMASK_LAMP_DEVICE_STATE);
+   if (block == nullptr)
+      return;
+
+   if (outputStates == nullptr)
+      UpdateOutputState(block->controlledDeviceStates);
+
+   pinmame_tDeviceStates* states = block->controlledDeviceStates;
+   if (outputUpdateTimestamp != states->updateTimestamp)
+   {
+      outputUpdateTimestamp = states->updateTimestamp;
+      pinmame_tDeviceState* state = block->controlledDeviceStates->states;
+      for (int i = 0; i < states->nDevices; i++)
+      {
+         switch (state->category)
+         {
+         case PINMAME_DEVICE_STATE_TYPE_CUSTOM: outputStates[i] = static_cast<float>(state->customState) / 255.f; break;
+         case PINMAME_DEVICE_STATE_TYPE_LED: outputStates[i] = state->ledLuminance; break;
+         case PINMAME_DEVICE_STATE_TYPE_BULB: outputStates[i] = state->bulb.luminance; break;
+         }
+         state = reinterpret_cast<pinmame_tDeviceState*>(reinterpret_cast<uint8_t*>(state) + states->stateByteSize);
+      }
+   }
+
+   msg->state = outputStates;
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // DMD & Displays
 
 static bool hasDMD = false;
@@ -481,6 +581,14 @@ static void OnControllerGameStart(Controller*)
          msgApi->SubscribeMsg(endpointId, getSegId, onGetSeg, controller);
          msgApi->BroadcastMsg(endpointId, onSegSrcChangedId, nullptr);
       }
+      hasIO = true;
+      if (hasIO)
+      {
+         msgApi->SubscribeMsg(endpointId, getIOSrcId, onGetIOSrc, controller);
+         msgApi->SubscribeMsg(endpointId, getInputsId, onGetInputs, controller);
+         msgApi->SubscribeMsg(endpointId, getOutputsId, onGetOutputs, controller);
+         msgApi->BroadcastMsg(endpointId, onIOSrcChangedId, nullptr);
+      }
    }
 }
 
@@ -499,10 +607,18 @@ static void OnControllerGameEnd(Controller*)
       msgApi->UnsubscribeMsg(getSegSrcId, onGetSegSrc);
       msgApi->UnsubscribeMsg(getSegId, onGetSeg);
    }
+   if (hasIO)
+   {
+      hasIO = false;
+      msgApi->UnsubscribeMsg(getIOSrcId, onGetIOSrc);
+      msgApi->UnsubscribeMsg(getInputsId, onGetInputs);
+      msgApi->UnsubscribeMsg(getOutputsId, onGetOutputs);
+   }
    // Broadcast message after unsubscribing to avoid receiving unwanted requests
    msgApi->BroadcastMsg(endpointId, onGameEndId, nullptr);
    msgApi->BroadcastMsg(endpointId, onDmdSrcChangedId, nullptr);
    msgApi->BroadcastMsg(endpointId, onSegSrcChangedId, nullptr);
+   msgApi->BroadcastMsg(endpointId, onIOSrcChangedId, nullptr);
    StopAudioStream();
 }
 
@@ -538,6 +654,10 @@ MSGPI_EXPORT void MSGPIAPI PluginLoad(const uint32_t sessionId, MsgPluginAPI* ap
    onSegSrcChangedId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_ONSEG_SRC_CHG_MSG);
    getSegSrcId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_GETSEG_SRC_MSG);
    getSegId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_GETSEG_MSG);
+   onIOSrcChangedId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_ONIO_SRC_CHG_MSG);
+   getIOSrcId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_GETIO_SRC_MSG);
+   getInputsId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_GETINPUTS_MSG);
+   getOutputsId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_GETOUTPUTS_MSG);
    onAudioUpdateId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_ONAUDIO_UPDATE_MSG);
 
    // Contribute our API to the script engine
@@ -639,6 +759,10 @@ MSGPI_EXPORT void MSGPIAPI PluginUnload()
    msgApi->ReleaseMsgID(onSegSrcChangedId);
    msgApi->ReleaseMsgID(getSegSrcId);
    msgApi->ReleaseMsgID(getSegId);
+   msgApi->ReleaseMsgID(onIOSrcChangedId);
+   msgApi->ReleaseMsgID(getIOSrcId);
+   msgApi->ReleaseMsgID(getInputsId);
+   msgApi->ReleaseMsgID(getOutputsId);
    msgApi->ReleaseMsgID(onAudioUpdateId);
    scriptApi->SetCOMObjectOverride("VPinMAME.Controller", nullptr);
    // TODO we should unregister the script API contribution

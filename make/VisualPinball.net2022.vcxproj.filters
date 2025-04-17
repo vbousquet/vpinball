@@ -133,6 +133,9 @@
     <Filter Include="third-party\simple-uri-parser">
       <UniqueIdentifier>{d2ad50dc-81bf-4ece-9513-85e36260bc19}</UniqueIdentifier>
     </Filter>
+    <Filter Include="backglass">
+      <UniqueIdentifier>{63cfd04c-92ca-4564-b9f8-c0f9cbe91571}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="../../src/audio/pinsound.cpp">
@@ -687,8 +690,8 @@
     <ClCompile Include="../../src/core/DynamicScript.cpp">
       <Filter>core</Filter>
     </ClCompile>
-    <ClCompile Include="../../src/core/ScoreView.cpp">
-      <Filter>core</Filter>
+    <ClCompile Include="../../src/backglass/ScoreView.cpp">
+      <Filter>backglass</Filter>
     </ClCompile>
     <ClCompile Include="../../src/core/ResURIResolver.cpp">
       <Filter>core</Filter>
@@ -708,6 +711,12 @@
     <ClCompile Include="../../src\ui\properties\PartGroupVisualsProperty.cpp">
       <Filter>ui\properties</Filter>
     </ClCompile>
+    <ClCompile Include="../../src/backglass/B2SDataModel.cpp">
+      <Filter>backglass</Filter>
+    </ClCompile>
+    <ClCompile Include="../../src/backglass/B2SRenderer.cpp">
+      <Filter>backglass</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="../gen/vpinball.h">
@@ -715,6 +724,12 @@
     </ClInclude>
     <ClInclude Include="../../src/audio/pinsound.h">
       <Filter>audio</Filter>
+    </ClInclude>
+    <ClInclude Include="../../src/backglass/B2SDataModel.h">
+      <Filter>backglass</Filter>
+    </ClInclude>
+    <ClInclude Include="../../src/backglass/B2SRenderer.h">
+      <Filter>backglass</Filter>
     </ClInclude>
     <ClInclude Include="../../src/core/def.h">
       <Filter>core</Filter>
@@ -1814,8 +1829,8 @@
     <ClInclude Include="../../src/core/DynamicScript.h">
       <Filter>core</Filter>
     </ClInclude>
-    <ClInclude Include="../../src\core\ScoreView.h">
-      <Filter>core</Filter>
+    <ClInclude Include="../../src\backglass\ScoreView.h">
+      <Filter>backglass</Filter>
     </ClInclude>
     <ClInclude Include="../../src\core\ResURIResolver.h">
       <Filter>core</Filter>

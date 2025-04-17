@@ -34,6 +34,75 @@ typedef union CtlResId
 } CtlResId;
 
 
+
+///////////////////////////////////////////////////////////////////////////////
+//
+// Inputs & controlled outputs/devices
+//
+// Controllers have inputs and controlled binary outputs which can be wired to 
+// physical devices (bulbs, Leds, solenoids, motors,...) which have varying 
+// behaviors and state data. These messages allow to share these states.
+//
+
+// Broadcasted when an IO source has been added, modified or removed, there is no message data
+#define CTLPI_ONIO_SRC_CHG_MSG        "OnIOSrcChange"
+
+// Request subscribers to fill up an array with the list of IO sources, message data is a pointer to a GetIOSrcMsg structure
+#define CTLPI_GETIO_SRC_MSG           "GetIOSrc"
+
+// Request subscribers for the input state, message data is a pointer to a GetIOMsg structure
+#define CTLPI_GETINPUTS_MSG           "GetInputs"
+
+// Request subscribers for the output state, message data is a pointer to a GetIOMsg structure
+#define CTLPI_GETOUTPUTS_MSG          "GetOutputs"
+
+// IO state data format
+#define CTLPI_IO_FORMAT_BIT          0 // State is a single bit, this may only be used for bit pack state block (all IO state are single bits)
+#define CTLPI_IO_FORMAT_BOOL         1 // State is a single byte resolving to a bool (0 is clear, set otherwise)
+#define CTLPI_IO_FORMAT_BYTE         2 // State is a single byte (0..255)
+#define CTLPI_IO_FORMAT_FLOAT        3 // State is a single float (usually 0..1)
+#define CTLPI_IO_FORMAT_LUM          4 // State is a single float representing relative luminance (for light sources)
+
+typedef struct IOSrcDef
+{
+   unsigned int mappingId;     // User friendly unique mapping id (usually corresponding to the datasheet number), conflicts inside a given IO block are forbidden
+   char* name;                 // User friendly name, or null if none available
+   unsigned int dataFormat;    // See CTLPI_IO_FORMAT_xxx
+} IOSrcDef;
+
+typedef struct IOSrcId
+{
+   CtlResId id;                // Unique Id of the IO block
+   
+   unsigned int nInputs;       // Number of inputs
+   IOSrcDef* inputSrcDefs;     // Pointer to a block of nInputs IOSrcDef, may be null is nInputs is 0
+   unsigned int inputStride;   // Stride between each input state in a state frame, or 0 for bit packed (1 bit per input)
+   void (MSGPIAPI *SetInput)(const unsigned int inputIndex, const int isSet); // Pointer to function to request an input state change, may be null if unsupported
+   
+   unsigned int nOutputs;      // Number of outputs
+   IOSrcDef* outputSrcDefs;    // Pointer to a block of nOutputs IOSrcDef, may be null is nOutputs is 0
+   unsigned int outputStride;  // Stride between each output state in a state frame, or 0 for bit packed (1 bit per output)
+} IOSrcId;
+
+typedef struct GetIOSrcMsg
+{
+   // Request
+   unsigned int maxEntryCount; // see below
+   // Response
+   unsigned int count;         // Number of entries, also position to put next entry
+   IOSrcId* entries;           // Pointer to an array of maxEntryCount entries to be filled
+} GetIOSrcMsg;
+
+typedef struct GetIOMsg
+{
+   // Request that must match one of the DMD source definitions reported by GetDmdSrcMsg
+   CtlResId blockId;          // Uniquely identify the requested IO block
+   // Response
+   void* state;               // Pointer to state data, null until a provider answers the request, owned by the provider
+} GetIOMsg;
+
+
+
 ///////////////////////////////////////////////////////////////////////////////
 //
 // Dot Matrix Displays
@@ -49,7 +118,7 @@ typedef union CtlResId
 //   providing upscaling or colorization support.
 //
 
-// Broadcasted when a DMD source has been added, changed or removed, there is no message data
+// Broadcasted when a DMD source has been added, modified or removed, there is no message data
 #define CTLPI_ONDMD_SRC_CHG_MSG               "OnDMDSrcChange"
 
 // Request subscribers to fill up an array with the list of DMD sources, message data is a pointer to a GetDmdSrcMsg structure
@@ -127,7 +196,7 @@ typedef struct GetRawDmdMsg
 // Segment displays
 //
 
-// Broadcasted when an alpha numeric source has been added, changed or removed, there is no message data
+// Broadcasted when an alpha numeric source has been added, modified or removed, there is no message data
 #define CTLPI_ONSEG_SRC_CHG_MSG        "OnSegSrcChange"
 
 // Request subscribers to fill up an array with the list of alpha numeric sources, message data is a pointer to a GetSegSrcMsg structure

@@ -11,8 +11,10 @@
 #include "input/pininput.h"
 #include "plugins/CorePlugin.h"
 #include "ResURIResolver.h"
-#include "ScoreView.h"
 #include "audio/pinsound.h"
+
+#include "backglass/ScoreView.h"
+#include "backglass/B2SRenderer.h"
 
 #define DEFAULT_PLAYER_WIDTH 1024
 #define DEFAULT_PLAYER_FS_WIDTH 1920
@@ -381,6 +383,8 @@ public:
    };
    ControllerSegDisplay GetControllerSegDisplay(CtlResId id);
 
+   float GetControllerOutput(CtlResId id, const unsigned int outputId);
+
    ResURIResolver m_resURIResolver;
 
 private:
@@ -388,15 +392,21 @@ private:
    unsigned int m_getDmdMsgId, m_getDmdSrcMsgId, m_onDmdChangedMsgId;
    vector<ControllerDisplay> m_controllerDisplays;
    bool m_defaultDmdSelected = false;
-   DmdSrcId m_defaultDmdId;
+   DmdSrcId m_defaultDmdId { 0 };
 
    static void OnSegChanged(const unsigned int msgId, void *userData, void *msgData);
    unsigned int m_getSegMsgId, m_getSegSrcMsgId, m_onSegChangedMsgId;
    vector<ControllerSegDisplay> m_controllerSegDisplays;
    bool m_defaultSegSelected = false;
-   CtlResId m_defaultSegId; 
-   
+   CtlResId m_defaultSegId { 0 };
+
+   static void OnIOChanged(const unsigned int msgId, void *userData, void *msgData);
+   vector<IOSrcId> m_controllerOutputs;
+   CtlResId m_defaultIOId { 0 };
+   unsigned int m_getInputsMsgId, m_getOutputsMsgId, m_getIOSrcMsgId, m_onIOChangedMsgId;
+
    ScoreView m_scoreView;
+   VPX::B2SRenderer m_b2sRenderer;
 
 
    // External audio sources
