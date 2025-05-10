@@ -22,7 +22,6 @@ echo "  BGFX_PATCH_SHA: ${BGFX_PATCH_SHA}"
 echo "  PINMAME_SHA: ${PINMAME_SHA}"
 echo "  OPENXR_SHA: ${OPENXR_SHA}"
 echo "  LIBDMDUTIL_SHA: ${LIBDMDUTIL_SHA}"
-echo "  LIBPUPDMD_SHA: ${LIBPUPDMD_SHA}"
 echo "  FFMPEG_SHA: ${FFMPEG_SHA}"
 echo ""
 
@@ -297,39 +296,6 @@ if [ "${LIBDMDUTIL_EXPECTED_SHA}" != "${LIBDMDUTIL_FOUND_SHA}" ]; then
 fi
 
 #
-# build libpupdmd
-#
-
-LIBPUPDMD_EXPECTED_SHA="${LIBPUPDMD_SHA}"
-LIBPUPDMD_FOUND_SHA="$([ -f libpupdmd/cache.txt ] && cat libpupdmd/cache.txt || echo "")"
-
-if [ "${LIBPUPDMD_EXPECTED_SHA}" != "${LIBPUPDMD_FOUND_SHA}" ]; then
-   echo "Building libpupdmd. Expected: ${LIBPUPDMD_EXPECTED_SHA}, Found: ${LIBPUPDMD_FOUND_SHA}"
-
-   rm -rf libpupdmd
-   mkdir libpupdmd
-   cd libpupdmd
-
-   curl -sL https://github.com/PPUC/libpupdmd/archive/${LIBPUPDMD_SHA}.tar.gz -o libpupdmd-${LIBPUPDMD_SHA}.tar.gz
-   tar xzf libpupdmd-${LIBPUPDMD_SHA}.tar.gz
-   mv libpupdmd-${LIBPUPDMD_SHA} libpupdmd
-   cd libpupdmd
-   cmake \
-      -G "Visual Studio 17 2022" \
-      -DPLATFORM=win \
-      -DARCH=x64 \
-      -DBUILD_SHARED=ON \
-      -DBUILD_STATIC=OFF \
-      -B build
-   cmake --build build --config ${BUILD_TYPE}
-   cd ..
-
-   echo "$LIBPUPDMD_EXPECTED_SHA" > cache.txt
-
-   cd ..
-fi
-
-#
 # build ffmpeg
 #
 
@@ -426,10 +392,6 @@ cp libdmdutil/libdmdutil/third-party/build-libs/win/x64/sockpp64.lib ../../../th
 cp libdmdutil/libdmdutil/third-party/runtime-libs/win/x64/sockpp64.dll ../../../third-party/runtime-libs/windows-x64
 cp libdmdutil/libdmdutil/third-party/build-libs/win/x64/cargs64.lib ../../../third-party/build-libs/windows-x64
 cp libdmdutil/libdmdutil/third-party/runtime-libs/win/x64/cargs64.dll ../../../third-party/runtime-libs/windows-x64
-
-cp libpupdmd/libpupdmd/build/${BUILD_TYPE}/pupdmd64.lib ../../../third-party/build-libs/windows-x64
-cp libpupdmd/libpupdmd/build/${BUILD_TYPE}/pupdmd64.dll ../../../third-party/runtime-libs/windows-x64
-cp libpupdmd/libpupdmd/src/pupdmd.h ../../../third-party/include/
 
 for LIB in avcodec avdevice avfilter avformat avutil swresample swscale; do
    DIR="lib${LIB}"

@@ -82,7 +82,7 @@ if(PluginPlatform STREQUAL "windows")
          avutil64.lib
          swresample64.lib
          swscale64.lib
-		 pupdmd64.lib
+         pupdmd64.lib
       )
    else()
       set_target_properties(PUPPlugin PROPERTIES
@@ -100,7 +100,7 @@ if(PluginPlatform STREQUAL "windows")
          avutil.lib
          swresample.lib
          swscale.lib
-		 pupdmd.lib
+         pupdmd.lib
       )
    endif()
 else()
@@ -122,7 +122,7 @@ else()
       avutil
       swresample
       swscale
-	  pupdmd
+      pupdmd
    )
 endif()
 
