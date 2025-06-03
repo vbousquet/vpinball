@@ -666,7 +666,7 @@
       <AdditionalIncludeDirectories>$(SolutionDir)../gen;$(SolutionDir)../../src;$(SolutionDir)../../third-party/include/win32xx/include</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>SDL364.lib;openxr_loader64.lib;comctl32.lib;dxguid.lib;freeimage64.lib;winmm.lib;dinput.lib;nvapi.lib;odbc32.lib;odbccp32.lib;SDL3_mixer64.lib;imm32.lib;setupapi.lib;hid.lib;bgfx64.lib;bimg_decode64.lib;bimg64.lib;bx64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SDL364.lib;openxr_loader64.lib;comctl32.lib;dxguid.lib;freeimage64.lib;winmm.lib;dinput.lib;nvapi.lib;odbc32.lib;odbccp32.lib;SDL3_mixer64.lib;imm32.lib;setupapi.lib;hid.lib;bgfx64.lib;bimg_decode64.lib;bimg_encode64.lib;bimg64.lib;bx64.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <AdditionalLibraryDirectories>$(DXSDK_DIR)\Lib\x64;$(SolutionDir)../../third-party/build-libs/windows-x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>

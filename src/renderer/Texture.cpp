@@ -22,6 +22,16 @@
 #include <iostream>
 #endif
 
+#if defined(ENABLE_BGFX)
+#include <bimg/bimg.h>
+#include <bimg/decode.h>
+#include <bimg/encode.h>
+#include <bx/file.h>
+#include <bx/bx.h>
+#include <bx/allocator.h>
+#include <bx/math.h>
+#endif
+
 static inline int GetPixelSize(const BaseTexture::Format format)
 {
    switch (format)
@@ -852,7 +862,7 @@ Texture* Texture::CreateFromFile(const string& filename)
       delete ppb;
       return nullptr;
    }
-   
+
    int begin, end;
    const int len = (int)filename.length();
    for (begin = len; begin >= 0; begin--)
@@ -909,6 +919,57 @@ HRESULT Texture::SaveToStream(IStream *pstream, const PinTable *pt)
    bw.WriteBool(FID(OPAQ), IsOpaque());
    bw.WriteTag(FID(ENDB));
    return S_OK;
+}
+
+void Texture::CreateCompressedVariant()
+{
+   #if defined(ENABLE_BGFX)
+   bx::DefaultAllocator allocator;
+   // FIXME we should use NormalMap quality for non color images (detect by image use)
+   //bimg::Quality quality = bimg::Quality::Highest;
+   bimg::Quality::Enum quality = bimg::Quality::Fastest;
+
+   // BaseTexture* tex = GetRawBitmap();
+   //bimg::ImageContainer* inputImage = bimg::imageAlloc(&allocator, bimg::TextureFormat::RGBA8, tex->width(), tex->height(), 0, 0, false, false, tex->datac());
+   bimg::ImageContainer* inputImage = bimg::imageParse(&allocator, m_ppb->m_pdata, m_ppb->m_cdata);
+   if (inputImage == nullptr)
+      return;
+   
+   bimg::ImageContainer* mips = bimg::imageGenerateMips(&allocator, *inputImage);
+   bimg::imageFree(inputImage);
+   if (mips == nullptr)
+      return;
+
+   auto isFormatSupported = [](bimg::TextureFormat::Enum format) { return true; }; // FIXME implement
+   auto isFormatEmulated = [](bimg::TextureFormat::Enum format) { return true; }; // FIXME implement
+   bimg::ImageContainer* compressedImage = nullptr;
+   if (isFormatSupported(bimg::TextureFormat::ASTC4x4))
+      compressedImage = bimg::imageEncode(&allocator, bimg::TextureFormat::ASTC4x4, quality, *mips);
+   else if (bimg::isFloat(mips->m_format) && isFormatSupported(bimg::TextureFormat::BC6H))
+      compressedImage = bimg::imageEncode(&allocator, bimg::TextureFormat::BC6H, quality, *mips);
+   else if (!bimg::isFloat(mips->m_format) && isFormatSupported(bimg::TextureFormat::BC7))
+      compressedImage = bimg::imageEncode(&allocator, bimg::TextureFormat::BC7, quality, *mips);
+   else if (isFormatEmulated(bimg::TextureFormat::ASTC4x4))
+      compressedImage = bimg::imageEncode(&allocator, bimg::TextureFormat::ASTC4x4, quality, *mips);
+   else if (bimg::isFloat(mips->m_format) && isFormatEmulated(bimg::TextureFormat::BC6H))
+      compressedImage = bimg::imageEncode(&allocator, bimg::TextureFormat::BC6H, quality, *mips);
+   else if (!bimg::isFloat(mips->m_format) && isFormatEmulated(bimg::TextureFormat::BC7))
+      compressedImage = bimg::imageEncode(&allocator, bimg::TextureFormat::BC7, quality, *mips);
+   bimg::imageFree(mips);
+
+   if (compressedImage)
+   {
+      bx::FileWriter writer;
+      static int index = 1;
+      string out = string("D:\\test").append(std::to_string(index++).append(".ktx"));
+      if (bx::open(&writer, out.c_str()))
+      {
+         bimg::imageWriteKtx(&writer, *compressedImage, compressedImage->m_data, compressedImage->m_size);
+         bx::close(&writer);
+      }
+      bimg::imageFree(compressedImage);
+   }
+   #endif
 }
 
 HBITMAP Texture::GetGDIBitmap() const

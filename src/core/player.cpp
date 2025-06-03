@@ -639,6 +639,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
                   if (tex != nullptr && node->QueryBoolAttribute("linear", &linearRGB) == tinyxml2::XML_SUCCESS)
                   {
                      PLOGI << "Texture preloading: '" << name << '\'';
+                     tex->CreateCompressedVariant();
                      m_renderer->m_renderDevice->UploadTexture(tex->GetRawBitmap(), linearRGB);
                   }
                }

@@ -92,6 +92,8 @@ public:
    HBITMAP GetGDIBitmap() const; // Lazily created view of the image, suitable for GDI rendering
    BaseTexture* GetRawBitmap() const { return m_imageBuffer; } // Lazily created view of the image, suitable for GPU sampling
    
+   void CreateCompressedVariant(); // FIXME prototype implementation of texture compression
+
    int GetFileSize() const { return m_ppb->m_cdata; }
    const uint8_t *const GetFileRaw() const { return m_ppb->m_pdata; }
    const string& GetFilePath() const { return m_ppb->m_path; }
