@@ -204,35 +204,27 @@ STDMETHODIMP ScriptGlobalTable::PlayMusic(BSTR str, float volume)
    {
       EndMusic();
 
-      g_pplayer->m_audio = new PinSound();
-      const float MusicVolume = clamp(dequantizeSignedPercent(g_pplayer->m_MusicVolume) * m_pt->m_TableMusicVolume * volume, 0.f, 1.f);
-
-      if (!g_pplayer->m_audio->MusicInit(MakeString(str), MusicVolume))
-      {
-         delete g_pplayer->m_audio;
-         g_pplayer->m_audio = nullptr;
-      }
+      g_pplayer->m_pinAudio->PlayMusic(MakeString(str));
+      PinAudioMusic * music = g_pplayer->m_pinAudio->GetMusic();
+      if (music)
+         music->SetVolume(clamp(dequantizeSignedPercent(g_pplayer->m_MusicVolume) * m_pt->m_TableMusicVolume * volume, 0.f, 1.f));
    }
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::EndMusic()
 {
-   if (g_pplayer && g_pplayer->m_audio)
-   {
-      delete g_pplayer->m_audio;
-      g_pplayer->m_audio = nullptr;
-   }
+   PinAudioMusic *music = g_pplayer ? g_pplayer->m_pinAudio->GetMusic() : nullptr;
+   if (music)
+      music->Pause();
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::put_MusicVolume(float volume)
 {
-   if (g_pplayer && g_pplayer->m_PlayMusic && g_pplayer->m_audio)
-   {
-      const float MusicVolume = clamp(m_pt->m_TableMusicVolume * volume, 0.f, 1.f);
-      g_pplayer->m_audio->MusicVolume(MusicVolume);
-   }
+   PinAudioMusic *music = g_pplayer ? g_pplayer->m_pinAudio->GetMusic() : nullptr;
+   if (music)
+      music->SetVolume(clamp(m_pt->m_TableMusicVolume * volume, 0.f, 1.f));
    return S_OK;
 }
 

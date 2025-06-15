@@ -7,8 +7,6 @@
 #include <SDL3_mixer/SDL_mixer.h>
 
 enum SoundOutTypes : char { SNDOUT_TABLE = 0, SNDOUT_BACKGLASS = 1 };
-enum SoundConfigTypes : int { SNDCFG_SND3D2CH = 0, SNDCFG_SND3DALLREAR = 1, SNDCFG_SND3DFRONTISREAR = 2, 
-                              SNDCFG_SND3DFRONTISFRONT = 3, SNDCFG_SND3D6CH = 4, SNDCFG_SND3DSSF = 5};
 
 // Surround modes
 // ==============
@@ -31,11 +29,20 @@ enum SoundConfigTypes : int { SNDCFG_SND3D2CH = 0, SNDCFG_SND3DALLREAR = 1, SNDC
 //
 // SSF: 6CH still doesn't map sounds for SSF as distinctly as it could.. In this mode horizontal panning and vertical fading 
 // are enhanced for a more realistic experience.
+enum SoundConfigTypes : int
+{
+   SNDCFG_SND3D2CH = 0,
+   SNDCFG_SND3DALLREAR = 1,
+   SNDCFG_SND3DFRONTISREAR = 2,
+   SNDCFG_SND3DFRONTISFRONT = 3,
+   SNDCFG_SND3D6CH = 4,
+   SNDCFG_SND3DSSF = 5
+};
 
 struct AudioDevice
 {
    int id;
-   char name[100];
+   string name;
    unsigned int channels; //number of speakers in this case
 };
 
@@ -63,13 +70,7 @@ public:
 
    // SDL3_mixer
    Mix_Chunk * m_pMixChunkOrg = nullptr; // the original unmodified loaded sound
-   Mix_Music * m_pMixMusic = nullptr; // used by PlayMusic
    Mix_Chunk * m_pMixChunk = nullptr; // we use this one when we resample for pitch changes
-
-   //SDL Audio
-   //SDL_AudioSpec m_audioSpec; // audio spec format 
-   SDL_AudioStream *m_pstream = nullptr; // VPinMAME streamer
-   float m_streamVolume = 0.f;
 
    // if the Reinitialize comes back good, we should free these in pintable.cpp or we're keeping two copies
    // one here and one from pintable.  Once everything is good we only need Mix_Chunk.   S_FIX S_REMOVE
@@ -103,24 +104,6 @@ public:
              float pan, float front_rear_fade, const int loopcount, const bool usesame, const bool restart);
    void Stop(); // stop sound
 
-   // Music Playing from AudioPlayer (used by WMPCore, PlayMusic)
-   bool SetMusicFile(const string& filename);
-   void MusicPlay();
-   void MusicStop();
-   void MusicPause();
-   void MusicUnpause();
-   void MusicClose();
-   bool MusicActive();
-   double GetMusicPosition() const;
-   void SetMusicPosition(double seconds);
-   void MusicVolume(const float volume);
-   bool MusicInit(const string& szFileName, const float volume); // player.cpp
-
-   // Plays sounds from VPinMAME and PUP.  These are streams
-   bool StreamInit(DWORD frequency, int channels, const float volume);
-   void StreamUpdate(void* buffer, DWORD length);
-   void StreamVolume(const float volume);
-
    SoundOutTypes GetOutputTarget() const { return m_outputTarget; }
    void SetOutputTarget(SoundOutTypes target) { assert(SoundOutTypes::SNDOUT_TABLE <= target && target <= SoundOutTypes::SNDOUT_BACKGLASS); m_outputTarget = target; }
 
@@ -138,11 +121,6 @@ public:
 
    // Windows Editor?
    PinSound *LoadFile(const string& filename);
-
-   // Static class methods
-
-   // Retrieves detected audio devices detected by SDL
-   static void EnumerateAudioDevices(vector<AudioDevice>& devices);
 
 private:
    MixEffectsData m_mixEffectsData;
@@ -208,3 +186,72 @@ private:
    static float PanTo3D(float input);
    static float FadeSSF(float front_rear_fade);
 };
+
+
+// Plays audio streams for example for PinMAME and PUP
+class PinAudioStream
+{
+public:
+   PinAudioStream(SDL_AudioStream* stream);
+   ~PinAudioStream();
+
+   void Update(void* buffer, DWORD length);
+   int GetQueued() const { return SDL_GetAudioStreamQueued(m_pstream); }
+   void SetVolume(const float volume);
+   void UpdateVolume();
+
+private:
+   SDL_AudioStream* const m_pstream = nullptr;
+   float m_volume = 1.f;
+};
+
+// Stream music from a file
+class PinAudioMusic
+{
+public:
+   PinAudioMusic(Mix_Music* mixMusic);
+   ~PinAudioMusic();
+
+   void Pause() { Mix_PauseMusic(); }
+   void Unpause() { Mix_ResumeMusic(); }
+   double GetPosition() const { return Mix_GetMusicPosition(m_pMixMusic); }
+   void SetPosition(double seconds) { Mix_SetMusicPosition(seconds); }
+   void SetVolume(const float volume); // Volume, range in 0-1, without global music volume applied (as the function apply it)
+   void UpdateVolume();
+
+private:
+   static void MusicFinishedCallback();
+
+   Mix_Music* const m_pMixMusic;
+   float m_volume = 1.f;
+};
+
+
+// Audio playback system, supporting:
+// - Multiple streamed backglass audio (for PinMAME, PUP, etc.)
+// - A (unique) backglass music
+// - Multiple sound effects (backglass audio or playfield sounds)
+class PinAudio
+{
+public:
+   PinAudio(const Settings& settings);
+   ~PinAudio();
+
+   PinAudioStream* OpenAudioStream(int frequency, int channels);
+
+   bool PlayMusic(const string& filename);
+   PinAudioMusic* GetMusic() const { return m_audioMusic.get(); };
+
+
+   static void EnumerateAudioDevices(vector<AudioDevice>& devices);
+
+private:
+   int m_sdl_STD_idx = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK; // the table sound device to play sounds out of
+   int m_sdl_BG_idx = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK; // the BG sounds/music device to play sounds out of
+   SoundConfigTypes m_SoundMode3D = SNDCFG_SND3D2CH; // What 3Dsound Mode are we in from VPinball.ini "Sound3D" key.
+   SDL_AudioSpec m_audioSpecOutput; // The output devices audio spec
+
+   std::unique_ptr<PinAudioMusic> m_audioMusic = nullptr;
+};
+
+

@@ -103,7 +103,7 @@ void PinSound::initSDLAudio(const Settings& settings)
     }
     else { // this is all because the device id's are random: https://github.com/libsdl-org/SDL/issues/12278
       vector<AudioDevice> allAudioDevices;
-      PinSound::EnumerateAudioDevices(allAudioDevices);
+      PinAudio::EnumerateAudioDevices(allAudioDevices);
       for (size_t i = 0; i < allAudioDevices.size(); ++i) {
          const AudioDevice& audioDevice = allAudioDevices[i];
          if (audioDevice.name == soundDeviceName)
@@ -162,14 +162,6 @@ void PinSound::UnInitialize()
       Mix_FreeChunk(m_pMixChunk);
       m_pMixChunk = nullptr;
    }
-   if (m_pMixMusic != nullptr) {
-      Mix_FreeMusic(m_pMixMusic);
-      m_pMixMusic = nullptr;
-   }
-   if (m_pstream) {
-      SDL_DestroyAudioStream(m_pstream);
-      m_pstream = nullptr;
-   }
 }
 
 /**
@@ -219,15 +211,7 @@ HRESULT PinSound::ReInitialize()
 void PinSound::UpdateVolume()
 {
    if (m_outputTarget == SNDOUT_BACKGLASS) {
-      if (m_pMixMusic != nullptr) {
-         // Backglass music (requested volume is stored in the mix effect as for other sounds)
-         MusicVolume(m_mixEffectsData.volume);
-      }
-      else if (m_pstream != nullptr) {
-         // Backglass stream use stream volume (requested volume is stored in the mix effect as for other sounds)
-         SDL_SetAudioStreamGain(m_pstream, m_streamVolume * (g_pplayer ? dequantizeSignedPercent(g_pplayer->m_MusicVolume) : 1.f));
-      }
-      else if (m_assignedChannel != -1) {
+      if (m_assignedChannel != -1) {
          // Backglass sound use mixer volume (requested volume is stored in the mix effect as for other sounds)
          const int nVolume = static_cast<int>(m_mixEffectsData.volume * (g_pplayer ? dequantizeSignedPercent(g_pplayer->m_MusicVolume) : 1.f) * static_cast<float>(MIX_MAX_VOLUME));
          Mix_Volume(m_assignedChannel, nVolume);
@@ -604,226 +588,6 @@ void PinSound::Stop()
       Mix_FadeOutChannel(m_assignedChannel, 300); // fade out in 300ms.  Also halts channel when done
 }
 
-/**
- * @brief Loads a music file into the `m_pMixMusic` object.
- * 
- * This function attempts to load a music file from the provided file path (`szFileName`).
- * If a music file is already loaded, it will be freed before attempting to load the new file.
- * On successful loading, the `m_pMixMusic` pointer will point to the new music object.
- * If loading fails, an error message will be logged and the function will return false.
- * 
- * @param szFileName The file path of the music file to load.
- * 
- * @return `true` if the music file was successfully loaded, `false` otherwise.
- * 
- * @note Used by WMP.
- */
-bool PinSound::SetMusicFile(const string& szFileName)
-{
-   if (m_pMixMusic != nullptr)
-      Mix_FreeMusic(m_pMixMusic);
-
-   string path = find_case_insensitive_file_path(szFileName);
-   if (path.empty()) {
-      PLOGE << "Failed to find music file: " << szFileName;
-      return false;
-   }
-
-   m_pMixMusic = Mix_LoadMUS(path.c_str());
-   if (!m_pMixMusic) {
-      PLOGE << "Failed to load sound: " << SDL_GetError();
-      return false;
-   }
-
-   return true;
-}
-
-/**
- * @brief Initializes and plays music from a specified file.
- *
- * This function attempts to load a music file from different potential locations,
- * starting with the file path provided. It uses SDL_mixer's Mix_LoadMUS function
- * to load the music and adjusts the volume based on the given `volume` parameter
- * and the player's current music volume. If successful, it starts the music playback.
- * 
- * @param szFileName The name of the music file to load. The function will search for the file
- * in various directories.
- * @param volume A float representing the desired volume of the music (0.0 to 1.0). The final
- * volume is scaled based on the player's current music volume setting.
- * 
- * @return True if the music was successfully loaded and started, false otherwise.
- * 
- * @note Loads Music file from the table script when it uses 'PlayMusic'. These are typically
- *       in the music folder.
- */
-bool PinSound::MusicInit(const string& szFileName, const float volume)
-{
-   m_outputTarget = SNDOUT_BACKGLASS;
-
-   const string& filename = szFileName;
-
-   if (m_pMixMusic != nullptr)
-      Mix_FreeMusic(m_pMixMusic);
-
-   // need to find the path of the music dir. This does hunt to find the file.
-   for (int i = 0; i < 5; ++i) {
-      string path;
-      switch (i)
-      {
-      case 0: break;
-      case 1: path = g_pvp->m_myPath + "music" + PATH_SEPARATOR_CHAR; break;
-      case 2: path = g_pvp->m_currentTablePath; break;
-      case 3: path = g_pvp->m_currentTablePath + "music" + PATH_SEPARATOR_CHAR; break;
-      case 4: path = PATH_MUSIC; break;
-      }
-      path += filename;
-
-      #ifdef __STANDALONE__
-      path = find_case_insensitive_file_path(path);
-      #endif
-
-      if ((m_pMixMusic = Mix_LoadMUS(path.c_str()))) {
-         const float nVolume = volume;
-         MusicVolume(nVolume);
-         MusicPlay();
-         // PLOGI << "Loaded Music File: " << szFileName << " nVolume: " << nVolume << " to OutputTarget(0=table, 1=BG): " << static_cast<int>(m_outputTarget);
-         return true;
-      }
-   }
-   PLOGE << "Failed to load sound: " << szFileName << " SDL Error: " << SDL_GetError();
-   return false;
-}
-
-void PinSound::MusicPlay()
-{
-   Mix_PlayMusic(m_pMixMusic, 0);
-}
-
-void PinSound::MusicPause()
-{
-   Mix_PauseMusic();
-}
-
-void PinSound::MusicUnpause()
-{
-   Mix_ResumeMusic();
-}
-
-void PinSound::MusicClose()
-{
-   MusicStop(); 
-}
-
-bool PinSound::MusicActive()
-{
-   return Mix_PlayingMusic();
-}
-
-void PinSound::MusicStop()
-{
-   Mix_HaltMusic();
-}
-
-double PinSound::GetMusicPosition() const
-{
-   return Mix_GetMusicPosition(m_pMixMusic);
-}
-
-void PinSound::SetMusicPosition(double seconds)
-{
-   Mix_SetMusicPosition(seconds);
-}
-
-// Volume, range in 0-1, without global music volume applied (as the function apply it)
-void PinSound::MusicVolume(const float volume)
-{
-   const int nVolume = static_cast<int>(volume * (g_pplayer ? dequantizeSignedPercent(g_pplayer->m_MusicVolume) : 1.f) * static_cast<float>(MIX_MAX_VOLUME));
-   Mix_VolumeMusic(nVolume);
-}
-
-/**
- * @brief Initializes an SDL audio stream for background music playback.
- *
- * This function sets up an audio stream with the specified frequency, channel count,
- * and volume, then attempts to open and configure the audio device for playback. 
- * If the stream is successfully initialized, the function resumes audio playback.
- * If initialization fails, an error message is logged.
- *
- * @param frequency The audio sample rate (in Hz) to be used by the audio stream.
- * @param channels The number of audio channels (e.g., 1 for mono, 2 for stereo).
- * @param volume A floating-point value representing the desired volume. It is scaled 
- *        by the current music volume setting of the player.
- * @return bool Returns true if the audio stream was successfully initialized 
- *         and started; false otherwise.
- * 
- * @note Used by VPinMAMEController and PUP. volume range 0-1 from both VPinMAME and PUP
- */
-bool PinSound::StreamInit(DWORD frequency, int channels, const float volume) 
-{
-   SDL_AudioSpec audioSpec;
-   audioSpec.freq = frequency;
-   audioSpec.format =  SDL_AUDIO_S16LE;
-   audioSpec.channels = channels;
-
-   m_outputTarget = SNDOUT_BACKGLASS;
-   m_pstream = SDL_OpenAudioDeviceStream(m_sdl_BG_idx, &audioSpec, nullptr, nullptr);
-
-   if (m_pstream) {
-      m_streamVolume = volume;
-      SDL_SetAudioStreamGain(m_pstream, volume * (g_pplayer ? dequantizeSignedPercent(g_pplayer->m_MusicVolume) : 1.f));
-      SDL_ResumeAudioStreamDevice(m_pstream); // it always stops paused
-      return true;
-   }
-   else {
-      PLOGE << "Failed to load stream: " << SDL_GetError();
-   }
-   return false;
-}
-
-/**
- * @brief Updates the audio stream with new data to be played.
- * 
- * This function is used to feed audio data into an active audio stream in the 
- * SDL audio system. It passes the provided audio buffer and its length to the
- * SDL audio stream, allowing for continuous playback of audio data.
- *
- * @param buffer A pointer to the audio data buffer, typically containing PCM audio samples.
- * @param length The length of the buffer in bytes, indicating how much audio data is available to process.
- * 
- * @note The function assumes that the stream (m_pstream) has been properly initialized
- * and that the audio data format is compatible with the stream's configuration.
- * 
- * @note called by VPinMAMEController and PUP
- */
-void PinSound::StreamUpdate(void* buffer, DWORD length)
-{
-   SDL_PutAudioStreamData(m_pstream, buffer, length);
-}
-
-/**
- * @brief Adjusts the volume of the audio stream.
- *
- * This function sets the gain of the audio stream by adjusting it based on the
- * provided volume and the current music volume from the global player settings.
- * It ensures the stream's volume is updated only when the volume has changed.
- *
- * @param volume The desired volume level (range is expected to be from 0.0 to 1.0).
- *               This value is multiplied by the global music volume setting (in percentage)
- *               before being applied to the audio stream.
- *
- * @note The function only updates the stream's volume if the provided volume differs
- *       from the current stream volume, avoiding unnecessary updates.
- * 
- * @note Called by PUP. up sends a value between 0 and 1.. matches sdl stream volume scale
- */
-void PinSound::StreamVolume(const float volume)
-{
-   //PLOGI << "STREAM VOL";
-   if (m_streamVolume != volume) {
-      SDL_SetAudioStreamGain(m_pstream, volume * (g_pplayer ? dequantizeSignedPercent(g_pplayer->m_MusicVolume) : 1.f));
-      m_streamVolume = volume;
-   }
-}
 
 /**
  * @brief Loads a sound file and initializes a PinSound object with its data.
@@ -1524,6 +1288,179 @@ int PinSound::getChannel()
    return oldMaxSDLMixerChannels;
 }
 
+
+
+
+
+
+
+/**
+ * (Static)
+ * @brief Initializes SDL audio and sets up the sound devices for table and background sounds.
+ *
+ * This function attempts to load sound device settings from a configuration file (VPinball.ini) and 
+ * assigns the appropriate SDL audio devices for playing table and background sounds. If no matching 
+ * sound devices are found, it defaults to the standard SDL audio devices. Additionally, the function 
+ * initializes SDL audio and SDL_Mixer, configures the sound mode for 3D audio, and allocates the 
+ * necessary audio channels.
+ * 
+ * @note If no sound device names are found in the configuration file, default devices are used. 
+ *       A warning is logged in this case. SDL audio initialization is attempted, and failure is 
+ *       logged with an error message.
+ *
+ * @see SDL_InitSubSystem(SDL_INIT_AUDIO), Mix_OpenAudio(), SDL_GetAudioDeviceFormat(), Mix_AllocateChannels()
+ */
+/**
+ * @brief Constructor for the PinSound class. Initializes SDL audio, configures output devices,
+ *        and prepares the audio specifications based on the provided settings.
+ *
+ * This constructor checks whether SDL audio has been initialized. If not, it initializes SDL audio
+ * and configures the output audio specifications using the Mix_QuerySpec function. The output audio
+ * specifications are stored in internal member variables for further processing.
+ *
+ * @param settings The configuration settings for the audio system, passed by reference.
+ * 
+ * @note SDL audio initialization is done only once. If it has already been initialized, the constructor
+ *       will skip the initialization process and directly set up the output parameters.
+ *
+ * @note This function logs the output audio specifications (frequency, format, channels) after the SDL
+ *       audio system has been initialized.
+ */
+PinAudio::PinAudio(const Settings& settings)
+{
+   string soundDeviceName;
+   string soundDeviceBGName;
+   const bool good = settings.LoadValue(Settings::Player, "SoundDevice"s, soundDeviceName);
+   const bool good2 = settings.LoadValue(Settings::Player, "SoundDeviceBG"s, soundDeviceBGName);
+
+   if (!good && !good2)
+   { // use the default SDL audio device
+      PLOGI << "Sound Device not set in VPinball.ini.  Using default";
+      m_sdl_STD_idx = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
+      m_sdl_BG_idx = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
+   }
+   else
+   { // this is all because the device id's are random: https://github.com/libsdl-org/SDL/issues/12278
+      vector<AudioDevice> allAudioDevices;
+      PinAudio::EnumerateAudioDevices(allAudioDevices);
+      for (size_t i = 0; i < allAudioDevices.size(); ++i)
+      {
+         const AudioDevice& audioDevice = allAudioDevices[i];
+         if (audioDevice.name == soundDeviceName)
+            m_sdl_STD_idx = audioDevice.id;
+         if (audioDevice.name == soundDeviceBGName)
+            m_sdl_BG_idx = audioDevice.id;
+      }
+
+      if (m_sdl_STD_idx == SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK)
+      { // we didn't find a matching name
+         PLOGE << "No sound device by that name found in VPinball.ini. " << "SoundDevice:\"" << soundDeviceName << "\" SoundDeviceBG:\"" << soundDeviceBGName << "\" Using default.";
+         m_sdl_STD_idx = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
+         m_sdl_BG_idx = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
+      }
+   }
+
+   m_SoundMode3D = static_cast<SoundConfigTypes>(settings.LoadValueUInt(Settings::Player, "Sound3D"s));
+
+   if (!SDL_WasInit(SDL_INIT_AUDIO))
+   {
+      if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
+      {
+         PLOGE << "Failed to initialize SDL Audio: " << SDL_GetError();
+         return;
+      }
+   }
+
+   // change the AudioSpec param when we know what sound format output we want.  or get from device
+   if (!Mix_OpenAudio(m_sdl_STD_idx, nullptr))
+   {
+      PLOGE << "Failed to initialize SDL Mixer: " << SDL_GetError();
+      return;
+   }
+
+   SDL_AudioSpec spec;
+   int sample_frames;
+   SDL_GetAudioDeviceFormat(m_sdl_STD_idx, &spec, &sample_frames);
+
+   const char* pdriverName = SDL_GetCurrentAudioDriver();
+   Mix_QuerySpec(&m_audioSpecOutput.freq, &m_audioSpecOutput.format, &m_audioSpecOutput.channels);
+   PLOGI << "Output Device Settings: " << "Freq: " << m_audioSpecOutput.freq << " Format (SDL_AudioFormat): " << m_audioSpecOutput.format
+      << " channels: " << m_audioSpecOutput.channels << ", driver: " << (pdriverName ? pdriverName : "NULL") ;
+}
+
+PinAudio::~PinAudio()
+{
+}
+
+PinAudioStream* PinAudio::OpenAudioStream(int frequency, int channels)
+{
+   SDL_AudioSpec audioSpec;
+   audioSpec.freq = frequency;
+   audioSpec.format = SDL_AUDIO_S16LE;
+   audioSpec.channels = channels;
+
+   SDL_AudioStream* stream = SDL_OpenAudioDeviceStream(m_sdl_BG_idx, &audioSpec, nullptr, nullptr);
+   if (stream)
+   {
+      SDL_ResumeAudioStreamDevice(stream);
+      return new PinAudioStream(stream);
+   }
+   else
+   {
+      PLOGE << "Failed to load stream: " << SDL_GetError();
+      return nullptr;
+   }
+}
+
+/**
+ * @brief Initializes and plays music from a specified file.
+ *
+ * This function attempts to load a music file from different potential locations,
+ * starting with the file path provided. It uses SDL_mixer's Mix_LoadMUS function
+ * to load the music and adjusts the volume based on the given `volume` parameter
+ * and the player's current music volume. If successful, it starts the music playback.
+ * 
+ * @param szFileName The name of the music file to load. The function will search for the file
+ * in various directories.
+ * @param volume A float representing the desired volume of the music (0.0 to 1.0). The final
+ * volume is scaled based on the player's current music volume setting.
+ * 
+ * @return True if the music was successfully loaded and started, false otherwise.
+ * 
+ * @note Loads Music file from the table script when it uses 'PlayMusic'. These are typically
+ *       in the music folder.
+ */
+bool PinAudio::PlayMusic(const string& filename)
+{
+   m_audioMusic = nullptr;
+
+   Mix_Music* mixMusic = nullptr;
+   // need to find the path of the music dir. This does hunt to find the file.
+   for (int i = 0; mixMusic == nullptr && i < 5; ++i)
+   {
+      string path;
+      switch (i)
+      {
+      case 0: break;
+      case 1: path = g_pvp->m_myPath + "music" + PATH_SEPARATOR_CHAR; break;
+      case 2: path = g_pvp->m_currentTablePath; break;
+      case 3: path = g_pvp->m_currentTablePath + "music" + PATH_SEPARATOR_CHAR; break;
+      case 4: path = PATH_MUSIC; break;
+      }
+      path += filename;
+      path = find_case_insensitive_file_path(path);
+      mixMusic = Mix_LoadMUS(path.c_str());
+      if (mixMusic)
+      {
+         // PLOGI << "Loaded Music File: " << szFileName << " nVolume: " << nVolume << " to OutputTarget(0=table, 1=BG): " << static_cast<int>(m_outputTarget);
+         m_audioMusic = std::make_unique<PinAudioMusic>(mixMusic);
+         return true;
+      }
+   }
+   PLOGE << "Failed to stream music: " << filename << " SDL Error: " << SDL_GetError();
+   return false;
+}
+
 /**
  * (Static)
  * @brief Enumerates available audio playback devices and stores their details.
@@ -1537,7 +1474,7 @@ int PinSound::getChannel()
  * @note This function clears the provided vector before populating it with device information.
  * @note SDL must be properly initialized before calling this function.
  */ 
-void PinSound::EnumerateAudioDevices(vector<AudioDevice>& audioDevices)
+void PinAudio::EnumerateAudioDevices(vector<AudioDevice>& audioDevices)
 {
    if (!SDL_WasInit(SDL_INIT_AUDIO))
       if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {
@@ -1575,15 +1512,136 @@ void PinSound::EnumerateAudioDevices(vector<AudioDevice>& audioDevices)
    for (int i = 0; i < count; ++i) {
       AudioDevice audioDevice = {};
       audioDevice.id = pAudioList[i];
-      #ifdef __STANDALONE__
-      strcpy(audioDevice.name, SDL_GetAudioDeviceName(pAudioList[i]));
-      #else
-      strcpy_s(audioDevice.name, SDL_GetAudioDeviceName(pAudioList[i]));
-      #endif
+      audioDevice.name = SDL_GetAudioDeviceName(pAudioList[i]);
       SDL_AudioSpec spec;
       SDL_GetAudioDeviceFormat(pAudioList[i], &spec, nullptr);
       audioDevice.channels = spec.channels;
       SDL_CloseAudioDevice(pAudioList[i]);
       audioDevices.push_back(audioDevice);
    }
+}
+
+
+
+
+
+
+
+
+
+
+
+/**
+ * @brief Initializes an SDL audio stream for background music playback.
+ *
+ * This function sets up an audio stream with the specified frequency, channel count,
+ * and volume, then attempts to open and configure the audio device for playback. 
+ * If the stream is successfully initialized, the function resumes audio playback.
+ * If initialization fails, an error message is logged.
+ *
+ * @param frequency The audio sample rate (in Hz) to be used by the audio stream.
+ * @param channels The number of audio channels (e.g., 1 for mono, 2 for stereo).
+ * @param volume A floating-point value representing the desired volume. It is scaled 
+ *        by the current music volume setting of the player.
+ * @return bool Returns true if the audio stream was successfully initialized 
+ *         and started; false otherwise.
+ * 
+ * @note Used by VPinMAMEController and PUP. volume range 0-1 from both VPinMAME and PUP
+ */
+PinAudioStream::PinAudioStream(SDL_AudioStream* stream)
+   : m_pstream(stream)
+{
+}
+
+PinAudioStream::~PinAudioStream()
+{
+   SDL_DestroyAudioStream(m_pstream);
+}
+
+/**
+ * @brief Updates the audio stream with new data to be played.
+ * 
+ * This function is used to feed audio data into an active audio stream in the 
+ * SDL audio system. It passes the provided audio buffer and its length to the
+ * SDL audio stream, allowing for continuous playback of audio data.
+ *
+ * @param buffer A pointer to the audio data buffer, typically containing PCM audio samples.
+ * @param length The length of the buffer in bytes, indicating how much audio data is available to process.
+ * 
+ * @note The function assumes that the stream (m_pstream) has been properly initialized
+ * and that the audio data format is compatible with the stream's configuration.
+ * 
+ * @note called by VPinMAMEController and PUP
+ */
+void PinAudioStream::Update(void* buffer, DWORD length)
+{
+   if (m_pstream)
+      SDL_PutAudioStreamData(m_pstream, buffer, length);
+}
+
+/**
+ * @brief Adjusts the volume of the audio stream.
+ *
+ * This function sets the gain of the audio stream by adjusting it based on the
+ * provided volume and the current music volume from the global player settings.
+ * It ensures the stream's volume is updated only when the volume has changed.
+ *
+ * @param volume The desired volume level (range is expected to be from 0.0 to 1.0).
+ *               This value is multiplied by the global music volume setting (in percentage)
+ *               before being applied to the audio stream.
+ *
+ * @note The function only updates the stream's volume if the provided volume differs
+ *       from the current stream volume, avoiding unnecessary updates.
+ * 
+ * @note Called by PUP. up sends a value between 0 and 1.. matches sdl stream volume scale
+ */
+void PinAudioStream::SetVolume(const float volume)
+{
+   //PLOGI << "STREAM VOL";
+   m_volume = volume;
+   SDL_SetAudioStreamGain(m_pstream, volume * (g_pplayer ? dequantizeSignedPercent(g_pplayer->m_MusicVolume) : 1.f));
+}
+
+void PinAudioStream::UpdateVolume()
+{
+   SetVolume(m_volume);
+}
+
+
+
+
+
+
+
+
+PinAudioMusic::PinAudioMusic(Mix_Music* mixMusic)
+   : m_pMixMusic(mixMusic)
+{
+   Mix_HookMusicFinished(PinAudioMusic::MusicFinishedCallback);
+   Mix_PlayMusic(m_pMixMusic, 0);
+}
+
+PinAudioMusic::~PinAudioMusic()
+{
+   Mix_HookMusicFinished(nullptr);
+   Mix_HaltMusic();
+   Mix_FreeMusic(m_pMixMusic);
+}
+
+void PinAudioMusic::SetVolume(const float volume)
+{
+   m_volume = volume;
+   const int nVolume = static_cast<int>(volume * (g_pplayer ? dequantizeSignedPercent(g_pplayer->m_MusicVolume) : 1.f) * static_cast<float>(MIX_MAX_VOLUME));
+   Mix_VolumeMusic(nVolume);
+}
+
+void PinAudioMusic::UpdateVolume()
+{
+   SetVolume(m_volume);
+}
+
+void PinAudioMusic::MusicFinishedCallback()
+{
+   if (g_pplayer)
+      g_pplayer->m_musicFinished = true;
 }

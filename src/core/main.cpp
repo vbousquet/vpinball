@@ -1008,7 +1008,7 @@ public:
 
       if (m_listSnd) {
          vector<AudioDevice> allAudioDevices;
-         PinSound::EnumerateAudioDevices(allAudioDevices);
+         PinAudio::EnumerateAudioDevices(allAudioDevices);
          PLOGI << "Available sound devices:";
          for (size_t i = 0; i < allAudioDevices.size(); ++i) {
             AudioDevice audioDevice = allAudioDevices.at(i);

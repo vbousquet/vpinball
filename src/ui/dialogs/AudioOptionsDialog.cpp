@@ -41,12 +41,12 @@ BOOL AudioOptionsDialog::OnInitDialog()
    SendDlgItemMessage(IDC_SoundListBG, LB_RESETCONTENT, 0, 0);
 
    vector<AudioDevice> allAudioDevices;
-   PinSound::EnumerateAudioDevices(allAudioDevices);
+   PinAudio::EnumerateAudioDevices(allAudioDevices);
          for (size_t i = 0; i < allAudioDevices.size(); ++i) {
             AudioDevice audioDevice = allAudioDevices.at(i);
-            const size_t index = SendDlgItemMessage(IDC_SoundList, LB_ADDSTRING, 0, (size_t) audioDevice.name);
+            const size_t index = SendDlgItemMessage(IDC_SoundList, LB_ADDSTRING, 0, (size_t) audioDevice.name.c_str());
             SendDlgItemMessage(IDC_SoundList, LB_SETITEMDATA, index, (LPARAM)audioDevice.id);
-            const size_t indexbg = SendDlgItemMessage(IDC_SoundListBG, LB_ADDSTRING, 0, (size_t)audioDevice.name);
+            const size_t indexbg = SendDlgItemMessage(IDC_SoundListBG, LB_ADDSTRING, 0, (size_t)audioDevice.name.c_str());
             SendDlgItemMessage(IDC_SoundListBG, LB_SETITEMDATA, indexbg, (LPARAM)audioDevice.id);
          }
   

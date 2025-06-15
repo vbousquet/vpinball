@@ -160,6 +160,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    , m_backglassOutput("Visual Pinball - Backglass"s, live_table->m_settings, Settings::Backglass, "Backglass"s)
    , m_topperOutput("Visual Pinball - Topper"s, live_table->m_settings, Settings::Topper, "Topper"s)
    , m_resURIResolver(MsgPluginManager::GetInstance().GetMsgAPI(), VPXPluginAPIImpl::GetInstance().GetVPXEndPointId(), true, true, true, true)
+   , m_pinAudio(std::make_unique<PinAudio>(live_table->m_settings))
 {
    // For the time being, lots of access are made through the global singleton, so ensure we are unique, and define it as soon as needed
    assert(g_pplayer == nullptr);
@@ -1058,18 +1059,6 @@ Player::~Player()
       sound->Stop();
       sound->ReInitialize();
    }
-
-   // Stop all played musics, including ones streamed from plugins
-   if (m_audio)
-      m_audio->MusicPause();
-   delete m_audio;
-   m_audio = nullptr;
-   for (const auto& entry : m_externalAudioPlayers)
-   {
-      entry.second->MusicPause();
-      delete entry.second;
-   }
-   m_externalAudioPlayers.clear();
 
    // FIXME remove or at least move legacy ushock to a plugin
    ushock_output_shutdown();
@@ -2100,12 +2089,10 @@ void Player::FinishFrame()
    #endif
 
    // Detect & fire end of music events
-   if (IsPlaying() && m_audio && !m_audio->MusicActive())
+   if (IsPlaying() && m_musicFinished)
    {
-      delete m_audio;
-      m_audio = nullptr;
-      if (!IsEditorMode())
-         m_ptable->FireVoidEvent(DISPID_GameEvents_MusicDone);
+      m_musicFinished = false;
+      m_ptable->FireVoidEvent(DISPID_GameEvents_MusicDone);
    }
 
    // Pause after performing a simulation step
@@ -2526,8 +2513,9 @@ RenderTarget *Player::RenderAnciliaryWindow(VPXAnciliaryWindow window, RenderTar
 
 void Player::UpdateVolume()
 {
-   if (m_audio)
-      m_audio->UpdateVolume();
+   PinAudioMusic *music = g_pplayer ? g_pplayer->m_pinAudio->GetMusic() : nullptr;
+   if (music)
+      music->UpdateVolume();
    for (auto sound : m_ptable->m_vsound)
       sound->UpdateVolume();
    for (const auto& players : m_externalAudioPlayers)
@@ -2544,17 +2532,19 @@ void Player::OnAudioUpdated(const unsigned int msgId, void* userData, void* msgD
       if (msg.buffer != nullptr)
       {
          const int nChannels = (msg.type == CTLPI_AUDIO_SRC_BACKGLASS_MONO) ? 1 : 2;
-         PinSound* const pPinSound = new PinSound(me->m_ptable->m_settings); //!!??
-         pPinSound->StreamInit(static_cast<DWORD>(msg.sampleRate), nChannels, 1.f);
-         pPinSound->StreamUpdate(msg.buffer, msg.bufferSize);
-         me->m_externalAudioPlayers[msg.id.id] = pPinSound;
+         PinAudioStream *const stream = me->m_pinAudio->OpenAudioStream(static_cast<int>(msg.sampleRate), nChannels);
+         if (stream)
+         {
+            stream->Update(msg.buffer, msg.bufferSize);
+            me->m_externalAudioPlayers[msg.id.id] = std::unique_ptr<PinAudioStream>(stream);
+         }
       }
    }
    else
    {
       if (msg.buffer != nullptr)
       {
-         int pending = SDL_GetAudioStreamQueued(entry->second->m_pstream);
+         int pending = entry->second->GetQueued();
          if (pending >= 0 && static_cast<unsigned int>(pending) >= msg.bufferSize)
          {
             double delay = 1000.0 * msg.bufferSize / (msg.sampleRate * ((msg.type == CTLPI_AUDIO_SRC_BACKGLASS_MONO) ? 1 : 2));
@@ -2564,13 +2554,11 @@ void Player::OnAudioUpdated(const unsigned int msgId, void* userData, void* msgD
          else
          {
             // PLOGD << "Pending: " << pending << " queuing: " << msg.bufferSize;
-            entry->second->StreamUpdate(msg.buffer, msg.bufferSize);
+            entry->second->Update(msg.buffer, msg.bufferSize);
          }
       }
       else
       {
-         entry->second->MusicPause();
-         delete entry->second;
          me->m_externalAudioPlayers.erase(entry);
       }
    }
@@ -2580,8 +2568,9 @@ void Player::PauseMusic()
 {
    if (m_pauseMusicRefCount == 0)
    {
-      if (m_audio)
-         m_audio->MusicPause();
+      PinAudioMusic *music = g_pplayer ? g_pplayer->m_pinAudio->GetMusic() : nullptr;
+      if (music)
+         music->Pause();
    }
    m_pauseMusicRefCount++;
 }
@@ -2591,8 +2580,9 @@ void Player::UnpauseMusic()
    m_pauseMusicRefCount--;
    if (m_pauseMusicRefCount == 0)
    {
-      if (m_audio)
-         m_audio->MusicUnpause();
+      PinAudioMusic *music = g_pplayer ? g_pplayer->m_pinAudio->GetMusic() : nullptr;
+      if (music)
+         music->Unpause();
    }
    else if (m_pauseMusicRefCount < 0)
       m_pauseMusicRefCount = 0;
