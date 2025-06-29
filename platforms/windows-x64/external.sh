@@ -25,6 +25,7 @@ echo "  LIBDMDUTIL_SHA: ${LIBDMDUTIL_SHA}"
 echo "  LIBDOF_SHA: ${LIBDOF_SHA}"
 echo "  FFMPEG_SHA: ${FFMPEG_SHA}"
 echo "  LIBZIP_SHA: ${LIBZIP_SHA}"
+echo "  LIBSPATIALAUDIO_SHA: ${LIBSPATIALAUDIO_SHA}"
 echo ""
 
 mkdir -p "external/windows-x64/${BUILD_TYPE}"
@@ -409,6 +410,40 @@ if [ "${LIBZIP_EXPECTED_SHA}" != "${LIBZIP_FOUND_SHA}" ]; then
 fi
 
 #
+# build libspatialaudio
+#
+
+LIBSPATIALAUDIO_EXPECTED_SHA="${LIBSPATIALAUDIO_SHA}"
+LIBSPATIALAUDIO_FOUND_SHA="$([ -f libspatialaudio/cache.txt ] && cat libspatialaudio/cache.txt || echo "")"
+
+if [ "${LIBSPATIALAUDIO_EXPECTED_SHA}" != "${LIBSPATIALAUDIO_FOUND_SHA}" ]; then
+   echo "Building libspatialaudio. Expected: ${LIBSPATIALAUDIO_EXPECTED_SHA}, Found: ${LIBSPATIALAUDIO_FOUND_SHA}"
+
+   rm -rf libspatialaudio
+   mkdir libspatialaudio
+   cd libspatialaudio
+
+   curl -sL https://github.com/videolabs/libspatialaudio/archive/${LIBSPATIALAUDIO_SHA}.tar.gz -o libspatialaudio-${LIBSPATIALAUDIO_SHA}.tar.gz
+   tar xzf libspatialaudio-${LIBSPATIALAUDIO_SHA}.tar.gz
+   mv libspatialaudio-${LIBSPATIALAUDIO_SHA} libspatialaudio
+   cd libspatialaudio
+   #./platforms/win/x64/external.sh
+   cmake \
+      -G "Visual Studio 17 2022" \
+      -DPLATFORM=win \
+      -DARCH=x64 \
+      -DBUILD_SHARED=ON \
+      -DBUILD_STATIC=OFF \
+      -B build
+   cmake --build build --config ${BUILD_TYPE}
+   cd ..
+
+   echo "$LIBSPATIALAUDIO_EXPECTED_SHA" > cache.txt
+
+   cd ..
+fi
+
+#
 # copy libraries
 #
 
@@ -496,3 +531,7 @@ cp "${MSYS2_PATH}/mingw64/bin/libbz2-1.dll" ../../../third-party/runtime-libs/wi
 cp libzip/libzip/build/lib/libzip64.dll ../../../third-party/runtime-libs/windows-x64
 cp libzip/libzip/build/zipconf.h ../../../third-party/include
 cp libzip/libzip/lib/zip.h ../../../third-party/include
+
+cp -r libspatialaudio/libspatialaudio/include ../../../third-party/include/spatialaudio
+cp libspatialaudio/libspatialaudio/build/${BUILD_TYPE}/spatialaudio.lib ../../../third-party/build-libs/windows-x64
+cp libspatialaudio/libspatialaudio/build/${BUILD_TYPE}/spatialaudio.dll ../../../third-party/runtime-libs/windows-x64
