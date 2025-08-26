@@ -894,6 +894,12 @@
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/NotificationOverlay.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/PerfUI.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/PlumbOverlay.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/ui/live/ingameui/HomePage.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/ui/live/ingameui/InGameUIItem.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/ui/live/ingameui/InGameUIPage.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/ui/live/ingameui/NudgeSettingPage.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/ui/live/ingameui/PointOfViewSettingPage.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/ui/live/ingameui/TableRulesPage.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/win/PinTableMDI.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/worker.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/codeviewedit.cpp" />
@@ -1650,6 +1656,12 @@
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/NotificationOverlay.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/PerfUI.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/PlumbOverlay.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/ui/live/ingameui/HomePage.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/ui/live/ingameui/InGameUIItem.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/ui/live/ingameui/InGameUIPage.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/ui/live/ingameui/NudgeSettingPage.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/ui/live/ingameui/PointOfViewSettingPage.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/ui/live/ingameui/TableRulesPage.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/win/PinTableMDI.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/resource.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/worker.h" />

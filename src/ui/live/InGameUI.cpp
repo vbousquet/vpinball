@@ -14,6 +14,14 @@
 #include "plugins/VPXPlugin.h"
 #include "core/VPXPluginAPIImpl.h"
 
+#include "ingameui/HomePage.h"
+#include "ingameui/NudgeSettingPage.h"
+#include "ingameui/PointOfViewSettingPage.h"
+#include "ingameui/TableRulesPage.h"
+
+
+namespace VPX::InGameUI
+{
 
 InGameUI::InGameUI(LiveUI &liveUI)
    : m_liveUI(liveUI)
@@ -25,16 +33,55 @@ InGameUI::InGameUI(LiveUI &liveUI)
    m_live_table = m_player->m_ptable;
    m_pininput = &(m_player->m_pininput);
    m_renderer = m_player->m_renderer;
+
+   AddPage(std::make_unique<HomePage>());
+   AddPage(std::make_unique<TableRulesPage>());
+   AddPage(std::make_unique<PointOfViewSettingPage>());
+   AddPage(std::make_unique<NudgeSettingPage>());
 }
 
 InGameUI::~InGameUI()
 {
 }
 
+void InGameUI::AddPage(std::unique_ptr<InGameUIPage> page)
+{
+   m_pages[page->GetPath()] = std::move(page);
+}
+
+void InGameUI::Navigate(const string& path)
+{
+   assert(IsOpened());
+   if (m_activePage)
+   {
+      m_navigationHistory.push_back(m_activePage->GetPath());
+      m_activePage->Close();
+   }
+   m_activePage = m_pages[path].get();
+   if (m_activePage)
+      m_activePage->Open();
+   else
+      Close();
+}
+
+void InGameUI::NavigateBack()
+{
+   assert(IsOpened());
+   if (m_navigationHistory.empty())
+      Close();
+   else
+   {
+      string path = m_navigationHistory.back();
+      Navigate(path);
+      m_navigationHistory.pop_back();
+      m_navigationHistory.pop_back();
+   }
+}
+
+
 void InGameUI::Open()
 {
-   if (m_isOpened)
-      return;
+   assert(!IsOpened());
    m_isOpened = true;
    m_tweakPages.clear();
    if (!m_table->m_rules.empty())
@@ -62,16 +109,23 @@ void InGameUI::Open()
    m_activeTweakPageIndex = 0;
    m_activeTweakIndex = 0;
    UpdateTweakPage();
+
+   Navigate("homepage");
 }
 
 void InGameUI::Close()
 {
-   if (!m_isOpened)
-      return;
+   assert(IsOpened());
    m_isOpened = false;
    if (m_staticPrepassDisabled)
       m_renderer->DisableStaticPrePass(false);
+   if (m_playerPaused)
+      m_player->SetPlayState(true);
+   m_playerPaused = false;
    m_live_table->FireOptionEvent(3); // Tweak mode closed event
+
+   if (m_activePage)
+      m_activePage->Close();
 }
 
 void InGameUI::UpdateTweakPage()
@@ -166,6 +220,7 @@ void InGameUI::UpdateTweakPage()
 
 void InGameUI::HandleTweakInput()
 {
+   return;
    const uint32_t now = msec();
    static uint32_t lastHandle = now;
    const uint32_t sinceLastInputHandleMs = now - lastHandle;
@@ -778,7 +833,58 @@ void InGameUI::Update()
    if (!m_isOpened)
       return;
 
-   HandleTweakInput();
+   // Only pause player if balls are moving to keep attract mode if possible
+   if (!m_playerPaused)
+   {
+      bool ballMoving = false;
+      for (const auto &ball : m_player->m_vball)
+      {
+         if (ball->m_d.m_vel.LengthSquared() > 0.25f)
+         {
+            ballMoving = true;
+            break;
+         }
+      }
+      if (ballMoving)
+      {
+         m_player->SetPlayState(false);
+         m_playerPaused = true;
+      }
+   }
+
+   PinInput::InputState state = m_player->m_pininput.GetInputState();
+   // Enable keyboard shortcut if no control editing is in progress
+   // FIXME: we should just diable keybaord shortcut, not gamepad, VR controller,...
+   if (!ImGui::IsAnyItemActive())
+   {
+      if (state.IsKeyPressed(eLeftMagnaSave, m_prevInputState))
+         m_activePage->SelectPrevItem();
+      if (state.IsKeyPressed(eRightMagnaSave, m_prevInputState))
+         m_activePage->SelectNextItem();
+      if (state.IsKeyPressed(eLeftFlipperKey, m_prevInputState))
+         m_activePage->AdjustItem(-1, true);
+      else if (state.IsKeyDown(eLeftFlipperKey))
+         m_activePage->AdjustItem(-1, false);
+      if (state.IsKeyPressed(eRightFlipperKey, m_prevInputState))
+         m_activePage->AdjustItem(1, true);
+      else if (state.IsKeyDown(eRightFlipperKey))
+         m_activePage->AdjustItem(1, false);
+      if (state.IsKeyPressed(ePlungerKey, m_prevInputState))
+         m_activePage->ResetToDefaults();
+      if (state.IsKeyPressed(eAddCreditKey, m_prevInputState))
+         if (g_pvp->m_povEdit)
+            g_pvp->QuitPlayer(Player::CloseState::CS_CLOSE_APP);
+         else
+            m_activePage->ResetToInitialValues();
+      if (state.IsKeyPressed(eStartGameKey, m_prevInputState))
+         m_activePage->Save();
+      if (state.IsKeyReleased(eEscape, m_prevInputState))
+         Close(); // FIXME should a navigate back, up to InGameUI close, applied on key release as this is the way it is handle for the main splash (to be changed ?)
+   }
+   m_prevInputState = state;
+
+   m_activePage->Render();
+   return;
 
    ImGui::PushFont(m_liveUI.GetOverlayFont(), m_liveUI.GetOverlayFont()->LegacySize);
    PinTable *const table = m_live_table;
@@ -1028,3 +1134,5 @@ void InGameUI::Update()
    ImGui::End();
    ImGui::PopFont();
 }
+
+};

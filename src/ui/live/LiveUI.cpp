@@ -667,8 +667,8 @@ void LiveUI::NewFrame()
    ImGui::NewFrame();
 
    // Only enable keyboard navigation for main splash popup as it interfer with UI keyboard shortcuts
-   if (m_escSplashModal.IsOpened())
-      io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+   if (m_escSplashModal.IsOpened() || m_inGameUI.IsOpened())
+      io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
    else
       io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
 }
@@ -899,7 +899,8 @@ void LiveUI::HideUI()
 { 
    SetupImGuiStyle(1.0f);
    m_renderer->InitLayout();
-   m_inGameUI.Close();
+   if (m_inGameUI.IsOpened())
+      m_inGameUI.Close();
    m_editorUI.Close();
    m_table->m_settings.Save();
    g_pvp->m_settings.Save();

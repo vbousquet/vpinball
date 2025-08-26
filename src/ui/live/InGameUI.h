@@ -4,6 +4,13 @@
 
 class LiveUI;
 
+#include "ingameui/InGameUIPage.h"
+#include "unordered_dense.h"
+
+
+namespace VPX::InGameUI
+{
+
 class InGameUI final
 {
 public:
@@ -14,6 +21,10 @@ public:
    bool IsOpened() const { return m_isOpened; }
    void Update();
    void Close();
+
+   void AddPage(std::unique_ptr<InGameUIPage> page);
+   void Navigate(const string &path);
+   void NavigateBack();
 
 private:
    // UI Context
@@ -29,21 +40,6 @@ private:
 
    // State
    bool m_isOpened = false;
-   enum TweakType
-   {
-      TT_Int,
-      TT_Float,
-      TT_Set
-   };
-   struct TweakOption
-   {
-      TweakType type;
-      float min, max, step, def;
-      string name, unit;
-      vector<string> options;
-      TweakOption(TweakType _type, float _min, float _max, float _step, float _def, const string& _name, const string& _unit, std::initializer_list<string> _options): 
-         type(_type), min(_min), max(_max), step(_step), def(_def), name(_name), unit(_unit), options(_options) { }
-   };
    enum TweakPage { TP_Info, TP_Rules, TP_PointOfView, TP_VRPosition, TP_TableOption, TP_Plugin00 };
    enum BackdropSetting
    {
@@ -67,4 +63,11 @@ private:
    void HandleTweakInput();
    void UpdateTweakPage();
    PinInput::InputState m_prevInputState { 0 };
+   bool m_playerPaused = false;
+
+   ankerl::unordered_dense::map<string, std::unique_ptr<InGameUIPage>> m_pages;
+   vector<string> m_navigationHistory;
+   InGameUIPage* m_activePage = nullptr;
+};
+
 };

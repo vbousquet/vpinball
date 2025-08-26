@@ -242,6 +242,18 @@ set(VPX_SOURCES
    src/ui/live/PerfUI.h
    src/ui/live/PlumbOverlay.cpp
    src/ui/live/PlumbOverlay.h
+   src/ui/live/ingameui/HomePage.h
+   src/ui/live/ingameui/HomePage.cpp
+   src/ui/live/ingameui/InGameUIItem.h
+   src/ui/live/ingameui/InGameUIItem.cpp
+   src/ui/live/ingameui/InGameUIPage.h
+   src/ui/live/ingameui/InGameUIPage.cpp
+   src/ui/live/ingameui/NudgeSettingPage.h
+   src/ui/live/ingameui/NudgeSettingPage.cpp
+   src/ui/live/ingameui/PointOfViewSettingPage.h
+   src/ui/live/ingameui/PointOfViewSettingPage.cpp
+   src/ui/live/ingameui/TableRulesPage.h
+   src/ui/live/ingameui/TableRulesPage.cpp
 
    src/ui/win/PinTableMDI.cpp
    src/ui/win/PinTableMDI.h
