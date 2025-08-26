@@ -247,6 +247,8 @@ void Settings::Validate(const bool addDefaults)
    // Rendering section
 
    SettingFloat(Section::Player, "EmissionScale"s, 0.5f, 0.f, 1.f, ""s);
+   SettingBool(Section::Player, "OverrideTableEmissionScale"s, false, ""s);
+   SettingBool(Section::Player, "DynamicDayNight"s, false, ""s);
    SettingBool(Section::Player, "ForceAnisotropicFiltering"s, true, "Force anisotropic filtering for better rendering quality at the cost of a bit of performance"s);
    SettingBool(Section::Player, "ForceBloomOff"s, false, "Disable bloom for better performance"s);
 
@@ -420,6 +422,10 @@ void Settings::Validate(const bool addDefaults)
    // Sound section
 
    SettingInt(Settings::Player, "Sound3D"s, VPX::SoundConfigTypes::SNDCFG_SND3D2CH, VPX::SoundConfigTypes::SNDCFG_SND3D2CH, VPX::SoundConfigTypes::SNDCFG_SND3DSSF, ""s);
+   SettingBool(Settings::Player, "PlayMusic"s, true, ""s);
+   SettingBool(Settings::Player, "PlaySound"s, true, ""s);
+   SettingInt(Section::Player, "SoundVolume"s, 100, 0, 100, ""s);
+   SettingInt(Section::Player, "MusicVolume"s, 100, 0, 100, ""s);
 
 
    //////////////////////////////////////////////////////////////////////////
