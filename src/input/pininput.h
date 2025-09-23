@@ -14,6 +14,8 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gamepad.h>
 
+#include "InputAction.h"
+
 // Maximum number of joysticks
 #define PININ_JOYMXCNT 8
 
@@ -133,6 +135,7 @@ static constexpr int regkey_idc[eActionCount] = {
    IDC_TWEAK
 };
 
+
 // Open Pinball Device context (defined in the OPD implementation module)
 class OpenPinDevContext;
 
@@ -144,16 +147,68 @@ public:
    virtual void PlayRumble(const float lowFrequencySpeed, const float highFrequencySpeed, const int ms_duration) { }
 };
 
-class PinInput final
+class PinInput final : public InputEventManager
 {
 public:
    PinInput();
-   ~PinInput();
+   ~PinInput() override;
 
-   void Init();
-   void ReInit() { UnInit(); Init(); }
-   void UnInit();
+   void ReloadNudgeAndPlungerSettings();
 
+   InputAction* AddAction(std::unique_ptr<InputAction>&& action);
+   bool IsPressed(int actionId) const;
+
+   int GetLeftFlipperActionId() const { return m_leftFlipperActionId; }
+   int GetRightFlipperActionId() const { return m_rightFlipperActionId; }
+   int GetStagedLeftFlipperActionId() const { return m_stagedLeftFlipperActionId; }
+   int GetStagedRightFlipperActionId() const { return m_stagedRightFlipperActionId; }
+   int GetLeftNudgeActionId() const { return m_leftNudgeActionId; }
+   int GetRightNudgeActionId() const { return m_rightNudgeActionId; }
+   int GetCenterNudgeActionId() const { return m_centerNudgeActionId; }
+   int GetPlungerActionId() const { return m_plungerActionId; }
+   int GetStartActionId() const { return m_startActionId; }
+   int GetAddCreditActionId() const { return m_addCreditActionId; }
+   int GetAddCredit2ActionId() const { return m_addCredit2ActionId; }
+   int GetTiltActionId() const { return m_tiltActionId; }
+   int GetLeftMagnaActionId() const { return m_leftMagnaActionId; }
+   int GetRightMagnaActionId() const { return m_rightMagnaActionId; }
+   int GetExitGameActionId() const { return m_exitGameActionId; }
+   int GetLockbarActionId() const { return m_lockbarActionId; }
+
+   void Register(DigitalMapping* mapping) override;
+   void Unregister(DigitalMapping* mapping) override;
+   void OnInputActionStateChanged(InputAction* action) override;
+   void RegisterOnUpdate(InputAction* action) override;
+   void UnregisterOnUpdate(InputAction* action) override;
+
+private:
+   vector<InputAction*> m_onUpdateActions;
+   vector<std::unique_ptr<InputAction>> m_actions;
+   ankerl::unordered_dense::map<SDL_Scancode, vector<DigitalMapping*>> m_keyMappings;
+   int m_leftFlipperActionId;
+   int m_rightFlipperActionId;
+   int m_stagedLeftFlipperActionId;
+   int m_stagedRightFlipperActionId;
+   int m_leftNudgeActionId;
+   int m_rightNudgeActionId;
+   int m_centerNudgeActionId;
+   int m_plungerActionId;
+   int m_startActionId;
+   int m_addCreditActionId;
+   int m_addCredit2ActionId;
+   int m_tiltActionId;
+   int m_leftMagnaActionId;
+   int m_rightMagnaActionId;
+   int m_exitGameActionId;
+   int m_lockbarActionId;
+
+   unsigned int m_volumeNotificationId = 0;
+
+
+
+
+
+public:
    enum InputAPI
    {
       PI_DIRECTINPUT, PI_XINPUT, PI_SDL
@@ -358,8 +413,6 @@ private:
 
    bool m_override_default_buttons = false;
    bool m_disable_esc = false;
-
-   uint32_t m_nextKeyPressedTime = 0;
 
    int m_rumbleMode = 0; // 0=Off, 1=Table only, 2=Generic only, 3=Table with generic as fallback
 

@@ -40,7 +40,7 @@ NudgeSettingsPage::NudgeSettingsPage()
    {
       g_pvp->m_settings.SaveValue(Settings::Player, "PBWRotationCB"s, accOrientation != 0);
       g_pvp->m_settings.SaveValue(Settings::Player, "PBWRotationValue"s, accOrientation);
-      m_player->m_pininput.ReInit();
+      m_player->m_pininput.ReloadNudgeAndPlungerSettings();
    }
    bool accFaceUp = m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "PBWNormalMount"s, true);
    bool accFilter = m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "EnableNudgeFilter"s, false); */

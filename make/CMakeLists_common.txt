@@ -46,6 +46,8 @@ set(VPX_SOURCES
    src/core/VPXPluginAPIImpl.h
    src/core/VPXPluginAPIImpl.cpp
 
+   src/input/InputAction.h
+   src/input/InputAction.cpp
    src/input/pininput.h
    src/input/pininput.cpp
    src/input/ScanCodes.h

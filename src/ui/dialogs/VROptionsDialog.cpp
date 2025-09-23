@@ -31,7 +31,7 @@ static SDL_Scancode GetNextKey()
 class KeyWindowStruct
 {
 public:
-   PinInput pi;
+   std::unique_ptr<PinInput> pi;
    HWND hwndKeyControl; // window to get the key assignment
    UINT_PTR m_timerid; // timer id for our key assignment
 };
@@ -267,8 +267,8 @@ BOOL VROptionsDialog::OnInitDialog()
    //
 
    KeyWindowStruct* const pksw = new KeyWindowStruct();
-   pksw->pi.SetFocusWindow(GetHwnd());
-   pksw->pi.Init();
+   pksw->pi = std::make_unique<PinInput>();
+   pksw->pi->SetFocusWindow(GetHwnd());
    pksw->m_timerid = 0;
    SetWindowLongPtr(GWLP_USERDATA, (size_t)pksw);
 
@@ -446,7 +446,7 @@ void VROptionsDialog::OnDestroy()
       KillTimer(pksw->m_timerid);
       pksw->m_timerid = 0;
    }
-   pksw->pi.UnInit();
+   pksw->pi = nullptr;
    CDialog::OnDestroy();
 }
 

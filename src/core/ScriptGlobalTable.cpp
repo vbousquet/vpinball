@@ -95,7 +95,7 @@ STDMETHODIMP ScriptGlobalTable::NudgeSetCalibration(int XMax, int YMax, int XGai
 		g_pvp->m_settings.DeleteValue(Settings::Player, "TiltSensitivity"s);
 
 	if (g_pplayer)
-		g_pplayer->m_pininput.ReInit();
+      g_pplayer->m_pininput.ReloadNudgeAndPlungerSettings();
 
 	return S_OK;
 }
@@ -209,97 +209,97 @@ STDMETHODIMP ScriptGlobalTable::get_Name(BSTR *pVal)
 
 STDMETHODIMP ScriptGlobalTable::get_LeftFlipperKey(LONG *pVal)
 {
-   *pVal = GetDirectInputKeyFromSDLScancode(g_pplayer->m_actionToSDLScanCodeMapping[eLeftFlipperKey]);
+   *pVal = 0x10000 | g_pplayer->m_pininput.GetLeftFlipperActionId();
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_RightFlipperKey(LONG *pVal)
 {
-   *pVal = GetDirectInputKeyFromSDLScancode(g_pplayer->m_actionToSDLScanCodeMapping[eRightFlipperKey]);
+   *pVal = 0x10000 | g_pplayer->m_pininput.GetRightFlipperActionId();
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_StagedLeftFlipperKey(LONG *pVal)
 {
-   *pVal = GetDirectInputKeyFromSDLScancode(g_pplayer->m_actionToSDLScanCodeMapping[eStagedLeftFlipperKey]);
+   *pVal = 0x10000 | g_pplayer->m_pininput.GetStagedLeftFlipperActionId();
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_StagedRightFlipperKey(LONG *pVal)
 {
-   *pVal = GetDirectInputKeyFromSDLScancode(g_pplayer->m_actionToSDLScanCodeMapping[eStagedRightFlipperKey]);
+   *pVal = 0x10000 | g_pplayer->m_pininput.GetStagedRightFlipperActionId();
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_LeftTiltKey(LONG *pVal)
 {
-   *pVal = GetDirectInputKeyFromSDLScancode(g_pplayer->m_actionToSDLScanCodeMapping[eLeftTiltKey]);
+   *pVal = 0x10000 | g_pplayer->m_pininput.GetLeftNudgeActionId();
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_RightTiltKey(LONG *pVal)
 {
-   *pVal = GetDirectInputKeyFromSDLScancode(g_pplayer->m_actionToSDLScanCodeMapping[eRightTiltKey]);
+   *pVal = 0x10000 | g_pplayer->m_pininput.GetRightNudgeActionId();
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_CenterTiltKey(LONG *pVal)
 {
-   *pVal = GetDirectInputKeyFromSDLScancode(g_pplayer->m_actionToSDLScanCodeMapping[eCenterTiltKey]);
+   *pVal = 0x10000 | g_pplayer->m_pininput.GetCenterNudgeActionId();
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_PlungerKey(LONG *pVal)
 {
-   *pVal = GetDirectInputKeyFromSDLScancode(g_pplayer->m_actionToSDLScanCodeMapping[ePlungerKey]);
+   *pVal = 0x10000 | g_pplayer->m_pininput.GetPlungerActionId();
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_StartGameKey(LONG *pVal)
 {
-   *pVal = GetDirectInputKeyFromSDLScancode(g_pplayer->m_actionToSDLScanCodeMapping[eStartGameKey]);
+   *pVal = 0x10000 | g_pplayer->m_pininput.GetStartActionId();
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_AddCreditKey(LONG *pVal)
 {
-   *pVal = GetDirectInputKeyFromSDLScancode(g_pplayer->m_actionToSDLScanCodeMapping[eAddCreditKey]);
+   *pVal = 0x10000 | g_pplayer->m_pininput.GetAddCreditActionId();
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_AddCreditKey2(LONG *pVal)
 {
-   *pVal = GetDirectInputKeyFromSDLScancode(g_pplayer->m_actionToSDLScanCodeMapping[eAddCreditKey2]);
+   *pVal = 0x10000 | g_pplayer->m_pininput.GetAddCredit2ActionId();
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_MechanicalTilt(LONG *pVal)
 {
-   *pVal = GetDirectInputKeyFromSDLScancode(g_pplayer->m_actionToSDLScanCodeMapping[eMechanicalTilt]);
+   *pVal = 0x10000 | g_pplayer->m_pininput.GetTiltActionId();
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_LeftMagnaSave(LONG *pVal)
 {
-   *pVal = GetDirectInputKeyFromSDLScancode(g_pplayer->m_actionToSDLScanCodeMapping[eLeftMagnaSave]);
+   *pVal = 0x10000 | g_pplayer->m_pininput.GetLeftMagnaActionId();
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_RightMagnaSave(LONG *pVal)
 {
-   *pVal = GetDirectInputKeyFromSDLScancode(g_pplayer->m_actionToSDLScanCodeMapping[eRightMagnaSave]);
+   *pVal = 0x10000 | g_pplayer->m_pininput.GetRightMagnaActionId();
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_ExitGame(LONG *pVal)
 {
-   *pVal = GetDirectInputKeyFromSDLScancode(g_pplayer->m_actionToSDLScanCodeMapping[eExitGame]);
+   *pVal = 0x10000 | g_pplayer->m_pininput.GetExitGameActionId();
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_LockbarKey(LONG *pVal)
 {
-   *pVal = GetDirectInputKeyFromSDLScancode(g_pplayer->m_actionToSDLScanCodeMapping[eLockbarKey]);
+   *pVal = 0x10000 | g_pplayer->m_pininput.GetLockbarActionId();
    return S_OK;
 }
 

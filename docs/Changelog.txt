@@ -40,6 +40,16 @@ FEATURES:
   . it uses multiple CPU cores to separately process the rendering from the game simulation, allowing for lower input/physics/controller latency, better nudging, more stable gameplay emulation, as well as a performance boost
   . it supports rendering to multiple outputs (windows)
 
+- input system was rewritten with the following changes:
+  . selecting between an input API is no more needed, SDL is now used on all platforms (on Windows it supports simultaneously all XInput & DirectInput devices),
+  . the user interface to define inputs has been moved to the in-game user interface
+  . it is now possible to use a combination of multiple inputs for an action (for example pressing 2 buttons simultaneously)
+  . it is now possible to define multiple bindings per action, for example a keyboard key as well as a joystick button
+  . a few hardware devices are automatically detected, whent his happens, the user is proposed to apply the corresponding default mapping
+  . the new system supports more keyboard layouts like japanese layouts, ...
+  . all key events are broadcasted to the table's script, separately from the named action event (left flipper, right magna save, ...)
+  This change requires users that did not uses the default input binding to define their custom input setting in the new UI
+
 - add a new 'ScoreView' which renders the segment displays or DMD to a dedicated window (BGFX variant only). The scoreview uses a layout defined in a 'scv' file placed along the table file
   matching its name, or by automatically selecting one of the default layouts matching the available displays at runtime. Default layout files in the asset folder show the syntax used to
   define the layout.

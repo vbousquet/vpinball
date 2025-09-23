@@ -319,7 +319,7 @@ void onPlayerUpdatePhysics(const unsigned int eventId, void* userData, void* eve
    {
       // LOGI(">>> New InputState %08x", lastState.timestamp);
       lastPlayerAppliedStateTimestamp = lastState.timestamp;
-      actionState = lastState.keyState & ~(1 << VPXACTION_Debugger);
+      actionState = lastState.keyState;
       vpxApi->SetInputState(actionState, lastState.nudgeX, lastState.nudgeY, lastState.plunger);
    }
 }

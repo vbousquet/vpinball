@@ -812,8 +812,6 @@
     <ClCompile Include="$(SolutionDir)/../../src/core/ieditable.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/core/editablereg.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/core/iselect.cpp" />
-    <ClCompile Include="$(SolutionDir)/../../src/input/pininput.cpp" />
-    <ClCompile Include="$(SolutionDir)/../../src/input/OpenPinDevHandler.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/core/pinundo.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/core/vpinball.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/core/VPApp.cpp" />
@@ -825,6 +823,9 @@
     <ClCompile Include="$(SolutionDir)/../../src/core/ResURIResolver.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="$(SolutionDir)/../../src/input/InputAction.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/input/pininput.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/input/OpenPinDevHandler.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/math/math.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/math/matrix.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/renderer/Backglass.cpp" />
@@ -1527,6 +1528,7 @@
     <ClInclude Include="$(SolutionDir)/../../src/core/Settings.h" />
     <ClInclude Include="$(SolutionDir)/../../src/core/TableDB.h" />
     <ClInclude Include="$(SolutionDir)/../../src/core/VPXPluginAPIImpl.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/input/InputAction.h" />
     <ClInclude Include="$(SolutionDir)/../../src/input/pininput.h" />
     <ClInclude Include="$(SolutionDir)/../../src/input/DirectInputJoystickHandler.h" />
     <ClInclude Include="$(SolutionDir)/../../src/input/DirectInputMouseHandler.h" />

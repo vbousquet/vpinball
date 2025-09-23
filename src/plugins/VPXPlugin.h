@@ -209,34 +209,31 @@ typedef struct VPXViewSetupDef
 
 typedef enum
 {
-   VPXACTION_LeftFlipperKey,
-   VPXACTION_RightFlipperKey,
-   VPXACTION_StagedLeftFlipperKey,
-   VPXACTION_StagedRightFlipperKey,
-   VPXACTION_LeftTiltKey,
-   VPXACTION_RightTiltKey,
-   VPXACTION_CenterTiltKey,
-   VPXACTION_PlungerKey,
-   VPXACTION_FrameCount,
-   VPXACTION_DBGBalls,
-   VPXACTION_Debugger,
-   VPXACTION_AddCreditKey,
-   VPXACTION_AddCreditKey2,
-   VPXACTION_StartGameKey,
-   VPXACTION_MechanicalTilt,
-   VPXACTION_RightMagnaSave,
+   VPXACTION_LeftFlipper = 0,
+   VPXACTION_RightFlipper,
+   VPXACTION_StagedLeftFlipper,
+   VPXACTION_StagedRightFlipper,
+   VPXACTION_LeftNudge,
+   VPXACTION_RightNudge,
+   VPXACTION_CenterNudge,
+   VPXACTION_Tilt,
+   VPXACTION_Plunger,
+   VPXACTION_AddCredit,
+   VPXACTION_AddCredit2,
+   VPXACTION_StartGame,
    VPXACTION_LeftMagnaSave,
-   VPXACTION_ExitGame,
-   VPXACTION_VolumeUp,
-   VPXACTION_VolumeDown,
-   VPXACTION_LockbarKey,
-   VPXACTION_Enable3D,
-   VPXACTION_TableRecenter,
-   VPXACTION_TableUp,
-   VPXACTION_TableDown,
-   VPXACTION_Escape,
+   VPXACTION_RightMagnaSave,
+   VPXACTION_Lockbar,
    VPXACTION_Pause,
-   VPXACTION_Tweak,
+   VPXACTION_PerfOverlay,
+   VPXACTION_ExitInteractive,
+   VPXACTION_ExitGame,
+   VPXACTION_InGameUI,
+   VPXACTION_VolumeDown,
+   VPXACTION_VolumeUp,
+   VPXACTION_VRRecenter,
+   VPXACTION_VRUp,
+   VPXACTION_VRDown,
 } VPXAction;
 
 typedef struct VPXActionEvent
@@ -265,6 +262,7 @@ typedef struct VPXPluginAPI
    // Input management
    void(MSGPIAPI* GetInputState)(uint64_t* keyState, float* nudgeX, float* nudgeY, float* plunger);
    void(MSGPIAPI* SetInputState)(const uint64_t keyState, const float nudgeX, const float nudgeY, const float plunger);
+   //void(MSGPIAPI* SetInputMask)(uint64_t* keyState, bool enableNudge, bool enablePlunger); // Allow to mask out some actions to avoid local processing
 
    // Rendering
    

@@ -762,6 +762,9 @@
     <ClCompile Include="$(SolutionDir)/../../src/physics/AsyncDynamicQuadTree.cpp">
       <Filter>physics</Filter>
     </ClCompile>
+    <ClCompile Include="$(SolutionDir)/../../src/input/InputAction.cpp">
+      <Filter>input</Filter>
+    </ClCompile>
     <ClCompile Include="$(SolutionDir)/../../src/input/pininput.cpp">
       <Filter>input</Filter>
     </ClCompile>
@@ -1933,6 +1936,9 @@
     </ClInclude>
     <ClInclude Include="$(SolutionDir)/../../src/physics/AsyncDynamicQuadTree.h">
       <Filter>physics</Filter>
+    </ClInclude>
+    <ClInclude Include="$(SolutionDir)/../../src/input/InputAction.h">
+      <Filter>input</Filter>
     </ClInclude>
     <ClInclude Include="$(SolutionDir)/../../src/input/pininput.h">
       <Filter>input</Filter>

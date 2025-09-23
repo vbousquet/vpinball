@@ -3,6 +3,7 @@
 #include "core/stdafx.h"
 
 #include <SDL3/SDL_main.h>
+#include "imgui/imgui_impl_sdl3.h"
 
 #ifndef __STANDALONE__
 #include "BAM/BAMView.h"
@@ -341,49 +342,6 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    #ifdef _WIN32
       m_pininput.SetFocusWindow(m_playfieldWnd->GetNativeHWND());
    #endif
-   m_pininput.Init();
-
-#ifndef __STANDALONE__
-   const unsigned int lflip = GetWin32VirtualKeyFromSDLScancode(m_actionToSDLScanCodeMapping[eLeftFlipperKey]);
-   const unsigned int rflip = GetWin32VirtualKeyFromSDLScancode(m_actionToSDLScanCodeMapping[eRightFlipperKey]);
-   if (((GetAsyncKeyState(VK_LSHIFT) & 0x8000) && (GetAsyncKeyState(VK_RSHIFT) & 0x8000))
-      || ((lflip != ~0u) && (rflip != ~0u) && (GetAsyncKeyState(lflip) & 0x8000) && (GetAsyncKeyState(rflip) & 0x8000)))
-   {
-      m_ptable->m_tblMirrorEnabled = true;
-   }
-   else
-#endif
-      m_ptable->m_tblMirrorEnabled = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "mirror"s, false);
-   if (m_ptable->m_tblMirrorEnabled)
-   {
-      m_audioPlayer->SetMirrored(true);
-      int rotation = (int)(m_ptable->mViewSetups[m_ptable->m_BG_current_set].GetRotation(m_playfieldWnd->GetWidth(), m_playfieldWnd->GetHeight())) / 90;
-      m_renderer->GetMVP().SetFlip(rotation == 0 || rotation == 2 ? ModelViewProj::FLIPX : ModelViewProj::FLIPY);
-   }
-
-#ifndef __STANDALONE__
-   // if left flipper or shift hold during load, then swap DT/FS view (for quick testing)
-   if (m_ptable->m_BG_current_set != BG_FSS &&
-       !m_ptable->m_tblMirrorEnabled &&
-       ((GetAsyncKeyState(VK_LSHIFT) & 0x8000)
-       || ((lflip != ~0u) && (GetAsyncKeyState(lflip) & 0x8000))))
-   {
-      switch (m_ptable->m_BG_current_set)
-      {
-      case BG_DESKTOP: m_ptable->m_BG_override = BG_FSS; break;
-      case BG_FSS: m_ptable->m_BG_override = BG_DESKTOP; break;
-      default: break;
-      }
-      m_ptable->UpdateCurrentBGSet();
-   }
-#endif
-
-   // Initialize default state
-   RenderState state;
-   state.SetRenderState(RenderState::CULLMODE, m_ptable->m_tblMirrorEnabled ? RenderState::CULL_CW : RenderState::CULL_CCW);
-   m_renderer->m_renderDevice->CopyRenderStates(false, state);
-   m_renderer->m_renderDevice->SetDefaultRenderState();
-   m_renderer->InitLayout();
 
    Ball::ResetBallIDCounter();
 
@@ -466,6 +424,40 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    wintimer_init();
    m_liveUI = new LiveUI(m_renderer->m_renderDevice);
    m_liveUI->m_ballControl.LoadSettings(m_ptable->m_settings);
+
+#ifndef __STANDALONE__
+   // Force a keyboard reset as the SDL event message loop is only started when using the player, missing pressed key events before start, also give show & focus playfield window to actually receive the events
+   m_playfieldWnd->Show();
+   SDL_ResetKeyboard();
+   ProcessOSMessages();
+   m_playfieldWnd->Show(false);
+   PLOGD << "LeftFlip: " << m_pininput.IsPressed(m_pininput.GetLeftFlipperActionId());
+   PLOGD << "RightFlip: " << m_pininput.IsPressed(m_pininput.GetRightFlipperActionId());
+   if (m_pininput.IsPressed(m_pininput.GetLeftFlipperActionId()) && m_pininput.IsPressed(m_pininput.GetRightFlipperActionId()))
+      m_ptable->m_tblMirrorEnabled = true;
+   else
+#endif
+      m_ptable->m_tblMirrorEnabled = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "mirror"s, false);
+   if (m_ptable->m_tblMirrorEnabled)
+   {
+      m_audioPlayer->SetMirrored(true);
+      int rotation = (int)(m_ptable->mViewSetups[m_ptable->m_BG_current_set].GetRotation(m_playfieldWnd->GetWidth(), m_playfieldWnd->GetHeight())) / 90;
+      m_renderer->GetMVP().SetFlip(rotation == 0 || rotation == 2 ? ModelViewProj::FLIPX : ModelViewProj::FLIPY);
+   }
+
+#ifndef __STANDALONE__
+   // if left flipper or shift hold during load, then swap DT/FS view (for quick testing)
+   if (m_ptable->m_BG_current_set != BG_FSS && !m_ptable->m_tblMirrorEnabled && m_pininput.IsPressed(m_pininput.GetLeftFlipperActionId()))
+   {
+      switch (m_ptable->m_BG_current_set)
+      {
+      case BG_DESKTOP: m_ptable->m_BG_override = BG_FSS; break;
+      case BG_FSS: m_ptable->m_BG_override = BG_DESKTOP; break;
+      default: break;
+      }
+      m_ptable->UpdateCurrentBGSet();
+   }
+#endif
 
    m_progressDialog.SetProgress("Loading Textures..."s, 50);
 
@@ -613,6 +605,11 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    m_progressDialog.SetProgress("Initializing Renderer..."s, 60);
 
    // Setup rendering and timers
+   RenderState state;
+   state.SetRenderState(RenderState::CULLMODE, m_ptable->m_tblMirrorEnabled ? RenderState::CULL_CW : RenderState::CULL_CCW);
+   m_renderer->m_renderDevice->CopyRenderStates(false, state);
+   m_renderer->m_renderDevice->SetDefaultRenderState();
+   m_renderer->InitLayout();
    for (RenderProbe *probe : m_ptable->m_vrenderprobe)
       probe->RenderSetup(m_renderer);
    for (auto editable : m_ptable->m_vedit)
@@ -919,7 +916,6 @@ Player::~Player()
 
    delete m_liveUI;
    m_liveUI = nullptr;
-   m_pininput.UnInit();
    delete m_physics;
    m_physics = nullptr;
 
@@ -1506,12 +1502,12 @@ void Player::LockForegroundWindow(const bool enable)
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-void Player::GameLoop(std::function<void()> ProcessOSMessages)
+void Player::GameLoop()
 {
    // Stereo must be run unthrottled to let OpenVR set the frame pace according to the head set
    assert(!(m_renderer->m_stereo3D == STEREO_VR && (m_videoSyncMode != VideoSyncMode::VSM_NONE || m_maxFramerate < 1000.f)));
 
-   auto sync = [this, ProcessOSMessages]()
+   auto sync = [this]()
    {
       // Controller sync
       #ifdef MSVC_CONCURRENCY_VIEWER
@@ -1556,6 +1552,124 @@ void Player::GameLoop(std::function<void()> ProcessOSMessages)
       else
          GPUQueueStuffingGameLoop(sync);
    #endif
+}
+
+void Player::ProcessOSMessages()
+{
+   const uint64_t startTick = usec();
+   SDL_Event e;
+   bool isPFWnd = true;
+   static Vertex2D dragStart;
+   static int dragging = 0;
+   while (SDL_PollEvent(&e) != 0)
+   {
+      switch (e.type)
+      {
+      case SDL_EVENT_QUIT: g_pplayer->SetCloseState(Player::CloseState::CS_STOP_PLAY); break;
+      case SDL_EVENT_WINDOW_FOCUS_GAINED:
+      case SDL_EVENT_WINDOW_FOCUS_LOST:
+         isPFWnd = SDL_GetWindowFromID(e.window.windowID) == g_pplayer->m_playfieldWnd->GetCore();
+         g_pplayer->OnFocusChanged();
+         break;
+      case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+         isPFWnd = SDL_GetWindowFromID(e.window.windowID) == m_playfieldWnd->GetCore();
+         SetCloseState(Player::CloseState::CS_STOP_PLAY);
+         break;
+      case SDL_EVENT_KEY_UP:
+      case SDL_EVENT_KEY_DOWN:
+         isPFWnd = SDL_GetWindowFromID(e.key.windowID) == m_playfieldWnd->GetCore();
+         ShowMouseCursor(false);
+         break;
+      case SDL_EVENT_TEXT_INPUT: isPFWnd = SDL_GetWindowFromID(e.text.windowID) == m_playfieldWnd->GetCore(); break;
+      case SDL_EVENT_MOUSE_WHEEL: isPFWnd = SDL_GetWindowFromID(e.wheel.windowID) == m_playfieldWnd->GetCore(); break;
+      case SDL_EVENT_MOUSE_BUTTON_DOWN:
+      case SDL_EVENT_MOUSE_BUTTON_UP:
+         isPFWnd = SDL_GetWindowFromID(e.button.windowID) == g_pplayer->m_playfieldWnd->GetCore();
+         if (!isPFWnd)
+         {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP)
+               dragging = 0;
+            else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && dragging == 0)
+               dragging = 1;
+         }
+         break;
+      case SDL_EVENT_MOUSE_MOTION:
+         isPFWnd = SDL_GetWindowFromID(e.motion.windowID) == m_playfieldWnd->GetCore();
+         if (isPFWnd)
+         {
+            // We scale motion data since SDL expects DPI scaled points coordinates on Apple device, while it uses pixel coordinates on other devices (see SDL_WINDOWS_DPI_SCALING)
+            // For the time being, VPX always uses pixel coordinates, using setup obtained at window creation time.
+            e.motion.x *= SDL_GetWindowPixelDensity(m_playfieldWnd->GetCore());
+            e.motion.y *= SDL_GetWindowPixelDensity(m_playfieldWnd->GetCore());
+            static float m_lastcursorx = FLT_MAX, m_lastcursory = FLT_MAX;
+            if (m_lastcursorx != e.motion.x || m_lastcursory != e.motion.y)
+            {
+               m_lastcursorx = e.motion.x;
+               m_lastcursory = e.motion.y;
+               ShowMouseCursor(true);
+            }
+         }
+         else if (dragging)
+         {
+            // Handle dragging of auxiliary windows
+            SDL_Window *const sdlWnd = SDL_GetWindowFromID(e.motion.windowID);
+            std::vector<VPX::Window *> windows = {
+               m_scoreviewOutput.GetWindow(),
+               m_backglassOutput.GetWindow(),
+               m_topperOutput.GetWindow(),
+            };
+            for (VPX::Window *wnd : windows)
+            {
+               if (wnd && sdlWnd == wnd->GetCore())
+               {
+                  int x, y;
+                  wnd->GetPos(x, y);
+                  Vertex2D click(x + e.motion.x, y + e.motion.y);
+                  if (dragging > 1)
+                     wnd->SetPos(static_cast<int>(x + click.x - dragStart.x), static_cast<int>(y + click.y - dragStart.y));
+                  dragStart = click;
+                  dragging = 2;
+                  break;
+               }
+            }
+         }
+         break;
+      }
+
+      if (isPFWnd)
+      {
+         if (e.type == SDL_EVENT_MOUSE_MOTION)
+         {
+            SDL_Event rotatedEvent = e;
+            switch (g_pplayer->m_liveUI->GetUIOrientation())
+            {
+            case 0: break;
+            case 1:
+               rotatedEvent.motion.x = e.motion.y;
+               rotatedEvent.motion.y = ImGui::GetIO().DisplaySize.y - e.motion.x;
+               break;
+            case 2:
+               rotatedEvent.motion.x = e.motion.x;
+               rotatedEvent.motion.y = ImGui::GetIO().DisplaySize.y - e.motion.y;
+               break;
+            case 3:
+               rotatedEvent.motion.x = ImGui::GetIO().DisplaySize.x - e.motion.y;
+               rotatedEvent.motion.y = e.motion.x;
+               break;
+            default: assert(false); return;
+            }
+            ImGui_ImplSDL3_ProcessEvent(&rotatedEvent);
+         }
+         else
+            ImGui_ImplSDL3_ProcessEvent(&e);
+      }
+
+      m_pininput.HandleSDLEvent(e);
+
+      // Limit to 1ms of OS message processing per call
+      if ((usec() - startTick) > 1000ull)
+         break;
+   }
 }
 
 void Player::MultithreadedGameLoop(const std::function<void()>& sync)

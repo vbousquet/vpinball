@@ -26,7 +26,7 @@ static SDL_Scancode GetNextKey()
 class KeyWindowStruct
 {
 public:
-    PinInput pi;
+    std::unique_ptr<PinInput> pi;
     HWND hwndKeyControl; // window to get the key assignment
     UINT_PTR m_timerid; // timer id for our key assignment
 };
@@ -283,8 +283,8 @@ BOOL KeysConfigDialog::OnInitDialog()
     //
 
     KeyWindowStruct * const pksw = new KeyWindowStruct();
-    pksw->pi.SetFocusWindow(GetHwnd());
-    pksw->pi.Init();
+    pksw->pi = std::make_unique<PinInput>();
+    pksw->pi->SetFocusWindow(GetHwnd());
     pksw->m_timerid = 0;
     SetWindowLongPtr(GWLP_USERDATA, (size_t)pksw);
 
@@ -419,10 +419,10 @@ BOOL KeysConfigDialog::OnCommand(WPARAM wParam, LPARAM lParam)
    case IDC_DEVICES_BUTTON:
    {
       KeyWindowStruct *const pksw = (KeyWindowStruct *)GetWindowLongPtr(GWLP_USERDATA);
-      if (pksw->pi.GetDirectInputJoystickHandler() != nullptr)
+      if (pksw->pi->GetDirectInputJoystickHandler() != nullptr)
       {
          CRect pos = GetWindowRect();
-         InputDeviceDialog *const deviceConfigDlg = new InputDeviceDialog(&pos, &pksw->pi);
+         InputDeviceDialog *const deviceConfigDlg = new InputDeviceDialog(&pos, pksw->pi.get());
          deviceConfigDlg->DoModal();
          delete deviceConfigDlg;
       }
@@ -471,7 +471,8 @@ BOOL KeysConfigDialog::OnCommand(WPARAM wParam, LPARAM lParam)
        GetDlgItem(IDC_COMBO_RUMBLE).EnableWindow(inputApi > 0); // No rumble for DirectInput
        GetDlgItem(IDC_DEVICES_BUTTON).EnableWindow(inputApi == 0); // Manage device is only available for DirectInput
        KeyWindowStruct *const pksw = (KeyWindowStruct *)GetWindowLongPtr(GWLP_USERDATA);
-       pksw->pi.ReInit(); // Reinit on API change to have access to the underlying controllers
+       pksw->pi = std::make_unique<PinInput>(); // Reinit on API change to have access to the underlying controllers
+       pksw->pi->SetFocusWindow(GetHwnd());
     }
 
     return TRUE;
@@ -653,7 +654,7 @@ void KeysConfigDialog::OnDestroy()
         KillTimer(pksw->m_timerid);
         pksw->m_timerid = 0;
     }
-    pksw->pi.UnInit();
+    pksw->pi = nullptr;
     CDialog::OnDestroy();
 }
 
