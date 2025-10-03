@@ -6,10 +6,10 @@
 namespace VPX::InGameUI
 {
 
-class NudgeSettingsPage final : public InGameUIPage
+class PlungerSettingsPage final : public InGameUIPage
 {
 public:
-   NudgeSettingsPage();
+   PlungerSettingsPage();
 
    void Open() override;
    void Close() override;
@@ -21,10 +21,8 @@ private:
    InputManager& GetInput() const { return m_player->m_pininput; }
    void AppendPlot();
 
-   PerfUI::PlotData m_nudgeXPlot;
-   PerfUI::PlotData m_nudgeXRawPlot;
-   PerfUI::PlotData m_nudgeYPlot;
-   PerfUI::PlotData m_nudgeYRawPlot;
+   PerfUI::PlotData m_positionPlot;
+   PerfUI::PlotData m_velocityPlot;
 };
 
 }

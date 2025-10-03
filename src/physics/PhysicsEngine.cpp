@@ -15,8 +15,6 @@
 PhysicsEngine::PhysicsEngine(PinTable *const table)
    : m_hitPlayfield(table)
    , m_hitTopGlass(table)
-   , m_nudgeFilterX("x")
-   , m_nudgeFilterY("y")
 {
    m_physicsMaxLoops = table->m_PhysicsMaxLoops == 0xFFFFFFFFu ? 0 : table->m_PhysicsMaxLoops * (10000 / PHYSICS_STEPTIME) /*2*/;
    m_contacts.reserve(8);
@@ -264,24 +262,20 @@ void PhysicsEngine::Nudge(float angle, float force)
    }
 }
 
-// For the time being, there are 3 models available for nudge simulation (from keyboard or cabinet sensor).
+// For the time being, there are 2 models available for nudge simulation (from keyboard or cabinet sensor).
 // 1. Legacy nudge:
 //    - Perform keyboard nudge by applying a force directly to the balls, first in the forward direction, 
 //      then, after a little while, in the opposite direction
 //    - No hardware nudging support
-// 2. Acceleration based nudge:
+// 2. New acceleration based nudge:
 //    - Perform keyboard nudge by applying an impulse to a physic model of the cabinet (spring-mass model, see below)
-//    - Acquire cabinet acceleration from sensor and apply it directly to balls
-// 3. Velocity based nudge:
-//    - Perform keyboard nudge by applying an impulse to a physic model of the cabinet (spring-mass model, see below)
-//    - Acquire cabinet velocity from sensor and apply it to the physic model of the cabinet (same spring-mass model as for keyboard nudge)
+//    - Acquire cabinet acceleration from hardware sensor (eventually deriving it from position or velocity sensor) and apply it directly to balls
 void PhysicsEngine::UpdateNudge(float dtime)
 {
    // Since we are deriving forces/accelerations from velocities by doing a simple substract without scaling by delta time, we need dtime to be constant
    assert(fabs(dtime - ((double)PHYSICS_STEPTIME / (double)DEFAULT_STEPTIME)) < 1e-5);
 
    // Nudge acceleration is computed either from hardware accelerometer(s) or from nudge commands called from script.
-
    if (!m_legacyNudge)
    {
       // Perform keyboard nudge by simulating table movement modeled as a mass-spring-damper system
@@ -295,20 +289,7 @@ void PhysicsEngine::UpdateNudge(float dtime)
 
       // Simulate hardware nudge by getting the cabinet acceleration (eventually through velocity sensor) and applying it directly to the ball
       Vertex2D sensor = g_pplayer->m_pininput.GetNudge(); // Acquire from sensor input
-      if (g_pplayer->IsAccelInputAsVelocity())
-      {
-         // Compute acceleration from acquired table velocity and apply it as a force to the balls.
-         // Apply the external accelerometer-based nudge velocity input (which is
-         // a separate input from the traditional acceleration input)
-         Vertex3Ds sensorTableVelocity(sensor.x, sensor.y, 0.f);
-         m_nudgeAcceleration = sensorTableVelocity - m_prevSensorTableVelocity;
-         m_prevSensorTableVelocity = sensorTableVelocity;
-         m_enableNudgeFilter = false; // the nudge filter is only designed for acceleration data
-      }
-      else
-      {
-         m_nudgeAcceleration.Set(sensor.x, sensor.y, 0.f);
-      }
+      m_nudgeAcceleration.Set(sensor.x, sensor.y, 0.f);
    }
    // legacy/VP9 style keyboard nudging, by directly applying a force to the balls
    else if (m_legacyNudgeTime != 0)
@@ -328,13 +309,6 @@ void PhysicsEngine::UpdateNudge(float dtime)
       {
          m_nudgeAcceleration.SetZero();
       }
-   }
-
-   // Apply our filter to the nudge data (meaningless for legacy and velocity based nudging ?)
-   if (m_enableNudgeFilter)
-   {
-      m_nudgeFilterX.sample(m_nudgeAcceleration.x, m_curPhysicsFrameTime);
-      m_nudgeFilterY.sample(m_nudgeAcceleration.y, m_curPhysicsFrameTime);
    }
 
    // Convert to force
@@ -394,7 +368,9 @@ void PhysicsEngine::UpdateNudge(float dtime)
          m_plumbTiltHigh = tilted;
          if (tilted)
             m_plumbTiltIndex++; 
-         g_pplayer->m_pininput.FireActionEvent(eMechanicalTilt, m_plumbTiltHigh);
+         if (m_plumbTiltInputSlot == -1)
+            m_plumbTiltInputSlot = g_pplayer->m_pininput.GetInputActions()[g_pplayer->m_pininput.GetTiltActionId()]->NewDirectStateSlot();
+         g_pplayer->m_pininput.GetInputActions()[g_pplayer->m_pininput.GetTiltActionId()]->SetDirectState(m_plumbTiltInputSlot, m_plumbTiltHigh);
       }
 
       // Update player for diagnostic/table script visibility. Only update if input value is larger than what's there.
@@ -417,8 +393,6 @@ void PhysicsEngine::ReadNudgeSettings(const Settings& settings)
    m_enablePlumbTilt = settings.LoadValueWithDefault(Settings::Player, "TiltSensCB"s, false);
    m_plumbMassFactor = settings.LoadValueWithDefault(Settings::Player, "TiltInertia"s, 100.f) * 0.05f;
    m_plumbTiltThreshold = (float)settings.LoadValueWithDefault(Settings::Player, "TiltSensitivity"s, 400) * (float)(1.0 / 1000.0);
-
-   m_enableNudgeFilter = settings.LoadValueWithDefault(Settings::Player, "EnableNudgeFilter"s, false);
 
    m_legacyNudge = settings.LoadValueWithDefault(Settings::Player, "EnableLegacyNudge"s, false);
    m_legacyNudgeStrength = settings.LoadValueWithDefault(Settings::Player, "LegacyNudgeStrength"s, 1.f);
@@ -647,9 +621,6 @@ void PhysicsEngine::UpdatePhysics()
       #endif
          g_pplayer->FireTimers(g_pplayer->m_time_msec);
       #endif
-
-      g_pplayer->MechPlungerUpdate(); // integral physics frame. So the previous graphics frame was (1.0 - physics_diff_time) before 
-      // this integral physics frame. Accelerations and inputs are always physics frame aligned
 
       UpdateNudge(physics_diff_time);
 
