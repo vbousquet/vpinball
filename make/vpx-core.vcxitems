@@ -810,6 +810,8 @@
     <ClCompile Include="$(SolutionDir)/../../src/core/stdafx.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="$(SolutionDir)/../../src/core/AppCommands.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/core/def.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/core/DynamicScript.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/core/extern.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/core/FileLocator.cpp" />
@@ -1026,9 +1028,8 @@
     <ClCompile Include="$(SolutionDir)/../../src/utils/BlackBox.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/utils/bulb.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/utils/CrashHandler.cpp" />
-    <ClCompile Include="$(SolutionDir)/../../src/core/AppCommands.cpp" />
-    <ClCompile Include="$(SolutionDir)/../../src/core/def.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/utils/fileio.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/utils/JSONSerializer.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/utils/Logger.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/utils/lzwreader.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/utils/MemoryStatus.cpp" />
@@ -1835,6 +1836,7 @@
     <ClInclude Include="$(SolutionDir)/../../src/utils/eventproxy.h" />
     <ClInclude Include="$(SolutionDir)/../../src/utils/fileio.h" />
     <ClInclude Include="$(SolutionDir)/../../src/utils/hash.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/utils/JSONSerializer.h" />
     <ClInclude Include="$(SolutionDir)/../../src/utils/Logger.h" />
     <ClInclude Include="$(SolutionDir)/../../src/utils/lzwreader.h" />
     <ClInclude Include="$(SolutionDir)/../../src/utils/MemoryStatus.h" />

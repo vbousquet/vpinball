@@ -17,11 +17,11 @@ void RenderProbe::Save(IObjectWriter& writer, const bool saveForUndo)
 {
    // Save as a data blob inside the main gamedata. This allows backward compatibility since the block will be blindly discarded on older versions, still hashing it.
    writer.BeginObject(FID(RPRB), true, true);
-   writer.WriteInt(FID(TYPE), (int)m_type);
+   writer.WriteInt(FID(TYPE), static_cast<int>(m_type));
    writer.WriteString(FID(NAME), m_name);
    writer.WriteInt(FID(RBAS), m_roughness);
-   writer.WriteRaw(FID(RPLA), (void*)&m_reflection_plane, sizeof(vec4));
-   writer.WriteInt(FID(RMOD), (int)m_reflection_mode);
+   writer.WriteVector4(FID(RPLA), m_reflection_plane);
+   writer.WriteInt(FID(RMOD), static_cast<int>(m_reflection_mode));
    writer.WriteBool(FID(RLMP), m_disableLightReflection);
    writer.EndObject();
 }

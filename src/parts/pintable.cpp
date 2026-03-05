@@ -24,6 +24,7 @@
 
 #include "utils/BiffReader.h"
 #include "utils/BiffWriter.h"
+#include "utils/JSONSerializer.h"
 #include "utils/ushock_output.h"
 
 #include "ui/live/ingameui/InGameUIItem.h"
@@ -822,20 +823,43 @@ HRESULT PinTable::Save()
    return S_OK;
 }
 
-HRESULT PinTable::SaveToStorage(IStorage *pstgRoot)
+void PinTable::SaveToJSON()
 {
+   m_savingActive = true;
 #ifndef __STANDALONE__
    VPXSaveFileProgressBar feedback(g_app->GetInstanceHandle(), m_vpinball->m_hwndStatusBar, m_tableEditor);
 #else
    VPXFileFeedback feedback;
-#endif
+#endif   
+   feedback.OperationStarted();
+   feedback.AboutToProcessTable((int)(m_vedit.size() + m_vsound.size() + m_vimage.size() + m_vfont.size() + m_vcollection.size()));
 
-   return SaveToStorage(pstgRoot, feedback);
+   std::filesystem::path vpzPath = m_filename;
+   vpzPath.replace_extension(".vpz");
+   auto tableFile = JSONSerializer::Create(vpzPath);
+   
+   JSONObjectWriter writer(*tableFile, std::filesystem::path(m_wzName + L".json"s));
+   Save(writer, false);
+
+   // Move PartGroup ahead of objects they contain, so that they are saved first
+   std::ranges::stable_partition(m_vedit.begin(), m_vedit.end(), [](IEditable *p) { return p->GetItemType() == ItemTypeEnum::eItemPartGroup; });
+   for (size_t i = 0; i < m_vedit.size(); i++)
+   {
+      IEditable *const piedit = m_vedit[i];
+      JSONObjectWriter writer(*tableFile, std::filesystem::path("Parts") / std::filesystem::path(piedit->GetScriptable()->m_wzName + L".json"s));
+      Save(writer, false);
+      feedback.ItemHasBeenProcessed((int)i + 1, (int)m_vedit.size());
+   }
+
+   feedback.Done();
+   m_savingActive = false;
 }
 
-HRESULT PinTable::SaveToStorage(IStorage *pstgRoot, VPXFileFeedback& feedback)
+HRESULT PinTable::SaveToStorage(IStorage *pstgRoot)
 {
 #ifndef __STANDALONE__
+   VPXSaveFileProgressBar feedback(g_app->GetInstanceHandle(), m_vpinball->m_hwndStatusBar, m_tableEditor);
+
    m_savingActive = true;
    feedback.OperationStarted();
 
@@ -883,11 +907,15 @@ HRESULT PinTable::SaveToStorage(IStorage *pstgRoot, VPXFileFeedback& feedback)
 
             if (SUCCEEDED(hr = pstgData->CreateStream(L"CustomInfoTags", STGM_DIRECT | STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE, 0, 0, &pstmItem)))
             {
-               SaveCustomInfo(pstgInfo, pstmItem, hch);
+               BiffWriter writer(pstmItem, hch);
+               for (const auto& [name, value] : m_vCustomInfos) {
+                  writer.WriteString(FID(CUST), name);
+                  WriteInfoValue(pstgInfo, MakeWString(name), value, hch);
+               }
+               writer.EndObject();
                pstmItem->Release();
-               pstmItem = nullptr;
+               pstgInfo->Commit(STGC_DEFAULT);
             }
-
             pstgInfo->Release();
          }
 
@@ -1096,27 +1124,6 @@ HRESULT PinTable::SaveInfo(IStorage* pstg, HCRYPTHASH hcrypthash)
 }
 
 
-HRESULT PinTable::SaveCustomInfo(IStorage* pstg, IStream *pstmTags, HCRYPTHASH hcrypthash)
-{
-#ifndef __STANDALONE__
-   BiffWriter writer(pstmTags, hcrypthash);
-   for (size_t i = 0; i < m_vCustomInfoTag.size(); i++)
-      writer.WriteString(FID(CUST), m_vCustomInfoTag[i]);
-   writer.EndObject();
-
-   for (size_t i = 0; i < m_vCustomInfoTag.size(); i++)
-   {
-      const wstring wzName = MakeWString(m_vCustomInfoTag[i]);
-      WriteInfoValue(pstg, wzName, m_vCustomInfoContent[i], hcrypthash);
-   }
-
-   pstg->Commit(STGC_DEFAULT);
-#endif
-
-   return S_OK;
-}
-
-
 HRESULT PinTable::ReadInfoValue(IStorage* pstg, const wstring& wzName, string &output, HCRYPTHASH hcrypthash)
 {
    HRESULT hr;
@@ -1199,31 +1206,6 @@ HRESULT PinTable::LoadInfo(IStorage* pstg, HCRYPTHASH hcrypthash, int version)
    }
 
    return hr;
-}
-
-HRESULT PinTable::LoadCustomInfo(IStorage* pstg, IStream *pstmTags, HCRYPTHASH hcrypthash, int version)
-{
-   m_vCustomInfoTag.clear();
-   m_vCustomInfoContent.clear();
-   BiffReader reader(pstmTags, version, hcrypthash, 0);
-   reader.AsObject(
-      [this](int tag, IObjectReader& reader)
-      {
-         if (tag == FID(CUST))
-         {
-            string tmp;
-            tmp = reader.AsString();
-            m_vCustomInfoTag.push_back(std::move(tmp));
-         }
-         return true;
-      });
-   for (const string& tag : m_vCustomInfoTag)
-   {
-      string customInfo;
-      ReadInfoValue(pstg, MakeWString(tag), customInfo, hcrypthash);
-      m_vCustomInfoContent.push_back(std::move(customInfo));
-   }
-   return S_OK;
 }
 
 void PinTable::Save(IObjectWriter& writer, const bool saveForUndo)
@@ -1543,9 +1525,23 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
             IStream* pstmItem;
             if (SUCCEEDED(hr = pstgData->OpenStream(L"CustomInfoTags", nullptr, STGM_DIRECT | STGM_READ | STGM_SHARE_EXCLUSIVE, 0, &pstmItem)))
             {
-               hr = LoadCustomInfo(pstgInfo, pstmItem, hch, loadfileversion);
+               m_vCustomInfos.clear();
+               BiffReader reader(pstmItem, loadfileversion, hch, 0);
+               vector<string> tagList;
+               reader.AsObject(
+                  [this, &tagList](int tag, IObjectReader& reader)
+                  {
+                     if (tag == FID(CUST))
+                        tagList.emplace_back(std::move(reader.AsString()));
+                     return true;
+                  });
+               for (auto& name : tagList)
+               {
+                  string value;
+                  ReadInfoValue(pstgInfo, MakeWString(name), value, hch);
+                  m_vCustomInfos.emplace_back(std::move(name), std::move(value));
+               }
                pstmItem->Release();
-               pstmItem = nullptr;
             }
             pstgInfo->Release();
          }
@@ -4687,12 +4683,6 @@ string PinTable::AuditTable(bool log) const
       PLOGI << trim_string(msg2);
    }
    return msg;
-}
-
-void PinTable::ListCustomInfo(HWND hwndListView)
-{
-   for (size_t i = 0; i < m_vCustomInfoTag.size(); i++)
-      AddListItem(hwndListView, m_vCustomInfoTag[i], m_vCustomInfoContent[i], NULL);
 }
 
 int PinTable::AddListItem(HWND hwndListView, const string& szName, const string& szValue1, LPARAM lparam)

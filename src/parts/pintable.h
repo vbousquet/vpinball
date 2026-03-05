@@ -348,7 +348,6 @@ public:
 
    string AuditTable(bool log) const;
 
-   void ListCustomInfo(HWND hwndListView);
    int AddListItem(HWND hwndListView, const string &szName, const string &szValue1, LPARAM lparam);
 
    void ImportFont(HWND hwndListView, const string &filename);
@@ -413,22 +412,23 @@ public:
    void AddMultiSel(ISelect *psel, const bool add, const bool update, const bool contextClick);
 
    HRESULT Save();
+   void SaveToJSON();
    HRESULT SaveToStorage(IStorage *pstg);
-   HRESULT SaveToStorage(IStorage *pstg, VPXFileFeedback& feedback);
-   HRESULT SaveInfo(IStorage *pstg, HCRYPTHASH hcrypthash);
-   HRESULT SaveCustomInfo(IStorage *pstg, IStream *pstmTags, HCRYPTHASH hcrypthash);
-   static HRESULT WriteInfoValue(IStorage *pstg, const wstring& wzName, const string &szValue, HCRYPTHASH hcrypthash);
-   static HRESULT ReadInfoValue(IStorage *pstg, const wstring& wzName, string &output, HCRYPTHASH hcrypthash);
    HRESULT LoadGameFromFilename(const std::filesystem::path &filename);
    HRESULT LoadGameFromFilename(const std::filesystem::path &filename, VPXFileFeedback &feedback);
-   void LoadScriptOverride(const std::filesystem::path& scriptPath);
+   
+private:
    HRESULT LoadInfo(IStorage *pstg, HCRYPTHASH hcrypthash, int version);
-   HRESULT LoadCustomInfo(IStorage *pstg, IStream *pstmTags, HCRYPTHASH hcrypthash, int version);
+   HRESULT SaveInfo(IStorage *pstg, HCRYPTHASH hcrypthash);
+   void LoadScriptOverride(const std::filesystem::path& scriptPath);
+   static HRESULT ReadInfoValue(IStorage *pstg, const wstring& wzName, string &output, HCRYPTHASH hcrypthash);
+   static HRESULT WriteInfoValue(IStorage *pstg, const wstring& wzName, const string &szValue, HCRYPTHASH hcrypthash);
+
+public:
    IEditable *GetIEditable() final { return (IEditable *)this; }
    const IEditable *GetIEditable() const final { return (const IEditable *)this; }
    void Delete() final { } // Can't delete table itself
    void Uncreate() final { }
-
    virtual IDispatch *GetPrimary() { return GetDispatch(); }
    IDispatch *GetDispatch() final { return (IDispatch *)this; }
    const IDispatch *GetDispatch() const final { return (const IDispatch *)this; }
@@ -736,8 +736,7 @@ public:
    string m_dateSaved;
    unsigned int m_numTimesSaved = 0;
 
-   vector<string> m_vCustomInfoTag;
-   vector<string> m_vCustomInfoContent;
+   vector<std::pair<string, string>> m_vCustomInfos;
 
    LightSource m_Light[MAX_LIGHT_SOURCES];
    COLORREF m_lightAmbient;
