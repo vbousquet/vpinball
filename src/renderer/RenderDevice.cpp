@@ -549,6 +549,9 @@ void RenderDevice::RenderThread(RenderDevice* rd, const bgfx::Init& initReq)
          // we start a flush sequence:
          // - process a few frames without VSync to flush the queue (as they will be discarded or presented directly)
          // - then process a few frame with VSync enabled, to measure the new number of frames in flights
+         // TODO this is not really correct as gpuFrameNum is the last porocessed frame, not the last presented frame. Therefore 
+         // if all frames are quickly processed, gpuFrameNum will be the same as m_lastPresentFrameIdx, but still the present queue
+         // will be filled up, leading to high latency. The user needs to limit the maxFrameLatency (see init.resolution.maxFrameLatency)
          const uint32_t framesInFlight = rd->m_lastPresentFrameIdx - bgfx::getStats()->gpuFrameNum;
          if (framePacingFlushing > 0)
             framePacingFlushing--;
@@ -562,7 +565,6 @@ void RenderDevice::RenderThread(RenderDevice* rd, const bgfx::Init& initReq)
          g_pplayer->m_curFrameSyncOnVBlank = needsVSync;
          if (!noPresent && framesInFlight <= bgfx::getStats()->maxGpuLatency)
             rd->m_renderLatency = framePacingFlushing || !useVSync ? -1.f : (static_cast<float>(framesInFlight) / rd->m_outputWnd[0]->GetRefreshRate());
-         //PLOGD << std::format("VS: {}   FiF: {}   Flush: {:2d}", needsVSync, framesInFlight, framePacingFlushing);
 
          // lock prepared frame and submit it
          {
@@ -572,7 +574,6 @@ void RenderDevice::RenderThread(RenderDevice* rd, const bgfx::Init& initReq)
             std::lock_guard lock(rd->m_frameMutex);
             g_pplayer->m_renderProfiler->NewFrame(g_pplayer->m_time_msec);
             g_pplayer->m_renderProfiler->EnterProfileSection(FrameProfiler::PROFILE_RENDER_SUBMIT);
-            rd->m_framePending = false; // Request next frame to be prepared as soon as possible
             rd->m_frameNoPresent = false;
             const int windowWidth = rd->m_outputWnd[0]->GetPixelWidth();
             const int windowHeight = rd->m_outputWnd[0]->GetPixelHeight();
@@ -635,7 +636,10 @@ void RenderDevice::RenderThread(RenderDevice* rd, const bgfx::Init& initReq)
          }
          lastFlipTick = now;
 
-         // Flip (eventually blocking until a VSYNC happens, also eventually discarding unpresented frame) then submit render commands to GPU
+         // Request next frame to be prepared while we submit and render the current one (we used to do it when submitting to BGFX but it adds a little useless latency)
+         rd->m_framePending = false;
+
+         // Submit to GPU then Flip (eventually blocking until a VSYNC happens, also eventually discarding unpresented frame)
          {
             g_pplayer->m_renderProfiler->EnterProfileSection(FrameProfiler::PROFILE_RENDER_FLIP);
             #ifdef MSVC_CONCURRENCY_VIEWER
@@ -667,6 +671,8 @@ void RenderDevice::RenderThread(RenderDevice* rd, const bgfx::Init& initReq)
             g_pplayer->m_logicProfiler.OnPresented(usec() - bgfxSubmit);
             g_pplayer->m_renderProfiler->ExitProfileSection();
             g_pplayer->m_renderProfiler->AdjustBGFXSubmit(static_cast<uint32_t>(bgfxSubmit));
+
+            //PLOGD << std::format("VS: {}   FiF: {}   Flush: {:2d}   GPU: {:5.1f}ms", needsVSync, framesInFlight, framePacingFlushing, (stats->gpuTimeEnd - stats->gpuTimeBegin) * 1000.f / stats->gpuTimerFreq);
          }
       }
    }
