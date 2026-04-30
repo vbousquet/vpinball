@@ -174,6 +174,19 @@ if "%vsv%" == "2026" (
 
 
 REM ***************************************************************************************************
+copy /V /Y "plugin-pin2k.vcxproj" "../.build/vsproject/plugin-pin2k.vcxproj"
+copy /V /Y "plugin-pin2k.vcxproj.filters" "../.build/vsproject/plugin-pin2k.vcxproj.filters"
+
+if "%vsv%" == "2019" (
+	cscript "simplereplace.wsf" //nologo /search:"v143" /replace:"v142" /in:"../.build/vsproject/plugin-pin2k.vcxproj" /out:"../.build/vsproject/plugin-pin2k.vcxproj"
+)
+
+if "%vsv%" == "2026" (
+	cscript "simplereplace.wsf" //nologo /search:"v143" /replace:"v145" /in:"../.build/vsproject/plugin-pin2k.vcxproj" /out:"../.build/vsproject/plugin-pin2k.vcxproj"
+)
+
+
+REM ***************************************************************************************************
 copy /V /Y "plugin-pinup-events.vcxproj" "../.build/vsproject/plugin-pinup-events.vcxproj"
 copy /V /Y "plugin-pinup-events.vcxproj.filters" "../.build/vsproject/plugin-pinup-events.vcxproj.filters"
 

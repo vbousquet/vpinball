@@ -1,0 +1,3 @@
+[submodule "plugins/pin2k/encore"]
+	path = plugins/pin2k/encore
+	url = https://github.com/ThomazPom/Encore-Pinball2000
