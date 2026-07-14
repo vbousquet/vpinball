@@ -31,13 +31,13 @@ Server* Server::m_singleton = nullptr;
 Server::Server(MsgPluginAPI* msgApi, uint32_t endpointId, VPXPluginAPI* vpxApi, ScriptClassDef* serverClassDef)
    : m_onGameStartId(msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_EVT_ON_GAME_START))
    , m_onGameEndId(msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_EVT_ON_GAME_END))
-   , m_onGetDevSrcId(msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_GET_SRC_MSG)) 
+   , m_onGetStateSrcId(msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_STATE_GET_SRC_MSG)) 
    , m_msgApi(msgApi)
    , m_vpxApi(vpxApi)
    , m_endpointId(endpointId)
    , m_onGetAuxRendererId(msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_AUX_RENDERER))
    , m_onAuxRendererChgId(msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_AUX_RENDERER_CHG))
-   , m_onDevChangedMsgId(msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_ON_SRC_CHG_MSG))
+   , m_onStateChangedMsgId(msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_STATE_ON_SRC_CHG_MSG))
    , m_pinmameApi(msgApi, endpointId, this, serverClassDef)
 {
    m_singleton = this;
@@ -51,14 +51,16 @@ Server::Server(MsgPluginAPI* msgApi, uint32_t endpointId, VPXPluginAPI* vpxApi, 
    m_pTimer->SetInterval(37);
    m_pTimer->SetElapsedListener(std::bind(&Server::TimerElapsed, this, std::placeholders::_1));
 
-   m_devSrc.id.endpointId = m_endpointId;
-   m_devSrc.GetByteState = GetByteState;
-   m_devSrc.GetFloatState = GetFloatState;
-   m_devSrc.SetChangeCallback = RegisterStateChangeCallback;
+   m_stateSrc.id.endpointId = m_endpointId;
+   m_stateSrc.nGroups = 0;
+   m_stateSrc.groupDefs = nullptr;
+   m_stateSrc.GetState = GetStateAPI;
+   m_stateSrc.SetState = SetStateAPI;
+   m_stateSrc.SetChangeCallback = RegisterStateChangeCallback;
 
    msgApi->SubscribeMsg(endpointId, m_onGetAuxRendererId, OnGetRendererStatic, this);
-   msgApi->SubscribeMsg(endpointId, m_onDevChangedMsgId, OnDevSrcChangedStatic, this);
-   msgApi->SubscribeMsg(endpointId, m_onGetDevSrcId, OnGetDevSrc, this);
+   msgApi->SubscribeMsg(endpointId, m_onStateChangedMsgId, OnStateSrcChangedStatic, this);
+   msgApi->SubscribeMsg(endpointId, m_onGetStateSrcId, OnGetStateSrc, this);
    msgApi->BroadcastMsg(endpointId, m_onAuxRendererChgId, nullptr);
 }
 
@@ -73,16 +75,16 @@ Server::~Server()
    m_msgApi->ReleaseMsgID(m_onGameEndId);
 
    m_msgApi->UnsubscribeMsg(m_onGetAuxRendererId, OnGetRendererStatic, this);
-   m_msgApi->UnsubscribeMsg(m_onDevChangedMsgId, OnDevSrcChangedStatic, this);
-   m_msgApi->UnsubscribeMsg(m_onGetDevSrcId, OnGetDevSrc, this);
+   m_msgApi->UnsubscribeMsg(m_onStateChangedMsgId, OnStateSrcChangedStatic, this);
+   m_msgApi->UnsubscribeMsg(m_onGetStateSrcId, OnGetStateSrc, this);
    m_msgApi->BroadcastMsg(m_endpointId, m_onAuxRendererChgId, nullptr);
    m_msgApi->ReleaseMsgID(m_onGetAuxRendererId);
    m_msgApi->ReleaseMsgID(m_onAuxRendererChgId);
-   m_msgApi->ReleaseMsgID(m_onDevChangedMsgId);
-   m_msgApi->ReleaseMsgID(m_onGetDevSrcId);
+   m_msgApi->ReleaseMsgID(m_onStateChangedMsgId);
+   m_msgApi->ReleaseMsgID(m_onGetStateSrcId);
 
-   delete[] m_deviceStateSrc.deviceDefs;
-   delete[] m_devSrc.deviceDefs;
+   delete[] m_pinmameStateSrc.stateDefs;
+   delete[] m_stateSrc.stateDefs;
 
    if (m_onDestroyHandler)
       m_onDestroyHandler(this);
@@ -134,52 +136,52 @@ int Server::OnRender(VPXRenderContext2D* const renderCtx, void* context)
    return 0;
 }
 
-void Server::OnDevSrcChanged(const unsigned int msgId, void* userData, void* msgData)
+void Server::OnStateSrcChanged(const unsigned int msgId, void* userData, void* msgData)
 {
-   delete[] m_deviceStateSrc.deviceDefs;
-   memset(&m_deviceStateSrc, 0, sizeof(m_deviceStateSrc));
+   delete[] m_pinmameStateSrc.stateDefs;
+   memset(&m_pinmameStateSrc, 0, sizeof(m_pinmameStateSrc));
 
    unsigned int pinmameEndpoint = m_msgApi->GetPluginEndpoint("PinMAME");
    if (pinmameEndpoint == 0)
       return;
 
-   unsigned int getDevSrcMsgId = m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_GET_SRC_MSG);
-   GetDevSrcMsg getSrcMsg = { 0, 0, nullptr };
-   m_msgApi->SendMsg(m_endpointId, getDevSrcMsgId, pinmameEndpoint, &getSrcMsg);
-   vector<DevSrcId> entries(getSrcMsg.count);
+   unsigned int getStateSrcMsgId = m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_STATE_GET_SRC_MSG);
+   GetStateSrcMsg getSrcMsg = { 0, 0, nullptr };
+   m_msgApi->SendMsg(m_endpointId, getStateSrcMsgId, pinmameEndpoint, &getSrcMsg);
+   vector<StateSrcId> entries(getSrcMsg.count);
    getSrcMsg = { getSrcMsg.count, 0, entries.data() };
-   m_msgApi->SendMsg(m_endpointId, getDevSrcMsgId, pinmameEndpoint, &getSrcMsg);
-   m_msgApi->ReleaseMsgID(getDevSrcMsgId);
+   m_msgApi->SendMsg(m_endpointId, getStateSrcMsgId, pinmameEndpoint, &getSrcMsg);
+   m_msgApi->ReleaseMsgID(getStateSrcMsgId);
    for (unsigned int i = 0; i < getSrcMsg.count; i++)
    {
       if (getSrcMsg.entries[i].id.endpointId == pinmameEndpoint)
       {
-         m_deviceStateSrc = getSrcMsg.entries[i];
-         if (getSrcMsg.entries[i].deviceDefs)
+         m_pinmameStateSrc = getSrcMsg.entries[i];
+         if (getSrcMsg.entries[i].stateDefs)
          {
-            m_deviceStateSrc.deviceDefs = new DeviceDef[getSrcMsg.entries[i].nDevices];
-            memcpy(m_deviceStateSrc.deviceDefs, getSrcMsg.entries[i].deviceDefs, getSrcMsg.entries[i].nDevices * sizeof(DeviceDef));
+            m_pinmameStateSrc.stateDefs = new StateDef[getSrcMsg.entries[i].nStates];
+            memcpy(m_pinmameStateSrc.stateDefs, getSrcMsg.entries[i].stateDefs, getSrcMsg.entries[i].nStates * sizeof(StateDef));
          }
          break;
       }
    }
 
-   if (m_deviceStateSrc.deviceDefs == nullptr)
+   if (m_pinmameStateSrc.stateDefs == nullptr)
       return;
 
-   LOGI(std::format("Device state updated - {} devices", m_deviceStateSrc.nDevices));
+   LOGI(std::format("Device state updated - {} devices", m_pinmameStateSrc.nStates));
 }
 
-void Server::OnGetDevSrc(const unsigned int, void* userData, void* msgData)
+void Server::OnGetStateSrc(const unsigned int, void* userData, void* msgData)
 {
    auto me = static_cast<Server*>(userData);
-   auto msg = static_cast<GetDevSrcMsg*>(msgData);
+   auto msg = static_cast<GetStateSrcMsg*>(msgData);
    if (msg->count < msg->maxEntryCount)
-      memcpy(&msg->entries[msg->count], &me->m_devSrc, sizeof(DevSrcId));
+      memcpy(&msg->entries[msg->count], &me->m_stateSrc, sizeof(StateSrcId));
    msg->count++;
 }
 
-void Server::UpdateDevSrc()
+void Server::UpdateStateSrc()
 {
    if (m_gameRunning && m_b2sStates.empty())
    {
@@ -194,44 +196,47 @@ void Server::UpdateDevSrc()
       m_msgApi->BroadcastMsg(m_endpointId, m_onGameStartId, reinterpret_cast<void*>(&msg));
    }
 
-   delete[] m_devSrc.deviceDefs;
-   m_devSrc.nDevices = static_cast<unsigned int>(m_b2sStates.size());
-   m_devSrc.deviceDefs = new DeviceDef[m_devSrc.nDevices];
-   m_devSrcNames.resize(m_devSrc.nDevices);
+   delete[] m_stateSrc.stateDefs;
+   m_stateSrc.nStates = static_cast<unsigned int>(m_b2sStates.size());
+   m_stateSrc.stateDefs = new StateDef[m_stateSrc.nStates];
+   m_stateSrcNames.resize(m_stateSrc.nStates);
    uint16_t index = 0;
    for (const auto& [id, v] : m_b2sStates)
    {
-      m_devSrcNames[index] = std::format("B2S.Data #{}", id);
-      m_devSrc.deviceDefs[index].name = m_devSrcNames[index].c_str();
-      m_devSrc.deviceDefs[index].id.groupId = 0x0001;
-      m_devSrc.deviceDefs[index].id.deviceId = id;
+      m_stateSrcNames[index] = std::format("B2S.Data #{}", id);
+      m_stateSrc.stateDefs[index].name = m_stateSrcNames[index].c_str();
+      m_stateSrc.stateDefs[index].id.groupId = 0x0001;
+      m_stateSrc.stateDefs[index].id.stateId = id;
       index++;
    }
    m_stateChgCallbacks.clear();
-   m_msgApi->BroadcastMsg(m_endpointId, m_onDevChangedMsgId, nullptr);
+   m_msgApi->BroadcastMsg(m_endpointId, m_onStateChangedMsgId, nullptr);
 }
 
-uint8_t MSGPIAPI Server::GetByteState(const unsigned int deviceIndex)
+int MSGPIAPI Server::GetStateAPI(unsigned int inputIndex, int type, void* pResult)
 {
-   if (Server::m_singleton == nullptr || deviceIndex >= m_singleton->m_devSrc.nDevices)
-      return 0;
-   int b2sId = m_singleton->m_devSrc.deviceDefs[deviceIndex].id.deviceId;
-   return static_cast<uint8_t>(m_singleton->GetState(b2sId) * 255.f);
+   if (Server::m_singleton == nullptr || inputIndex >= Server::m_singleton->m_stateSrc.nStates)
+      return -1;
+   int b2sId = m_singleton->m_stateSrc.stateDefs[inputIndex].id.stateId;
+   float val = m_singleton->GetState(b2sId);
+   if (type == CTLPI_STATE_TYPE_FLOAT)
+      *static_cast<float*>(pResult) = val;
+   else if (type == CTLPI_STATE_TYPE_UINT8)
+      *static_cast<uint8_t*>(pResult) = static_cast<uint8_t>(val * 255.f);
+   else if (type == CTLPI_STATE_TYPE_BOOL)
+      *static_cast<bool*>(pResult) = val != 0.f;
+   else
+      return -1;
+   return 0;
 }
 
-float MSGPIAPI Server::GetFloatState(const unsigned int deviceIndex)
-{
-   if (Server::m_singleton == nullptr || deviceIndex >= m_singleton->m_devSrc.nDevices)
-      return 0.f;
-   int b2sId = m_singleton->m_devSrc.deviceDefs[deviceIndex].id.deviceId;
-   return m_singleton->GetState(b2sId);
-}
+int MSGPIAPI Server::SetStateAPI(unsigned int inputIndex, int type, void* pResult) { return -1; }
 
 void MSGPIAPI Server::RegisterStateChangeCallback(unsigned int deviceIndex, int isRegister, ctlpi_chg_callback cb, void* ctx)
 {
-   if (Server::m_singleton == nullptr || deviceIndex >= m_singleton->m_devSrc.nDevices)
+   if (Server::m_singleton == nullptr || deviceIndex >= m_singleton->m_stateSrc.nStates)
       return;
-   const int b2sId = m_singleton->m_devSrc.deviceDefs[deviceIndex].id.deviceId;
+   const int b2sId = m_singleton->m_stateSrc.stateDefs[deviceIndex].id.stateId;
    if (auto mapIt = m_singleton->m_stateChgCallbacks.find(b2sId); mapIt == m_singleton->m_stateChgCallbacks.end())
       m_singleton->m_stateChgCallbacks[b2sId] = vector<ChgCallback>();
    auto& callbacks = m_singleton->m_stateChgCallbacks[b2sId];
@@ -279,10 +284,8 @@ void Server::OnGetRendererStatic(const unsigned int, void* userData, void* msgDa
    }
 }
 
-void Server::OnDevSrcChangedStatic(const unsigned int msgId, void* userData, void* msgData)
-{
-   static_cast<Server*>(userData)->OnDevSrcChanged(msgId, userData, msgData);
-}
+void Server::OnStateSrcChangedStatic(const unsigned int msgId, void* userData, void* msgData)
+{ static_cast<Server*>(userData)->OnStateSrcChanged(msgId, userData, msgData); }
 
 void Server::TimerElapsed(Timer* pTimer)
 {
@@ -815,7 +818,7 @@ void Server::MyB2SSetData(int id, int value)
    if (it == m_b2sStates.end())
    {
       m_b2sStates[id] = static_cast<float>(value);
-      UpdateDevSrc();
+      UpdateStateSrc();
    }
    else
       it->second = static_cast<float>(value);
@@ -952,15 +955,16 @@ void Server::CheckGetMech(int number, int mech)
 
 void Server::CheckLamps(ScriptArray* psa)
 {
-   if (m_deviceStateSrc.deviceDefs == nullptr)
+   if (m_pinmameStateSrc.stateDefs == nullptr)
       return;
 
-   for (unsigned int i = 0; i < m_deviceStateSrc.nDevices; i++)
+   for (unsigned int i = 0; i < m_pinmameStateSrc.nStates; i++)
    {
-      if ((m_deviceStateSrc.deviceDefs[i].id.groupId & 0xFF00) == 0x0200)
+      if ((m_pinmameStateSrc.stateDefs[i].id.groupId & 0xFF00) == 0x0200)
       {
-         const int lampId = m_deviceStateSrc.deviceDefs[i].id.deviceId;
-         const float state = m_deviceStateSrc.GetFloatState(i);
+         const int lampId = m_pinmameStateSrc.stateDefs[i].id.stateId;
+         float state;
+         m_pinmameStateSrc.GetState(i, CTLPI_STATE_TYPE_FLOAT, &state);
          const int lampState = static_cast<int>(state * 255.0f);
 
          if (m_pB2SData->IsUseRomLamps() || m_pB2SData->IsUseAnimationLamps()) {
@@ -1095,15 +1099,16 @@ void Server::CheckLamps(ScriptArray* psa)
 
 void Server::CheckSolenoids(ScriptArray* psa)
 {
-   if (m_deviceStateSrc.deviceDefs == nullptr)
+   if (m_pinmameStateSrc.stateDefs == nullptr)
       return;
 
-   for (unsigned int i = 0; i < m_deviceStateSrc.nDevices; i++)
+   for (unsigned int i = 0; i < m_pinmameStateSrc.nStates; i++)
    {
-      if ((m_deviceStateSrc.deviceDefs[i].id.groupId & 0xFF00) == 0x0000)
+      if ((m_pinmameStateSrc.stateDefs[i].id.groupId & 0xFF00) == 0x0000)
       {
-         const int solenoidId = m_deviceStateSrc.deviceDefs[i].id.deviceId;
-         const float state = m_deviceStateSrc.GetFloatState(i);
+         const int solenoidId = m_pinmameStateSrc.stateDefs[i].id.stateId;
+         float state;
+         m_pinmameStateSrc.GetState(i, CTLPI_STATE_TYPE_FLOAT, &state);
          const int solenoidState = static_cast<int>(state * 255.0f);
 
          if (m_pB2SData->IsUseRomSolenoids() || m_pB2SData->IsUseAnimationSolenoids())
@@ -1239,15 +1244,16 @@ void Server::CheckSolenoids(ScriptArray* psa)
 
 void Server::CheckGIStrings(ScriptArray* psa)
 {
-   if (m_deviceStateSrc.deviceDefs == nullptr)
+   if (m_pinmameStateSrc.stateDefs == nullptr)
       return;
 
-   for (unsigned int i = 0; i < m_deviceStateSrc.nDevices; i++)
+   for (unsigned int i = 0; i < m_pinmameStateSrc.nStates; i++)
    {
-      if ((m_deviceStateSrc.deviceDefs[i].id.groupId & 0xFF00) == 0x0100)
+      if ((m_pinmameStateSrc.stateDefs[i].id.groupId & 0xFF00) == 0x0100)
       {
-         const int giStringId = m_deviceStateSrc.deviceDefs[i].id.deviceId;
-         const float state = m_deviceStateSrc.GetFloatState(i);
+         const int giStringId = m_pinmameStateSrc.stateDefs[i].id.stateId;
+         float state;
+         m_pinmameStateSrc.GetState(i, CTLPI_STATE_TYPE_FLOAT, &state);
          const int giStringBool = static_cast<int>(state * 255.0f) > m_giStringThreshold;
 
          if (m_pB2SData->IsUseRomGIStrings() || m_pB2SData->IsUseAnimationGIStrings()) {

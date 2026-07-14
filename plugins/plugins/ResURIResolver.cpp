@@ -15,10 +15,8 @@ using namespace std::string_view_literals;
 ResURIResolver::ResURIResolver(const MsgPluginAPI &msgAPI, unsigned int endpointId, bool trackDisplays, bool trackSegDisplays, bool trackInputs, bool trackDevices)
    : m_msgAPI(msgAPI)
    , m_endpointId(endpointId)
-   , m_getDevSrcMsgId(trackDevices ? m_msgAPI.GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_GET_SRC_MSG) : 0)
-   , m_onDevChangedMsgId(trackDevices ? m_msgAPI.GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_ON_SRC_CHG_MSG) : 0)
-   , m_getInputSrcMsgId(trackInputs ? m_msgAPI.GetMsgID(CTLPI_NAMESPACE, CTLPI_INPUT_GET_SRC_MSG) : 0)
-   , m_onInputChangedMsgId(trackInputs ? m_msgAPI.GetMsgID(CTLPI_NAMESPACE, CTLPI_INPUT_ON_SRC_CHG_MSG) : 0)
+   , m_getStateSrcMsgId(trackDevices ? m_msgAPI.GetMsgID(CTLPI_NAMESPACE, CTLPI_STATE_GET_SRC_MSG) : 0)
+   , m_onStateChangedMsgId(trackDevices ? m_msgAPI.GetMsgID(CTLPI_NAMESPACE, CTLPI_STATE_ON_SRC_CHG_MSG) : 0)
    , m_getSegSrcMsgId(trackSegDisplays ? m_msgAPI.GetMsgID(CTLPI_NAMESPACE, CTLPI_SEG_GET_SRC_MSG) : 0)
    , m_onSegChangedMsgId(trackSegDisplays ? m_msgAPI.GetMsgID(CTLPI_NAMESPACE, CTLPI_SEG_ON_SRC_CHG_MSG) : 0)
    , m_getDisplaySrcMsgId(trackDisplays ? m_msgAPI.GetMsgID(CTLPI_NAMESPACE, CTLPI_DISPLAY_GET_SRC_MSG) : 0)
@@ -34,31 +32,20 @@ ResURIResolver::ResURIResolver(const MsgPluginAPI &msgAPI, unsigned int endpoint
       m_msgAPI.SubscribeMsg(m_endpointId, m_onSegChangedMsgId, OnSegSrcChanged, this);
       OnSegSrcChanged(m_onSegChangedMsgId, this, nullptr);
    }
-   if (trackInputs)
+   if (trackInputs || trackDevices)
    {
-      m_msgAPI.SubscribeMsg(m_endpointId, m_onInputChangedMsgId, OnInputSrcChanged, this);
-      OnInputSrcChanged(m_onInputChangedMsgId, this, nullptr);
-   }
-   if (trackDevices)
-   {
-      m_msgAPI.SubscribeMsg(m_endpointId, m_onDevChangedMsgId, OnDevSrcChanged, this);
-      OnDevSrcChanged(m_onDevChangedMsgId, this, nullptr);
+      m_msgAPI.SubscribeMsg(m_endpointId, m_onStateChangedMsgId, OnStateSrcChanged, this);
+      OnStateSrcChanged(m_onStateChangedMsgId, this, nullptr);
    }
 }
 
 ResURIResolver::~ResURIResolver()
 {
-   if (m_onInputChangedMsgId)
+   if (m_onStateChangedMsgId)
    {
-      m_msgAPI.UnsubscribeMsg(m_onInputChangedMsgId, OnInputSrcChanged, this);
-      m_msgAPI.ReleaseMsgID(m_onInputChangedMsgId);
-      m_msgAPI.ReleaseMsgID(m_getInputSrcMsgId);
-   }
-   if (m_onDevChangedMsgId)
-   {
-      m_msgAPI.UnsubscribeMsg(m_onDevChangedMsgId, OnDevSrcChanged, this);
-      m_msgAPI.ReleaseMsgID(m_onDevChangedMsgId);
-      m_msgAPI.ReleaseMsgID(m_getDevSrcMsgId);
+      m_msgAPI.UnsubscribeMsg(m_onStateChangedMsgId, OnStateSrcChanged, this);
+      m_msgAPI.ReleaseMsgID(m_onStateChangedMsgId);
+      m_msgAPI.ReleaseMsgID(m_getStateSrcMsgId);
    }
    if (m_onSegChangedMsgId)
    {
@@ -92,27 +79,15 @@ bool ResURIResolver::try_parse_int(const string &str, int &value)
    return (std::from_chars(tmp.c_str(), tmp.c_str() + tmp.length(), value).ec == std::errc {});
 }
 
-void ResURIResolver::OnInputSrcChanged(const unsigned int msgId, void *userData, void *msgData)
+void ResURIResolver::OnStateSrcChanged(const unsigned int msgId, void *userData, void *msgData)
 {
    ResURIResolver* me = static_cast<ResURIResolver *>(userData);
-   GetInputSrcMsg getSrcMsg = { 0, 0, nullptr };
-   me->m_msgAPI.BroadcastMsg(me->m_endpointId, me->m_getInputSrcMsgId, &getSrcMsg);
-   me->m_inputSources.clear();
-   me->m_inputSources.resize(getSrcMsg.count);
-   getSrcMsg = { getSrcMsg.count, 0, me->m_inputSources.data() };
-   me->m_msgAPI.BroadcastMsg(me->m_endpointId, me->m_getInputSrcMsgId, &getSrcMsg);
-   me->m_floatCache.clear();
-}
-
-void ResURIResolver::OnDevSrcChanged(const unsigned int msgId, void *userData, void *msgData)
-{
-   ResURIResolver* me = static_cast<ResURIResolver *>(userData);
-   GetDevSrcMsg getSrcMsg = { 0, 0, nullptr };
-   me->m_msgAPI.BroadcastMsg(me->m_endpointId, me->m_getDevSrcMsgId, &getSrcMsg);
-   me->m_deviceSources.clear();
-   me->m_deviceSources.resize(getSrcMsg.count);
-   getSrcMsg = { getSrcMsg.count, 0, me->m_deviceSources.data() };
-   me->m_msgAPI.BroadcastMsg(me->m_endpointId, me->m_getDevSrcMsgId, &getSrcMsg);
+   GetStateSrcMsg getSrcMsg = { 0, 0, nullptr };
+   me->m_msgAPI.BroadcastMsg(me->m_endpointId, me->m_getStateSrcMsgId, &getSrcMsg);
+   me->m_stateSources.clear();
+   me->m_stateSources.resize(getSrcMsg.count);
+   getSrcMsg = { getSrcMsg.count, 0, me->m_stateSources.data() };
+   me->m_msgAPI.BroadcastMsg(me->m_endpointId, me->m_getStateSrcMsgId, &getSrcMsg);
    me->m_floatCache.clear();
 }
 
@@ -164,7 +139,7 @@ float ResURIResolver::GetFloatState(const string &link)
             int resId = 0;
             if (auto resIdPart = uri.query.find("id"s); resIdPart != uri.query.end())
                try_parse_int(resIdPart->second, resId);
-
+            /* FIXME implement
             if (uri.path == "/device")
             {
                auto ioSource = std::ranges::find_if(m_deviceSources.begin(), m_deviceSources.end(), [plugin, resId](const DevSrcId &cd) { return cd.id.endpointId == plugin && cd.id.resId == resId; });
@@ -204,7 +179,7 @@ float ResURIResolver::GetFloatState(const string &link)
             else if (uri.path == "/display")
             {
                // TODO implement (to access individual dots, useful for small LED matrices)
-            }
+            }*/
          }
       }
    }

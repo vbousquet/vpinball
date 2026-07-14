@@ -85,15 +85,10 @@ private:
    const MsgPluginAPI& m_msgAPI;
    const unsigned int m_endpointId;
 
-   const unsigned int m_getDevSrcMsgId;
-   const unsigned int m_onDevChangedMsgId;
-   static void OnDevSrcChanged(const unsigned int msgId, void *userData, void *msgData);
-   std::vector<DevSrcId> m_deviceSources;
-
-   const unsigned int m_getInputSrcMsgId;
-   const unsigned int m_onInputChangedMsgId;
-   static void OnInputSrcChanged(const unsigned int msgId, void *userData, void *msgData);
-   std::vector<InputSrcId> m_inputSources;
+   const unsigned int m_getStateSrcMsgId;
+   const unsigned int m_onStateChangedMsgId;
+   static void OnStateSrcChanged(const unsigned int msgId, void *userData, void *msgData);
+   std::vector<StateSrcId> m_stateSources;
 
    using floatCacheLambda = std::function<float(const std::string &)>;
    ankerl::unordered_dense::map<std::string, floatCacheLambda> m_floatCache;

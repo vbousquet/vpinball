@@ -25,22 +25,17 @@ DOFEventStream::DOFEventStream(const MsgPluginAPI* msgApi, uint32_t endpointId, 
    m_getSegSrcId = m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DISPLAY_GET_SRC_MSG);
    m_onSegSrcChangedId = m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_SEG_ON_SRC_CHG_MSG);
    
-   m_getDevSrcId = m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_GET_SRC_MSG);
-   m_onDevSrcChangedId = m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_ON_SRC_CHG_MSG);
-
-   m_getInputSrcId = m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_INPUT_GET_SRC_MSG);
-   m_onInputSrcChangedId = m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_INPUT_ON_SRC_CHG_MSG);
+   m_getStateSrcId = m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_STATE_GET_SRC_MSG);
+   m_onStateSrcChangedId = m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_STATE_ON_SRC_CHG_MSG);
 
    m_onSerumTriggerId = m_msgApi->GetMsgID("Serum", "OnDmdTrigger");
 
    m_msgApi->SubscribeMsg(m_endpointId, m_onDmdSrcChangedId, OnDMDSrcChanged, this);
    m_msgApi->SubscribeMsg(m_endpointId, m_onSegSrcChangedId, OnSegSrcChanged, this);
-   m_msgApi->SubscribeMsg(m_endpointId, m_onDevSrcChangedId, OnDevSrcChanged, this);
-   m_msgApi->SubscribeMsg(m_endpointId, m_onInputSrcChangedId, OnInputSrcChanged, this);
+   m_msgApi->SubscribeMsg(m_endpointId, m_onStateSrcChangedId, OnStateSrcChanged, this);
    m_msgApi->SubscribeMsg(m_endpointId, m_onSerumTriggerId, OnSerumTrigger, this);
    OnDMDSrcChanged(m_onDmdSrcChangedId, this, nullptr);
-   OnDevSrcChanged(m_onDevSrcChangedId, this, nullptr);
-   OnInputSrcChanged(m_onInputSrcChangedId, this, nullptr);
+   OnStateSrcChanged(m_onStateSrcChangedId, this, nullptr);
 
    m_thread = std::thread(&DOFEventStream::StatePollingThread, this);
 }
@@ -51,26 +46,20 @@ DOFEventStream::~DOFEventStream()
    if (m_thread.joinable())
       m_thread.join();
 
-   for (unsigned int i = 0; i < m_b2sDevSrc.nDevices; i++)
-      m_b2sDevSrc.SetChangeCallback(i, 0, OnB2SStateChg, this);
+   for (unsigned int i = 0; i < m_b2sStateSrc.nStates; i++)
+      m_b2sStateSrc.SetChangeCallback(i, 0, OnB2SStateChg, this);
 
    m_msgApi->UnsubscribeMsg(m_onDmdSrcChangedId, OnDMDSrcChanged, this);
    m_msgApi->UnsubscribeMsg(m_onSegSrcChangedId, OnSegSrcChanged, this);
-   m_msgApi->UnsubscribeMsg(m_onDevSrcChangedId, OnDevSrcChanged, this);
-   m_msgApi->UnsubscribeMsg(m_onInputSrcChangedId, OnInputSrcChanged, this);
+   m_msgApi->UnsubscribeMsg(m_onStateSrcChangedId, OnStateSrcChanged, this);
    m_msgApi->UnsubscribeMsg(m_onSerumTriggerId, OnSerumTrigger, this);
-   delete[] m_b2sInputSrc.inputDefs;
-   delete[] m_b2sDevSrc.deviceDefs;
-   delete[] m_pmInputSrc.inputDefs;
-   delete[] m_pmDevSrc.deviceDefs;
+   delete[] m_b2sStateSrc.stateDefs;
+   delete[] m_pmStateSrc.stateDefs;
 
    m_msgApi->ReleaseMsgID(m_onSerumTriggerId);
 
-   m_msgApi->ReleaseMsgID(m_getDevSrcId);
-   m_msgApi->ReleaseMsgID(m_onDevSrcChangedId);
-
-   m_msgApi->ReleaseMsgID(m_getInputSrcId);
-   m_msgApi->ReleaseMsgID(m_onInputSrcChangedId);
+   m_msgApi->ReleaseMsgID(m_getStateSrcId);
+   m_msgApi->ReleaseMsgID(m_onStateSrcChangedId);
 
    m_msgApi->ReleaseMsgID(m_getSegSrcId);
    m_msgApi->ReleaseMsgID(m_onSegSrcChangedId);
@@ -129,53 +118,53 @@ void DOFEventStream::OnSegSrcChanged(const unsigned int eventId, void* userData,
    }
 }
 
-void DOFEventStream::OnDevSrcChanged(const unsigned int eventId, void* userData, void* eventData)
+void DOFEventStream::OnStateSrcChanged(const unsigned int eventId, void* userData, void* eventData)
 {
    auto me = static_cast<DOFEventStream*>(userData);
    std::unique_lock lock(me->m_pollSrcMutex);
 
    // PinMAME controller
-   delete[] me->m_pmDevSrc.deviceDefs;
-   memset(&me->m_pmDevSrc, 0, sizeof(me->m_pmDevSrc));
-   me->m_pmDeviceState.clear();
+   delete[] me->m_pmStateSrc.stateDefs;
+   memset(&me->m_pmStateSrc, 0, sizeof(me->m_pmStateSrc));
+   me->m_pmStates.clear();
    if (unsigned int pinmameEndPoint = me->m_msgApi->GetPluginEndpoint("PinMAME"); pinmameEndPoint)
    {
-      GetDevSrcMsg getSrcMsg = { 1, 0, &me->m_pmDevSrc };
-      me->m_msgApi->SendMsg(me->m_endpointId, me->m_getDevSrcId, pinmameEndPoint, &getSrcMsg);
-      if (getSrcMsg.count && me->m_pmDevSrc.deviceDefs)
+      GetStateSrcMsg getSrcMsg = { 1, 0, &me->m_pmStateSrc };
+      me->m_msgApi->SendMsg(me->m_endpointId, me->m_getStateSrcId, pinmameEndPoint, &getSrcMsg);
+      if (getSrcMsg.count && me->m_pmStateSrc.stateDefs)
       {
          // Copy device definitions
-         DeviceDef* devices = new DeviceDef[me->m_pmDevSrc.nDevices];
-         memcpy(devices, me->m_pmDevSrc.deviceDefs, me->m_pmDevSrc.nDevices * sizeof(DeviceDef));
-         me->m_pmDevSrc.deviceDefs = devices;
-         me->m_pmDeviceState.resize(me->m_pmDevSrc.nDevices, -1);
+         StateDef* devices = new StateDef[me->m_pmStateSrc.nStates];
+         memcpy(devices, me->m_pmStateSrc.stateDefs, me->m_pmStateSrc.nStates * sizeof(StateDef));
+         me->m_pmStateSrc.stateDefs = devices;
+         me->m_pmStates.resize(me->m_pmStateSrc.nStates, -1);
       }
    }
 
    // B2S controller
-   delete[] me->m_b2sDevSrc.deviceDefs;
-   memset(&me->m_b2sDevSrc, 0, sizeof(me->m_b2sDevSrc));
+   delete[] me->m_b2sStateSrc.stateDefs;
+   memset(&me->m_b2sStateSrc, 0, sizeof(me->m_b2sStateSrc));
    unsigned int b2sEndPoint = me->m_msgApi->GetPluginEndpoint("B2S");
    if (!b2sEndPoint)
       b2sEndPoint = me->m_msgApi->GetPluginEndpoint("B2SLegacy");
    if (b2sEndPoint)
    {
-      GetDevSrcMsg getSrcMsg = { 1, 0, &me->m_b2sDevSrc };
-      me->m_msgApi->SendMsg(me->m_endpointId, me->m_getDevSrcId, b2sEndPoint, &getSrcMsg);
-      if (getSrcMsg.count && me->m_b2sDevSrc.deviceDefs)
+      GetStateSrcMsg getSrcMsg = { 1, 0, &me->m_b2sStateSrc };
+      me->m_msgApi->SendMsg(me->m_endpointId, me->m_getStateSrcId, b2sEndPoint, &getSrcMsg);
+      if (getSrcMsg.count && me->m_b2sStateSrc.stateDefs)
       {
          // Copy device definitions and register state change listener
-         DeviceDef* devices = new DeviceDef[me->m_b2sDevSrc.nDevices];
-         memcpy(devices, me->m_b2sDevSrc.deviceDefs, me->m_b2sDevSrc.nDevices * sizeof(DeviceDef));
-         me->m_b2sDevSrc.deviceDefs = devices;
-         for (unsigned int i = 0; i < me->m_b2sDevSrc.nDevices; i++)
-            me->m_b2sDevSrc.SetChangeCallback(i, 1, OnB2SStateChg, me);
+         StateDef* devices = new StateDef[me->m_b2sStateSrc.nStates];
+         memcpy(devices, me->m_b2sStateSrc.stateDefs, me->m_b2sStateSrc.nStates * sizeof(StateDef));
+         me->m_b2sStateSrc.stateDefs = devices;
+         for (unsigned int i = 0; i < me->m_b2sStateSrc.nStates; i++)
+            me->m_b2sStateSrc.SetChangeCallback(i, 1, OnB2SStateChg, me);
       }
    }
 
    lock.unlock();
 
-   for (unsigned int i = 0; i < me->m_b2sDevSrc.nDevices; i++)
+   for (unsigned int i = 0; i < me->m_b2sStateSrc.nStates; i++)
       OnB2SStateChg(i, me);
 }
 
@@ -183,54 +172,15 @@ void MSGPIAPI DOFEventStream::OnB2SStateChg(unsigned int index, void* context)
 {
    // E: B2S Controller generic input state (B2SSetData / B2SPulseData)
    auto me = static_cast<DOFEventStream*>(context);
-   me->QueueEvent('E', static_cast<int>(me->m_b2sDevSrc.deviceDefs[index].id.deviceId), me->m_b2sDevSrc.GetFloatState(index) > 0.5f ? 1 : 0);
+   float state;
+   me->m_b2sStateSrc.GetState(index, CTLPI_STATE_TYPE_FLOAT, &state);
+   me->QueueEvent('E', static_cast<int>(me->m_b2sStateSrc.stateDefs[index].id.stateId), state > 0.5f ? 1 : 0);
 
    // B: B2S Controller score digit
    // TODO implement
 
    // C: B2S Controller score
    // TODO implement
-}
-
-void DOFEventStream::OnInputSrcChanged(const unsigned int eventId, void* userData, void* eventData)
-{
-   auto me = static_cast<DOFEventStream*>(userData);
-   std::lock_guard lock(me->m_pollSrcMutex);
-
-   delete[] me->m_pmInputSrc.inputDefs;
-   memset(&me->m_pmInputSrc, 0, sizeof(me->m_pmInputSrc));
-   me->m_pmSwitchState.clear();
-   if (unsigned int pinmameEndPoint = me->m_msgApi->GetPluginEndpoint("PinMAME"); pinmameEndPoint)
-   {
-      GetInputSrcMsg getSrcMsg = { 1, 0, &me->m_pmInputSrc };
-      me->m_msgApi->SendMsg(me->m_endpointId, me->m_getInputSrcId, pinmameEndPoint, &getSrcMsg);
-      if (getSrcMsg.count && me->m_pmInputSrc.inputDefs)
-      {
-         // Copy device definitions
-         DeviceDef* devices = new DeviceDef[me->m_pmInputSrc.nInputs];
-         memcpy(devices, me->m_pmInputSrc.inputDefs, me->m_pmInputSrc.nInputs * sizeof(DeviceDef));
-         me->m_pmInputSrc.inputDefs = devices;
-         me->m_pmSwitchState.resize(me->m_pmInputSrc.nInputs, 2);
-      }
-   }
-
-   delete[] me->m_b2sInputSrc.inputDefs;
-   memset(&me->m_b2sInputSrc, 0, sizeof(me->m_b2sInputSrc));
-   unsigned int b2sEndPoint = me->m_msgApi->GetPluginEndpoint("B2S");
-   if (!b2sEndPoint)
-      b2sEndPoint = me->m_msgApi->GetPluginEndpoint("B2SLegacy");
-   if (b2sEndPoint)
-   {
-      GetInputSrcMsg getSrcMsg = { 1, 0, &me->m_b2sInputSrc };
-      me->m_msgApi->SendMsg(me->m_endpointId, me->m_getInputSrcId, b2sEndPoint, &getSrcMsg);
-      if (getSrcMsg.count && me->m_b2sInputSrc.inputDefs)
-      {
-         // Copy device definitions
-         DeviceDef* devices = new DeviceDef[me->m_b2sInputSrc.nInputs];
-         memcpy(devices, me->m_b2sInputSrc.inputDefs, me->m_b2sInputSrc.nInputs * sizeof(DeviceDef));
-         me->m_b2sInputSrc.inputDefs = devices;
-      }
-   }
 }
 
 // Update thread that poll analog sources (lamps, solenoids, ...) at 60Hz
@@ -290,37 +240,26 @@ void DOFEventStream::StatePollingThread()
          segIndex++;
       }
 
-      // W: PinMAME switch events
-      // TODO implement switch state event in PinMAME
-      for (unsigned int i = 0; i < m_pmInputSrc.nInputs; i++)
-      {
-         if (m_pmInputSrc.inputDefs[i].id.groupId == 0x0001)
-         {
-            const int state = m_pmInputSrc.GetInputState(i) ? 1 : 0;
-            if (m_pmSwitchState[i] != state)
-            {
-               QueueEvent('W', m_pmInputSrc.inputDefs[i].id.deviceId, state);
-               m_pmSwitchState[i] = state;
-            }
-         }
-      }
-
       // S: PinMAME solenoid state
       // G: PinMAME GI state
       // L: PinMAME lamp state
       // N: PinMAME mech state
-      for (unsigned int i = 0; i < m_pmDevSrc.nDevices; i++)
+      // W: PinMAME switch events
+      for (unsigned int i = 0; i < m_pmStateSrc.nStates; i++)
       {
-         const int state = static_cast<int>(roundf(m_pmDevSrc.GetFloatState(i)));
-         if (m_pmDeviceState[i] != state)
+         float floatState;
+         m_pmStateSrc.GetState(i, CTLPI_STATE_TYPE_FLOAT, &floatState);
+         const int state = static_cast<int>(roundf(floatState));
+         if (m_pmStates[i] != state)
          {
-            m_pmDeviceState[i] = state;
-            switch (m_pmDevSrc.deviceDefs[i].id.groupId & 0xFF00)
+            m_pmStates[i] = state;
+            switch (m_pmStateSrc.stateDefs[i].id.groupId & 0xFF00)
             {
-            case 0x0000: QueueEvent('S', m_pmDevSrc.deviceDefs[i].id.deviceId, state); break;
-            case 0x0100: QueueEvent('G', m_pmDevSrc.deviceDefs[i].id.deviceId, state); break;
-            case 0x0200: QueueEvent('L', m_pmDevSrc.deviceDefs[i].id.deviceId, state); break;
-            case 0x0300: QueueEvent('N', m_pmDevSrc.deviceDefs[i].id.deviceId, state); break;
+            case 0x0000: QueueEvent('S', m_pmStateSrc.stateDefs[i].id.stateId, state); break;
+            case 0x0100: QueueEvent('G', m_pmStateSrc.stateDefs[i].id.stateId, state); break;
+            case 0x0200: QueueEvent('L', m_pmStateSrc.stateDefs[i].id.stateId, state); break;
+            case 0x0300: QueueEvent('N', m_pmStateSrc.stateDefs[i].id.stateId, state); break;
+            case 0x0400: QueueEvent('W', m_pmStateSrc.stateDefs[i].id.stateId, state); break;
             }
          }
       }

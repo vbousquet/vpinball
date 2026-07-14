@@ -48,21 +48,6 @@ typedef union CtlResId
    uint64_t id;
 } CtlResId;
 
-// Generic device state definition, used for inputs and devices
-typedef struct DeviceDef
-{
-   const char* name; // User friendly name, or null if not available, owned by the provider
-   union // User friendly unique mapping id, note that while unique, this id may appear multiple times if a device state is mirrored
-   {
-      struct
-      {
-         uint16_t groupId;
-         uint16_t deviceId;
-      };
-      uint32_t mappingId;
-   } id;
-} DeviceDef;
-
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -88,67 +73,71 @@ struct CtlOnSoundCommandMsg // FIXME replace by generic game events
 
 ///////////////////////////////////////////////////////////////////////////////
 //
-// Controller input state
+// Controller state
 //
 
-// Broadcasted after an input source has been added, modified or removed, there is no message data
-#define CTLPI_INPUT_ON_SRC_CHG_MSG "OnInputsChanged"
+// Broadcasted after a controller state source has been added, modified or removed, there is no message data
+#define CTLPI_STATE_ON_SRC_CHG_MSG "OnStateSrcChanged"
 
-// Request subscribers to fill up an array with the list of input blocks, message data is a pointer to a GetInputSrcMsg structure
-#define CTLPI_INPUT_GET_SRC_MSG    "GetInputs"
+// Request subscribers to fill up an array with the list of state blocks, message data is a pointer to a GetStateSrcMsg structure
+#define CTLPI_STATE_GET_SRC_MSG "GetStateSrc"
 
 typedef void(MSGPIAPI* ctlpi_chg_callback)(unsigned int index, void* context);
 
-typedef struct InputSrcId
+typedef struct StateGroupDef
 {
-   CtlResId id;                                                                   // Unique Id of the input block
-   unsigned int nInputs;                                                          // Number of inputs
-   DeviceDef* inputDefs;                                                          // Pointer to a block of nInputs DeviceDef, owned by the provider, valid until a src changed event is broadcasted
-   int(MSGPIAPI* GetInputState)(unsigned int inputIndex);                         // Pointer to function to request an input state, thread safe
-   void(MSGPIAPI* SetInputState)(unsigned int inputIndex, int isSet);             // Pointer to function to request an input state change, thread safe
-   void(MSGPIAPI* SetChangeCallback)(unsigned int inputIndex, int isRegister, ctlpi_chg_callback cb, void* ctx); // Optional pointer to function to register/unregister state change callback, NOT thread safe, callbacks are automatically unregistered when CTLPI_INPUT_ON_SRC_CHG_MSG is broadcasted
-} InputSrcId;
+   const char* name; // User friendly name, or null if not available, owned by the provider
+   const char* desc; // User friendly description, or null if not available, owned by the provider
+   uint16_t id;
+} StateGroupDef;
 
-typedef struct GetInputSrcMsg
+#define CTLPI_STATE_TYPE_BOOL              0
+#define CTLPI_STATE_TYPE_UINT8             1
+#define CTLPI_STATE_TYPE_UINT16            2
+#define CTLPI_STATE_TYPE_UINT32            3
+#define CTLPI_STATE_TYPE_INT8              4
+#define CTLPI_STATE_TYPE_INT16             5
+#define CTLPI_STATE_TYPE_INT32             6
+#define CTLPI_STATE_TYPE_FLOAT             7
+#define CTLPI_STATE_TYPE_STRING            8 // 0 ended char string, UTF8 encoded, owned by the controller
+
+typedef struct StateDef
+{
+   const char* name; // User friendly name, or null if not available, owned by the provider
+   const char* desc; // User friendly description, or null if not available, owned by the provider
+   union // User friendly unique mapping id, note that while unique, this id may appear multiple times if a device state is mirrored
+   {
+      struct
+      {
+         uint16_t groupId;
+         uint16_t stateId;
+      };
+      uint32_t mappingId;
+   } id;
+   int type; // State's data type. This is the only data type that can be requested/writed safely, see CTLPI_STATE_TYPE_xxx defines
+   int writable; // Non 0 if the state is writable
+} StateDef;
+
+typedef struct StateSrcId
+{
+   CtlResId id; // Unique Id of the input block
+   unsigned int nGroups; // Number of groups
+   StateGroupDef* groupDefs; // Pointer to a block of nGroups StateGroupDef, owned by the provider, valid until a src changed event is broadcasted
+   unsigned int nStates; // Number of states
+   StateDef* stateDefs; // Pointer to a block of nStates StateDef, owned by the provider, valid until a src changed event is broadcasted
+   int(MSGPIAPI* GetState)(unsigned int inputIndex, int type, void* pResult); // Pointer to function to request a state, thread safe, may be null, returns non 0 on error, pResult points to a memblock corresponding to type
+   int(MSGPIAPI* SetState)(unsigned int inputIndex, int type, void* pResult); // Pointer to function to request a state change, thread safe, may be null, returns non 0 on error, pResult points to a memblock corresponding to type
+   void(MSGPIAPI* SetChangeCallback)(unsigned int inputIndex, int isRegister, ctlpi_chg_callback cb, void* ctx); // Optional pointer to function to register/unregister state change callback, NOT thread safe, callbacks are automatically unregistered when CTLPI_STATE_ON_SRC_CHG_MSG is broadcasted
+} StateSrcId;
+
+typedef struct GetStateSrcMsg
 {
    // Request
    unsigned int maxEntryCount; // see below
    // Response
-   unsigned int count;         // Number of entries, also position to put next entry, should be increased even if exceeding maxEntryCount to get the total count
-   InputSrcId* entries;        // Pointer to an array of maxEntryCount entries to be filled
-} GetInputSrcMsg;
-
-
-
-///////////////////////////////////////////////////////////////////////////////
-//
-// Controlled device states
-//
-
-// Broadcasted after a controlled device source has been added, modified or removed, there is no message data
-#define CTLPI_DEVICE_ON_SRC_CHG_MSG "OnDevicesChanged"
-
-// Request subscribers to fill up an array with the list of controlled device sources, message data is a pointer to a GetDevSrcMsg structure
-#define CTLPI_DEVICE_GET_SRC_MSG    "GetDevices"
-
-typedef struct DevSrcId
-{
-   CtlResId id;                                                      // Unique Id of the controlled device block
-   unsigned int nDevices;                                            // Number of device properties in this block
-   DeviceDef* deviceDefs;                                            // Pointer to a block of nDevices DeviceDef, owned by the provider, valid until a src changed event is broadcasted
-   uint8_t (MSGPIAPI* GetByteState)(const unsigned int deviceIndex); // Get the state of a device property, thread safe
-   float (MSGPIAPI* GetFloatState)(const unsigned int deviceIndex);  // Get the state of a device property, thread safe
-   void (MSGPIAPI* SetChangeCallback)(unsigned int inputIndex, int isRegister, ctlpi_chg_callback cb, void* ctx); // Optional pointer to function to register/unregister state change callback, NOT thread safe, callbacks are automatically unregistered when CTLPI_DEVICE_ON_SRC_CHG_MSG is broadcasted
-} DevSrcId;
-
-typedef struct GetDevSrcMsg
-{
-   // Request
-   unsigned int maxEntryCount; // see below
-   // Response
-   unsigned int count;         // Number of entries, also position to put next entry, should be increased even if exceeding maxEntryCount to get the total count
-   DevSrcId* entries;          // Pointer to an array of maxEntryCount entries to be filled
-} GetDevSrcMsg;
+   unsigned int count; // Number of entries, also position to put next entry, should be increased even if exceeding maxEntryCount to get the total count
+   StateSrcId* entries; // Pointer to an array of maxEntryCount entries to be filled
+} GetStateSrcMsg;
 
 
 ///////////////////////////////////////////////////////////////////////////////

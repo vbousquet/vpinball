@@ -49,24 +49,19 @@ private:
    unsigned int m_getDmdSrcId = 0;
    unsigned int m_onSegSrcChangedId = 0;
    unsigned int m_getSegSrcId = 0;
-   unsigned int m_onDevSrcChangedId = 0;
-   unsigned int m_getDevSrcId = 0;
-   unsigned int m_onInputSrcChangedId = 0;
-   unsigned int m_getInputSrcId = 0;
+   unsigned int m_onStateSrcChangedId = 0;
+   unsigned int m_getStateSrcId = 0;
    unsigned int m_onSerumTriggerId = 0;
 
-   DevSrcId m_pmDevSrc {};
-   std::vector<int> m_pmDeviceState;
-   InputSrcId m_pmInputSrc {};
-   std::vector<int> m_pmSwitchState;
+   StateSrcId m_pmStateSrc {};
+   std::vector<int> m_pmStates;
    std::vector<SegSrcId> m_pmSegSrc;
    std::vector<uint16_t> m_pmLastSegFrame;
    std::vector<unsigned int> m_pmLastSegFrameId;
    static void OnSegSrcChanged(const unsigned int eventId, void* userData, void* eventData);
 
-   InputSrcId m_b2sInputSrc {};
-   std::vector<int> m_b2sSwitchState;
-   DevSrcId m_b2sDevSrc {};
+   StateSrcId m_b2sStateSrc {};
+   std::vector<int> m_b2sStates;
    static void MSGPIAPI OnB2SStateChg(unsigned int index, void* context);
 
    DisplaySrcId m_dmdId {};
@@ -76,8 +71,7 @@ private:
    static void OnDMDSrcChanged(const unsigned int eventId, void* userData, void* eventData);
 
    static void OnSerumTrigger(const unsigned int eventId, void* userData, void* eventData);
-   static void OnDevSrcChanged(const unsigned int eventId, void* userData, void* eventData);
-   static void OnInputSrcChanged(const unsigned int eventId, void* userData, void* eventData);
+   static void OnStateSrcChanged(const unsigned int eventId, void* userData, void* eventData);
 };
 
 }

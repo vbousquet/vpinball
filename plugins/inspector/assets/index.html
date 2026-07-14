@@ -53,9 +53,9 @@
         }
 
         function formatMapping(mapping, deviceOnly) {
-            const deviceId = (mapping >>> 16) & 0xFFFF;
+            const stateId = (mapping >>> 16) & 0xFFFF;
             const groupId = mapping & 0xFFFF;
-            return deviceOnly ? `${deviceId.toString(16).padStart(4, '0')}` : `${groupId.toString(16).padStart(4, '0')}.${deviceId.toString(16).padStart(4, '0')}`;
+            return deviceOnly ? `${stateId.toString(16).padStart(4, '0')}` : `${groupId.toString(16).padStart(4, '0')}.${stateId.toString(16).padStart(4, '0')}`;
         }
 
         function formatBinaryState(state) {
@@ -96,8 +96,7 @@
         }
 
         function itemDataAttributes(node) {
-            const kind = node.type === 'device' ? 'device' : 'input';
-            return `data-${kind}-id="${node.mapping}" data-${kind}-name="${escapeHtml(node.name)}" data-state-kind="${kind}"`;
+            return `data-state-id="${node.mapping}" data-state-name="${escapeHtml(node.name)}" data-state-kind="${kind}"`;
         }
 
         function isMatrixGroup(children) {
@@ -105,7 +104,7 @@
                 return false;
             }
 
-            return children.every(child => child && (child.type === 'input' || child.type === 'device'));
+            return children.every(child => child && (child.type === 'state'));
         }
 
         function buildStateSpan(node) {
@@ -160,7 +159,7 @@
                 return html;
             }
 
-            if (node.type === 'input' || node.type === 'device') {
+            if (node.type === 'state') {
                 return buildLeafNode(node);
             } else if (node.type === 'display' || node.type === 'seg_display') {
                 return `<div class="node-item">${escapeHtml(node.name)}</div>`;
@@ -192,32 +191,18 @@
                 });
         }
 
-        function updateInputState(item) {
-            document.querySelectorAll(`[data-input-id="${item.id}"]`).forEach(el => updateVisualState(el, 'input', item.state));
+        function updateState(item) {
+            document.querySelectorAll(`[data-state-id="${item.id}"]`).forEach(el => updateVisualState(el, 'state', item.state));
         }
 
-        function updateDeviceState(item) {
-            document.querySelectorAll(`[data-device-id="${item.id}"]`).forEach(el => updateVisualState(el, 'device', item.state));
-        }
-
-        function fetchInputStates() {
-            fetch('/api/input_states')
+        function fetchStates() {
+            fetch('/api/states')
                 .then(res => res.json())
                 .then(data => {
-                    data.forEach(updateInputState);
+                    data.forEach(updateState);
                 })
-                .catch(err => console.error('Input states error', err));
-            setTimeout(fetchInputStates, 30);
-        }
-
-        function fetchDeviceStates() {
-            fetch('/api/device_states')
-                .then(res => res.json())
-                .then(data => {
-                    data.forEach(updateDeviceState);
-                })
-                .catch(err => console.error('Device states error', err));
-            setTimeout(fetchDeviceStates, 30);
+                .catch(err => console.error('States error', err));
+            setTimeout(fetchStates, 30);
         }
 
         // Initial load
@@ -227,8 +212,7 @@
         window.addEventListener('resize', updateMatrixListHeights);
 
         // Refresh states periodically
-        setTimeout(fetchInputStates, 30);
-        setTimeout(fetchDeviceStates, 30);
+        setTimeout(fetchStates, 30);
     </script>
 </body>
 </html>

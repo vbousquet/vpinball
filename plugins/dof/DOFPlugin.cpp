@@ -49,17 +49,14 @@ static uint32_t endpointId;
 static unsigned int onControllerGameStartId;
 static unsigned int onControllerGameEndId;
 
-static unsigned int getDevSrcId;
-static unsigned int onDevSrcChangedId;
-static unsigned int getInputSrcId;
-static unsigned int onInputSrcChangedId;
+static unsigned int getStateSrcId;
+static unsigned int onStateSrcChangedId;
 
 static std::mutex sourceMutex;
 static bool isRunning = false;
 static bool isReady = false;
-static DevSrcId pinmameDevSrc = {};
-static InputSrcId pinmameInputSrc = {};
-static DevSrcId b2sDevSrc = {};
+static StateSrcId pinmameStateSrc = {};
+static StateSrcId b2sStateSrc = {};
 
 static std::thread pollThread;
 
@@ -129,8 +126,7 @@ static void PollThread(const string& tablePath, const string& gameId)
    SetThreadName("DOF.PollThread"s);
    pDOF->Init(tablePath.c_str(), gameId.c_str());
    bool isInitialState = true;
-   vector<bool> wireStates;
-   vector<bool> pinmameDeviceStates;
+   vector<bool> pinmameStates;
    while (isRunning)
    {
       {
@@ -138,46 +134,37 @@ static void PollThread(const string& tablePath, const string& gameId)
 
          if (!isReady)
          {
-            for (unsigned int i = 0; i < b2sDevSrc.nDevices; i++)
-               pDOF->DataReceive('E', b2sDevSrc.deviceDefs[i].id.deviceId, b2sDevSrc.GetFloatState(i) > 0.5f ? 1 : 0);
+            for (unsigned int i = 0; i < b2sStateSrc.nStates; i++)
+            {
+               float state = 0.f; b2sStateSrc.GetState(i, CTLPI_STATE_TYPE_FLOAT, &state);
+               pDOF->DataReceive('E', b2sStateSrc.stateDefs[i].id.stateId, state > 0.5f ? 1 : 0);
+            }
             isReady = true;
          }
 
-         isInitialState |= wireStates.size() != pinmameInputSrc.nInputs;
-         isInitialState |= pinmameDeviceStates.size() != pinmameDevSrc.nDevices;
+         isInitialState |= pinmameStates.size() != pinmameStateSrc.nStates;
 
-         wireStates.resize(pinmameInputSrc.nInputs);
-         for (unsigned int i = 0; i < pinmameInputSrc.nInputs; i++)
-         {
-            if (pinmameInputSrc.inputDefs[i].id.groupId == 0x0001)
-            {
-               bool state = pinmameInputSrc.GetInputState(i);
-               if (isInitialState || (wireStates[i] != state))
-               {
-                  pDOF->DataReceive('W', pinmameInputSrc.inputDefs[i].id.deviceId, state ? 1 : 0); // Switches
-                  wireStates[i] = state;
-               }
-            }
-         }
-
-         pinmameDeviceStates.resize(pinmameDevSrc.nDevices);
-         for (unsigned int i = 0; i < pinmameDevSrc.nDevices; i++)
+         pinmameStates.resize(pinmameStateSrc.nStates);
+         for (unsigned int i = 0; i < pinmameStateSrc.nStates; i++)
          {
             char type;
-            switch (pinmameDevSrc.deviceDefs[i].id.groupId & 0xFF00)
+            switch (pinmameStateSrc.stateDefs[i].id.groupId & 0xFF00)
             {
             case 0x0000: type = 'S'; break; // Solenoids
             case 0x0100: type = 'G'; break; // GI
             case 0x0200: type = 'L'; break; // Lamps
+            case 0x0300: type = '\0'; break; // Mech
+            case 0x0400: type = 'W'; break; // Switch
+            case 0x0500: type = '\0'; break; // Dip Switch
             default: type = '\0'; break; // Unsupported
             }
             if (type != '\0')
             {
-               float state = pinmameDevSrc.GetFloatState(i);
-               if (isInitialState || (pinmameDeviceStates[i] && state < 0.25f) || (!pinmameDeviceStates[i] && state > 0.75f))
+               float state = 0.f; pinmameStateSrc.GetState(i, CTLPI_STATE_TYPE_FLOAT, &state);
+               if (isInitialState || (pinmameStates[i] && state < 0.25f) || (!pinmameStates[i] && state > 0.75f))
                {
-                  pDOF->DataReceive(type, pinmameDevSrc.deviceDefs[i].id.deviceId, state > 0.5f ? 1 : 0);
-                  pinmameDeviceStates[i] = state > 0.5f;
+                  pDOF->DataReceive(type, pinmameStateSrc.stateDefs[i].id.stateId, state > 0.5f ? 1 : 0);
+                  pinmameStates[i] = state > 0.5f;
                }
             }
          }
@@ -198,11 +185,10 @@ static void PollThread(const string& tablePath, const string& gameId)
 static void MSGPIAPI OnB2SStateChg(unsigned int index, void* context)
 {
    std::lock_guard lock(sourceMutex);
-   if (isReady && index < b2sDevSrc.nDevices && pDOF != nullptr)
+   if (isReady && index < b2sStateSrc.nStates && pDOF != nullptr)
    {
-      float state = b2sDevSrc.GetFloatState(index);
-      // LOGD(std::format("B2S state change E{:d} = {:f}", b2sDevSrc.deviceDefs[index].id.deviceId, state));
-      pDOF->DataReceive('E', b2sDevSrc.deviceDefs[index].id.deviceId, state > 0.5f ? 1 : 0);
+      float state = 0.f; b2sStateSrc.GetState(index, CTLPI_STATE_TYPE_FLOAT, &state);
+      pDOF->DataReceive('E', b2sStateSrc.stateDefs[index].id.stateId, state > 0.5f ? 1 : 0);
    }
 }
 
@@ -247,31 +233,32 @@ static void OnControllerGameEnd(const unsigned int eventId, void* userData, void
    }
 }
 
-static void ClearDevices()
+static void ClearStates()
 {
-   delete[] pinmameDevSrc.deviceDefs;
-   memset(&pinmameDevSrc, 0, sizeof(pinmameDevSrc));
-   for (unsigned int i = 0; i < b2sDevSrc.nDevices; i++)
-      if (b2sDevSrc.SetChangeCallback)
-         b2sDevSrc.SetChangeCallback(i, 0, OnB2SStateChg, nullptr);
-   memset(&b2sDevSrc, 0, sizeof(b2sDevSrc));
+   delete[] pinmameStateSrc.stateDefs;
+   memset(&pinmameStateSrc, 0, sizeof(pinmameStateSrc));
+   for (unsigned int i = 0; i < b2sStateSrc.nStates; i++)
+      if (b2sStateSrc.SetChangeCallback)
+         b2sStateSrc.SetChangeCallback(i, 0, OnB2SStateChg, nullptr);
+   delete[] b2sStateSrc.stateDefs;
+   memset(&b2sStateSrc, 0, sizeof(b2sStateSrc));
 }
 
-static void OnDevSrcChanged(const unsigned int eventId, void* userData, void* msgData)
+static void OnStateSrcChanged(const unsigned int eventId, void* userData, void* msgData)
 {
    std::lock_guard lock(sourceMutex);
-   ClearDevices();
+   ClearStates();
 
-   GetDevSrcMsg getSrcMsg = { 0, 0, nullptr };
-   msgApi->BroadcastMsg(endpointId, getDevSrcId, &getSrcMsg);
+   GetStateSrcMsg getSrcMsg = { 0, 0, nullptr };
+   msgApi->BroadcastMsg(endpointId, getStateSrcId, &getSrcMsg);
    if (getSrcMsg.count == 0)
    {
-      LOGI("OnDevSrcChanged - No source"s);
+      LOGI("OnStateSrcChanged - No source"s);
       return;
    }
 
-   getSrcMsg = { getSrcMsg.count, 0, new DevSrcId[getSrcMsg.count] };
-   msgApi->BroadcastMsg(endpointId, getDevSrcId, &getSrcMsg);
+   getSrcMsg = { getSrcMsg.count, 0, new StateSrcId[getSrcMsg.count] };
+   msgApi->BroadcastMsg(endpointId, getStateSrcId, &getSrcMsg);
    MsgEndpointInfo info;
    for (unsigned int i = 0; i < getSrcMsg.count; i++)
    {
@@ -279,54 +266,29 @@ static void OnDevSrcChanged(const unsigned int eventId, void* userData, void* ms
       msgApi->GetEndpointInfo(getSrcMsg.entries[i].id.endpointId, &info);
       if (info.id != nullptr && info.id == "PinMAME"sv)
       {
-         pinmameDevSrc = getSrcMsg.entries[i];
-         if (pinmameDevSrc.deviceDefs)
+         pinmameStateSrc = getSrcMsg.entries[i];
+         if (pinmameStateSrc.stateDefs)
          {
-            pinmameDevSrc.deviceDefs = new DeviceDef[pinmameDevSrc.nDevices];
-            memcpy(pinmameDevSrc.deviceDefs, getSrcMsg.entries[i].deviceDefs, getSrcMsg.entries[i].nDevices * sizeof(DeviceDef));
+            pinmameStateSrc.stateDefs = new StateDef[pinmameStateSrc.nStates];
+            memcpy(pinmameStateSrc.stateDefs, getSrcMsg.entries[i].stateDefs, getSrcMsg.entries[i].nStates * sizeof(StateDef));
          }
       }
       else if (info.id != nullptr && (info.id == "B2S"sv || info.id == "B2SLegacy"sv))
       {
-         b2sDevSrc = getSrcMsg.entries[i];
-         for (unsigned int i = 0; i < b2sDevSrc.nDevices; i++)
-            if (b2sDevSrc.SetChangeCallback)
-               b2sDevSrc.SetChangeCallback(i, 1, OnB2SStateChg, nullptr);
-      }
-   }
-   delete[] getSrcMsg.entries;
-
-   LOGI(std::format("OnDevSrcChanged - Found {} PinMAME devices and {} B2S devices", pinmameDevSrc.nDevices, b2sDevSrc.nDevices));
-}
-
-static void OnInputSrcChanged(const unsigned int eventId, void* userData, void* msgData)
-{
-   std::lock_guard lock(sourceMutex);
-   delete[] pinmameInputSrc.inputDefs;
-   memset(&pinmameInputSrc, 0, sizeof(pinmameInputSrc));
-
-   GetInputSrcMsg getSrcMsg = { 1024, 0, new InputSrcId[1024] };
-   msgApi->BroadcastMsg(endpointId, getInputSrcId, &getSrcMsg);
-
-   MsgEndpointInfo info;
-   for (unsigned int i = 0; i < getSrcMsg.count; i++)
-   {
-      memset(&info, 0, sizeof(info));
-      msgApi->GetEndpointInfo(getSrcMsg.entries[i].id.endpointId, &info);
-      if (info.id != nullptr && info.id == "PinMAME"sv)
-      {
-         pinmameInputSrc = getSrcMsg.entries[i];
-         if (pinmameInputSrc.inputDefs)
+         b2sStateSrc = getSrcMsg.entries[i];
+         if (b2sStateSrc.stateDefs)
          {
-            pinmameInputSrc.inputDefs = new DeviceDef[pinmameInputSrc.nInputs];
-            memcpy(pinmameInputSrc.inputDefs, getSrcMsg.entries[i].inputDefs, getSrcMsg.entries[i].nInputs * sizeof(DeviceDef));
+            b2sStateSrc.stateDefs = new StateDef[b2sStateSrc.nStates];
+            memcpy(b2sStateSrc.stateDefs, getSrcMsg.entries[i].stateDefs, getSrcMsg.entries[i].nStates * sizeof(StateDef));
          }
-         break;
+         for (unsigned int j = 0; j < b2sStateSrc.nStates; j++)
+            if (b2sStateSrc.SetChangeCallback)
+               b2sStateSrc.SetChangeCallback(j, 1, OnB2SStateChg, nullptr);
       }
    }
    delete[] getSrcMsg.entries;
 
-   LOGI(std::format("OnInputSrcChanged - Found {} PinMAME inputs", pinmameInputSrc.nInputs));
+   LOGI(std::format("OnStateSrcChanged - Found {} PinMAME states and {} B2S states", pinmameStateSrc.nStates, b2sStateSrc.nStates));
 }
 
 }
@@ -340,8 +302,8 @@ MSGPI_EXPORT void MSGPIAPI DOFPluginLoad(const uint32_t sessionId, const MsgPlug
 
    LPISetup(endpointId, msgApi);
 
-   memset(&pinmameDevSrc, 0, sizeof(pinmameDevSrc));
-   ClearDevices();
+   memset(&pinmameStateSrc, 0, sizeof(pinmameStateSrc));
+   ClearStates();
 
    unsigned int getVpxApiId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_API);
    msgApi->BroadcastMsg(endpointId, getVpxApiId, &vpxApi);
@@ -350,16 +312,12 @@ MSGPI_EXPORT void MSGPIAPI DOFPluginLoad(const uint32_t sessionId, const MsgPlug
    msgApi->SubscribeMsg(endpointId, onControllerGameStartId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_EVT_ON_GAME_START), OnControllerGameStart, nullptr);
    msgApi->SubscribeMsg(endpointId, onControllerGameEndId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_EVT_ON_GAME_END), OnControllerGameEnd, nullptr);
 
-   getDevSrcId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_GET_SRC_MSG);
-   onDevSrcChangedId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_ON_SRC_CHG_MSG);
-   getInputSrcId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_INPUT_GET_SRC_MSG);
-   onInputSrcChangedId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_INPUT_ON_SRC_CHG_MSG);
+   getStateSrcId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_STATE_GET_SRC_MSG);
+   onStateSrcChangedId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_STATE_ON_SRC_CHG_MSG);
 
-   msgApi->SubscribeMsg(endpointId, onDevSrcChangedId, OnDevSrcChanged, nullptr);
-   msgApi->SubscribeMsg(endpointId, onInputSrcChangedId, OnInputSrcChanged, nullptr);
+   msgApi->SubscribeMsg(endpointId, onStateSrcChangedId, OnStateSrcChanged, nullptr);
 
-   OnDevSrcChanged(onDevSrcChangedId, nullptr, nullptr);
-   OnInputSrcChanged(onInputSrcChangedId, nullptr, nullptr);
+   OnStateSrcChanged(onStateSrcChangedId, nullptr, nullptr);
 
    VPXInfo vpxInfo;
    vpxApi->GetVpxInfo(&vpxInfo);
@@ -377,24 +335,19 @@ MSGPI_EXPORT void MSGPIAPI DOFPluginUnload()
    if (pollThread.joinable())
       pollThread.join();
 
-   ClearDevices();
-   delete[] pinmameInputSrc.inputDefs;
-   memset(&pinmameInputSrc, 0, sizeof(pinmameInputSrc));
+   ClearStates();
 
    delete pDOF;
    pDOF = nullptr;
 
    msgApi->UnsubscribeMsg(onControllerGameStartId, OnControllerGameStart, nullptr);
    msgApi->UnsubscribeMsg(onControllerGameEndId, OnControllerGameEnd, nullptr);
-   msgApi->UnsubscribeMsg(onDevSrcChangedId, OnDevSrcChanged, nullptr);
-   msgApi->UnsubscribeMsg(onInputSrcChangedId, OnInputSrcChanged, nullptr);
+   msgApi->UnsubscribeMsg(onStateSrcChangedId, OnStateSrcChanged, nullptr);
 
    msgApi->ReleaseMsgID(onControllerGameStartId);
    msgApi->ReleaseMsgID(onControllerGameEndId);
-   msgApi->ReleaseMsgID(getDevSrcId);
-   msgApi->ReleaseMsgID(onDevSrcChangedId);
-   msgApi->ReleaseMsgID(getInputSrcId);
-   msgApi->ReleaseMsgID(onInputSrcChangedId);
+   msgApi->ReleaseMsgID(getStateSrcId);
+   msgApi->ReleaseMsgID(onStateSrcChangedId);
 
    msgApi = nullptr;
 }
