@@ -131,7 +131,7 @@ private:
    static void MSGPIAPI SubscribeMsg(const uint32_t endpointId, const unsigned int msgId, const msgpi_msg_callback callback, void* userData);
    static void MSGPIAPI UnsubscribeMsg(const unsigned int msgId, const msgpi_msg_callback callback, void* userData);
    static void MSGPIAPI BroadcastMsg(const uint32_t endpointId, const unsigned int msgId, void* data);
-   static void MSGPIAPI SendMsg(const uint32_t endpointId, const unsigned int msgId, const uint32_t targetEndpointId, void* data);
+   static void MSGPIAPI SendMsg(const uint32_t endpointId, const unsigned int msgId, void* data, const uint32_t targetEndpointId);
    static void MSGPIAPI ReleaseMsgID(const unsigned int msgId);
    static void MSGPIAPI RegisterSetting(const uint32_t endpointId, MsgSettingDef* settingDef);
    static void MSGPIAPI SaveSetting(const uint32_t endpointId, MsgSettingDef* settingDef);

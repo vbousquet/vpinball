@@ -144,7 +144,7 @@ void onUpdateDMD(void* userData)
 }
 
 // Broadcasted by Serum plugin when frame triggers are identified
-void onSerumTrigger(const unsigned int eventId, void* userData, void* eventData)
+void onSerumTrigger(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* eventData)
 {
    unsigned int* trigger = static_cast<unsigned int*>(eventData);
    if (dmdDevicePupDll && pupTrigger)
@@ -178,7 +178,7 @@ static T GetModulePath(HMODULE hModule)
 }
 #endif
 
-void onGameStart(const unsigned int eventId, void* userData, void* eventData)
+void onGameStart(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* eventData)
 {
    // Select main DMD from the list of DMD sources (this is not fully clean as this rely on the fact that PinMAME sends the game start event after declaring its displays, we should listen for display source changes)
    bool mainDMDFound = false;
@@ -237,7 +237,7 @@ void onGameStart(const unsigned int eventId, void* userData, void* eventData)
    onUpdateDMD(nullptr);
 }
 
-void onGameEnd(const unsigned int eventId, void* userData, void* eventData)
+void onGameEnd(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* eventData)
 {
    dmdId = {};
    if (dmdDevicePupDll)

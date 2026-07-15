@@ -740,7 +740,7 @@ int PUPManager::Render(VPXRenderContext2D* const renderCtx, void* context)
    return true;
 }
 
-void PUPManager::OnGetRenderer(const unsigned int eventId, void* context, void* msgData)
+void PUPManager::OnGetRenderer(const unsigned int senderEndpointId, const unsigned int eventId, void* context, void* msgData)
 {
    auto me = static_cast<PUPManager*>(context);
    auto msg = static_cast<GetAncillaryRendererMsg*>(msgData);

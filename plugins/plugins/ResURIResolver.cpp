@@ -27,22 +27,22 @@ ResURIResolver::ResURIResolver(const MsgPluginAPI &msgAPI, unsigned int endpoint
    if (trackDisplays)
    {
       m_msgAPI.SubscribeMsg(m_endpointId, m_onDisplayChangedMsgId, OnDisplaySrcChanged, this);
-      OnDisplaySrcChanged(m_onDisplayChangedMsgId, this, nullptr);
+      OnDisplaySrcChanged(endpointId, m_onDisplayChangedMsgId, this, nullptr);
    }
    if (trackSegDisplays)
    {
       m_msgAPI.SubscribeMsg(m_endpointId, m_onSegChangedMsgId, OnSegSrcChanged, this);
-      OnSegSrcChanged(m_onSegChangedMsgId, this, nullptr);
+      OnSegSrcChanged(endpointId, m_onSegChangedMsgId, this, nullptr);
    }
    if (trackInputs)
    {
       m_msgAPI.SubscribeMsg(m_endpointId, m_onInputChangedMsgId, OnInputSrcChanged, this);
-      OnInputSrcChanged(m_onInputChangedMsgId, this, nullptr);
+      OnInputSrcChanged(endpointId, m_onInputChangedMsgId, this, nullptr);
    }
    if (trackDevices)
    {
       m_msgAPI.SubscribeMsg(m_endpointId, m_onDevChangedMsgId, OnDevSrcChanged, this);
-      OnDevSrcChanged(m_onDevChangedMsgId, this, nullptr);
+      OnDevSrcChanged(endpointId, m_onDevChangedMsgId, this, nullptr);
    }
 }
 
@@ -92,7 +92,7 @@ bool ResURIResolver::try_parse_int(const string &str, int &value)
    return (std::from_chars(tmp.c_str(), tmp.c_str() + tmp.length(), value).ec == std::errc {});
 }
 
-void ResURIResolver::OnInputSrcChanged(const unsigned int msgId, void *userData, void *msgData)
+void ResURIResolver::OnInputSrcChanged(const unsigned int senderEndpointId, const unsigned int msgId, void *userData, void *msgData)
 {
    ResURIResolver* me = static_cast<ResURIResolver *>(userData);
    GetInputSrcMsg getSrcMsg = { 0, 0, nullptr };
@@ -104,7 +104,7 @@ void ResURIResolver::OnInputSrcChanged(const unsigned int msgId, void *userData,
    me->m_floatCache.clear();
 }
 
-void ResURIResolver::OnDevSrcChanged(const unsigned int msgId, void *userData, void *msgData)
+void ResURIResolver::OnDevSrcChanged(const unsigned int senderEndpointId, const unsigned int msgId, void *userData, void *msgData)
 {
    ResURIResolver* me = static_cast<ResURIResolver *>(userData);
    GetDevSrcMsg getSrcMsg = { 0, 0, nullptr };
@@ -116,7 +116,7 @@ void ResURIResolver::OnDevSrcChanged(const unsigned int msgId, void *userData, v
    me->m_floatCache.clear();
 }
 
-void ResURIResolver::OnSegSrcChanged(const unsigned int msgId, void *userData, void *msgData)
+void ResURIResolver::OnSegSrcChanged(const unsigned int senderEndpointId, const unsigned int msgId, void *userData, void *msgData)
 {
    ResURIResolver* me = static_cast<ResURIResolver *>(userData);
    GetSegSrcMsg getSrcMsg = { 0, 0, nullptr };
@@ -128,7 +128,7 @@ void ResURIResolver::OnSegSrcChanged(const unsigned int msgId, void *userData, v
    me->m_segCache.clear();
 }
 
-void ResURIResolver::OnDisplaySrcChanged(const unsigned int msgId, void *userData, void *msgData)
+void ResURIResolver::OnDisplaySrcChanged(const unsigned int senderEndpointId, const unsigned int msgId, void *userData, void *msgData)
 {
    ResURIResolver* me = static_cast<ResURIResolver *>(userData);
    GetDisplaySrcMsg getSrcMsg = { 0, 0, nullptr };

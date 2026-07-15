@@ -51,7 +51,7 @@ struct AudioCallbackData {
     AudioUpdateMsg* msg;
 };
 
-static void OnGetAudioSrc(const unsigned int msgId, void* userData, void* msgData)
+static void OnGetAudioSrc(const unsigned int senderEndpointId, const unsigned int msgId, void* userData, void* msgData)
 {
     GetAudioSrcMsg* msg = static_cast<GetAudioSrcMsg*>(msgData);
     if (isRunning && msg->count < msg->maxEntryCount)
@@ -81,7 +81,7 @@ static void UpdatePinmameAudioId()
     }
 }
 
-static void OnAudioSrcChanged(const unsigned int msgId, void* userData, void* msgData)
+static void OnAudioSrcChanged(const unsigned int senderEndpointId, const unsigned int msgId, void* userData, void* msgData)
 {
     UpdatePinmameAudioId();
     if (isRunning)
@@ -178,7 +178,7 @@ static void StopAltSound()
     msgApi->BroadcastMsg(endpointId, onAudioSrcChangedId, nullptr);
 }
 
-static void OnControllerGameStart(const unsigned int eventId, void* userData, void* msgData)
+static void OnControllerGameStart(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* msgData)
 {
     // FIXME: Temp fix for issues 3298, 3309, and maybe 3322?
     if (isRunning)
@@ -218,7 +218,7 @@ static void OnControllerGameStart(const unsigned int eventId, void* userData, vo
     }
 }
 
-static void OnSoundCommand(const unsigned int eventId, void* userData, void* msgData)
+static void OnSoundCommand(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* msgData)
 {
     if (!isRunning)
         return;
@@ -228,8 +228,7 @@ static void OnSoundCommand(const unsigned int eventId, void* userData, void* msg
         AltSoundProcessCommand(msg->cmd, 0);
 }
 
-static void OnControllerGameEnd(const unsigned int eventId, void* userData, void* msgData)
-{
+static void OnControllerGameEnd(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* msgData) {
     StopAltSound();
 }
 

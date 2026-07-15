@@ -38,9 +38,9 @@ DOFEventStream::DOFEventStream(const MsgPluginAPI* msgApi, uint32_t endpointId, 
    m_msgApi->SubscribeMsg(m_endpointId, m_onDevSrcChangedId, OnDevSrcChanged, this);
    m_msgApi->SubscribeMsg(m_endpointId, m_onInputSrcChangedId, OnInputSrcChanged, this);
    m_msgApi->SubscribeMsg(m_endpointId, m_onSerumTriggerId, OnSerumTrigger, this);
-   OnDMDSrcChanged(m_onDmdSrcChangedId, this, nullptr);
-   OnDevSrcChanged(m_onDevSrcChangedId, this, nullptr);
-   OnInputSrcChanged(m_onInputSrcChangedId, this, nullptr);
+   OnDMDSrcChanged(m_endpointId, m_onDmdSrcChangedId, this, nullptr);
+   OnDevSrcChanged(m_endpointId, m_onDevSrcChangedId, this, nullptr);
+   OnInputSrcChanged(m_endpointId, m_onInputSrcChangedId, this, nullptr);
 
    m_thread = std::thread(&DOFEventStream::StatePollingThread, this);
 }
@@ -83,11 +83,11 @@ void DOFEventStream::SetDMDHandler(const std::function<DisplaySrcId(const GetDis
 {
    m_selectDmd = select;
    m_processDmd = process;
-   OnDMDSrcChanged(m_onDmdSrcChangedId, this, nullptr);
+   OnDMDSrcChanged(m_endpointId, m_onDmdSrcChangedId, this, nullptr);
 }
 
 // Broadcasted by Serum plugin when frame triggers are identified
-void DOFEventStream::OnSerumTrigger(const unsigned int eventId, void* userData, void* eventData)
+void DOFEventStream::OnSerumTrigger(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* eventData)
 {
    auto me = static_cast<DOFEventStream*>(userData);
    auto trigger = static_cast<unsigned int*>(eventData);
@@ -95,7 +95,7 @@ void DOFEventStream::OnSerumTrigger(const unsigned int eventId, void* userData, 
    me->QueueEvent('D', static_cast<int>(*trigger), 0);
 }
 
-void DOFEventStream::OnDMDSrcChanged(const unsigned int eventId, void* userData, void* eventData)
+void DOFEventStream::OnDMDSrcChanged(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* eventData)
 {
    auto me = static_cast<DOFEventStream*>(userData);
    std::lock_guard lock(me->m_pollSrcMutex);
@@ -109,7 +109,7 @@ void DOFEventStream::OnDMDSrcChanged(const unsigned int eventId, void* userData,
    delete[] getSrcMsg.entries;
 }
 
-void DOFEventStream::OnSegSrcChanged(const unsigned int eventId, void* userData, void* eventData)
+void DOFEventStream::OnSegSrcChanged(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* eventData)
 {
    auto me = static_cast<DOFEventStream*>(userData);
    std::lock_guard lock(me->m_pollSrcMutex);
@@ -122,14 +122,14 @@ void DOFEventStream::OnSegSrcChanged(const unsigned int eventId, void* userData,
    {
       me->m_pmSegSrc.resize(1024);
       GetSegSrcMsg getSrcMsg = { static_cast<unsigned int>(me->m_pmSegSrc.size()), 0, me->m_pmSegSrc.data() };
-      me->m_msgApi->SendMsg(me->m_endpointId, me->m_getSegSrcId, pinmameEndPoint, &getSrcMsg);
+      me->m_msgApi->SendMsg(me->m_endpointId, me->m_getSegSrcId, &getSrcMsg, pinmameEndPoint);
       me->m_pmSegSrc.resize(getSrcMsg.count);
       me->m_pmLastSegFrame.resize(getSrcMsg.count);
       me->m_pmLastSegFrameId.resize(getSrcMsg.count);
    }
 }
 
-void DOFEventStream::OnDevSrcChanged(const unsigned int eventId, void* userData, void* eventData)
+void DOFEventStream::OnDevSrcChanged(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* eventData)
 {
    auto me = static_cast<DOFEventStream*>(userData);
    std::unique_lock lock(me->m_pollSrcMutex);
@@ -141,7 +141,7 @@ void DOFEventStream::OnDevSrcChanged(const unsigned int eventId, void* userData,
    if (unsigned int pinmameEndPoint = me->m_msgApi->GetPluginEndpoint("PinMAME"); pinmameEndPoint)
    {
       GetDevSrcMsg getSrcMsg = { 1, 0, &me->m_pmDevSrc };
-      me->m_msgApi->SendMsg(me->m_endpointId, me->m_getDevSrcId, pinmameEndPoint, &getSrcMsg);
+      me->m_msgApi->SendMsg(me->m_endpointId, me->m_getDevSrcId, &getSrcMsg, pinmameEndPoint);
       if (getSrcMsg.count && me->m_pmDevSrc.deviceDefs)
       {
          // Copy device definitions
@@ -161,7 +161,7 @@ void DOFEventStream::OnDevSrcChanged(const unsigned int eventId, void* userData,
    if (b2sEndPoint)
    {
       GetDevSrcMsg getSrcMsg = { 1, 0, &me->m_b2sDevSrc };
-      me->m_msgApi->SendMsg(me->m_endpointId, me->m_getDevSrcId, b2sEndPoint, &getSrcMsg);
+      me->m_msgApi->SendMsg(me->m_endpointId, me->m_getDevSrcId, &getSrcMsg, b2sEndPoint);
       if (getSrcMsg.count && me->m_b2sDevSrc.deviceDefs)
       {
          // Copy device definitions and register state change listener
@@ -192,7 +192,7 @@ void MSGPIAPI DOFEventStream::OnB2SStateChg(unsigned int index, void* context)
    // TODO implement
 }
 
-void DOFEventStream::OnInputSrcChanged(const unsigned int eventId, void* userData, void* eventData)
+void DOFEventStream::OnInputSrcChanged(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* eventData)
 {
    auto me = static_cast<DOFEventStream*>(userData);
    std::lock_guard lock(me->m_pollSrcMutex);
@@ -203,7 +203,7 @@ void DOFEventStream::OnInputSrcChanged(const unsigned int eventId, void* userDat
    if (unsigned int pinmameEndPoint = me->m_msgApi->GetPluginEndpoint("PinMAME"); pinmameEndPoint)
    {
       GetInputSrcMsg getSrcMsg = { 1, 0, &me->m_pmInputSrc };
-      me->m_msgApi->SendMsg(me->m_endpointId, me->m_getInputSrcId, pinmameEndPoint, &getSrcMsg);
+      me->m_msgApi->SendMsg(me->m_endpointId, me->m_getInputSrcId, &getSrcMsg, pinmameEndPoint);
       if (getSrcMsg.count && me->m_pmInputSrc.inputDefs)
       {
          // Copy device definitions
@@ -222,7 +222,7 @@ void DOFEventStream::OnInputSrcChanged(const unsigned int eventId, void* userDat
    if (b2sEndPoint)
    {
       GetInputSrcMsg getSrcMsg = { 1, 0, &me->m_b2sInputSrc };
-      me->m_msgApi->SendMsg(me->m_endpointId, me->m_getInputSrcId, b2sEndPoint, &getSrcMsg);
+      me->m_msgApi->SendMsg(me->m_endpointId, me->m_getInputSrcId, &getSrcMsg, b2sEndPoint);
       if (getSrcMsg.count && me->m_b2sInputSrc.inputDefs)
       {
          // Copy device definitions

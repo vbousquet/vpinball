@@ -71,10 +71,10 @@ void B2SRenderer::OnSegSrcChanged(const unsigned int, void* userData, void*)
       return;
 
    GetSegSrcMsg getSrcMsg = { 0, 0, nullptr };
-   me->m_msgApi->SendMsg(me->m_endpointId, me->m_getSegSrcMsgId, pinmameEndpoint, &getSrcMsg);
+   me->m_msgApi->SendMsg(me->m_endpointId, me->m_getSegSrcMsgId, &getSrcMsg, pinmameEndpoint);
    vector<SegSrcId> entries(getSrcMsg.count);
    getSrcMsg = { getSrcMsg.count, 0, entries.data() };
-   me->m_msgApi->SendMsg(me->m_endpointId, me->m_getSegSrcMsgId, pinmameEndpoint, &getSrcMsg);
+   me->m_msgApi->SendMsg(me->m_endpointId, me->m_getSegSrcMsgId, &getSrcMsg, pinmameEndpoint);
    for (unsigned int i = 0; i < getSrcMsg.count; i++)
    {
       if (getSrcMsg.entries[i].id.endpointId == pinmameEndpoint)
@@ -99,10 +99,10 @@ void B2SRenderer::OnDevSrcChanged(const unsigned int, void* userData, void*)
       return;
 
    GetDevSrcMsg getSrcMsg = { 0, 0, nullptr };
-   me->m_msgApi->SendMsg(me->m_endpointId, me->m_getDevSrcMsgId, pinmameEndpoint, &getSrcMsg);
+   me->m_msgApi->SendMsg(me->m_endpointId, me->m_getDevSrcMsgId, &getSrcMsg, pinmameEndpoint);
    vector<DevSrcId> entries(getSrcMsg.count);
    getSrcMsg = { getSrcMsg.count, 0, entries.data() };
-   me->m_msgApi->SendMsg(me->m_endpointId, me->m_getDevSrcMsgId, pinmameEndpoint, &getSrcMsg);
+   me->m_msgApi->SendMsg(me->m_endpointId, me->m_getDevSrcMsgId, &getSrcMsg, pinmameEndpoint);
    for (unsigned int i = 0; i < getSrcMsg.count; i++)
    {
       if (getSrcMsg.entries[i].id.endpointId == pinmameEndpoint)

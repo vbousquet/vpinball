@@ -110,11 +110,11 @@ static constexpr int scaleFactors[] = { 1, 1, 3, 2, 2, 3, 4, 5, 6, 2 };
 static UpscalerMode upscalerMode = UM_Disabled;
 static UpscalerMode nextUpscalerMode = UM_Disabled;
 static int GetUpscalerMode() { return (int)upscalerMode; }
-static void OnDmdSrcChanged(const unsigned int, void*, void*);
+static void OnDmdSrcChanged(const unsigned int senderEndpointId, const unsigned int, void*, void*);
 static void SetUpscalerMode(int v)
 {
    nextUpscalerMode = (UpscalerMode) v;
-   OnDmdSrcChanged(endpointId, nullptr, nullptr);
+   OnDmdSrcChanged(endpointId, onDisplaySrcChangedId, nullptr, nullptr);
 }
 MSGPI_ENUM_SETTING(upscaleModeProp, "UpscaleMode", "Mode", "Select upscaler", true, 0, std::size(scaleFactors), upscalerNames, 0, GetUpscalerMode, SetUpscalerMode);
 
@@ -336,7 +336,7 @@ static DisplayFrame GetRenderFrame(const CtlResId id)
    return { renderFrameId, displayId.frameFormat == CTLPI_DISPLAY_FORMAT_LUM32F ? static_cast<void*>(lumFrame.data()) : static_cast<void*>(rgbFrame.data()) };
 }
 
-static void OnGetDisplaySrc(const unsigned int, void*, void* msgData)
+static void OnGetDisplaySrc(const unsigned int senderEndpointId, const unsigned int, void*, void* msgData)
 {
    if (!IsSourceSelected())
       return;
@@ -346,7 +346,7 @@ static void OnGetDisplaySrc(const unsigned int, void*, void* msgData)
    msg.count++;
 }
 
-static void OnDmdSrcChanged(const unsigned int, void*, void*)
+static void OnDmdSrcChanged(const unsigned int senderEndpointId, const unsigned int, void*, void*)
 {
    bool wasRendering = IsSourceSelected();
    bool modeChanged = upscalerMode != nextUpscalerMode;
@@ -439,7 +439,7 @@ MSGPI_EXPORT void MSGPIAPI UpscaleDMDPluginLoad(const uint32_t sessionId, const 
    getDisplaySrcId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DISPLAY_GET_SRC_MSG);
    msgApi->RegisterSetting(endpointId, &upscaleModeProp);
    msgApi->SubscribeMsg(endpointId, onDisplaySrcChangedId, OnDmdSrcChanged, nullptr);
-   OnDmdSrcChanged(onDisplaySrcChangedId, nullptr, nullptr);
+   OnDmdSrcChanged(endpointId, onDisplaySrcChangedId, nullptr, nullptr);
 }
 
 MSGPI_EXPORT void MSGPIAPI UpscaleDMDPluginUnload()

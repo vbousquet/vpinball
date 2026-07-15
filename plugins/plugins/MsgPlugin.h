@@ -102,7 +102,7 @@
 #endif
 
 // Callbacks
-typedef void(MSGPIAPI* msgpi_msg_callback)(const unsigned int msgId, void* context, void* msgData);
+typedef void(MSGPIAPI* msgpi_msg_callback)(const unsigned int senderEndpointId, const unsigned int msgId, void* msgData, void* subscriberUserData);
 typedef void(MSGPIAPI* msgpi_timer_callback)(void* userData);
 
 typedef struct MsgEndpointInfo
@@ -212,8 +212,8 @@ typedef struct MsgPluginAPI
    unsigned int (MSGPIAPI* GetMsgID)(const char* name_space, const char* name);
    void (MSGPIAPI *SubscribeMsg)(const uint32_t endpointId, const unsigned int msgId, const msgpi_msg_callback callback, void* userData);
    void (MSGPIAPI *UnsubscribeMsg)(const unsigned int msgId, const msgpi_msg_callback callback, void* userData);
-   void (MSGPIAPI* BroadcastMsg)(const uint32_t endpointId, const unsigned int msgId, void* data);
-   void (MSGPIAPI* SendMsg)(const uint32_t endpointId, const unsigned int msgId, const uint32_t targetEndpointId, void* data);
+   void (MSGPIAPI* BroadcastMsg)(const unsigned int senderEndpointId, const unsigned int msgId, void* msgData);
+   void(MSGPIAPI* SendMsg)(const unsigned int senderEndpointId, const unsigned int msgId, void* msgData, const uint32_t targetEndpointId);
    void (MSGPIAPI* ReleaseMsgID)(const unsigned int msgId);
    // Setting
    void(MSGPIAPI* RegisterSetting)(const uint32_t endpointId, MsgSettingDef* settingDef); // Register a setting that the host will initialize either from a previously persisted value or the default

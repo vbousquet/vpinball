@@ -189,7 +189,7 @@ void MsgPluginManager::BroadcastMsg(const uint32_t endpointId, const unsigned in
       entry.callback(msgId, entry.context, data);
 }
 
-void MsgPluginManager::SendMsg(const uint32_t endpointId, const unsigned int msgId, const uint32_t targetEndpointId, void* data)
+void MsgPluginManager::SendMsg(const uint32_t endpointId, const unsigned int msgId, void* data, const uint32_t targetEndpointId)
 {
    MsgPluginManager& pm = *MsgPluginManager::m_pluginManager;
    assert(std::this_thread::get_id() == pm.m_apiThread);

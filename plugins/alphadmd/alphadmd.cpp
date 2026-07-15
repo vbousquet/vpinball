@@ -538,7 +538,7 @@ static DisplayFrame GetIdentifyFrame(const CtlResId id)
    return { frameId, frameCopy };
 }
 
-static void OnGetDisplaySrc(const unsigned int eventId, void* userData, void* msgData)
+static void OnGetDisplaySrc(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* msgData)
 {
    if (selectedSources.empty() || (dmdLayout == DmdLayouts::Undefined))
       return;
@@ -556,7 +556,7 @@ static void StopRenderThread()
       renderThread.join();
 }
 
-static void OnSegSrcChanged(const unsigned int, void* userData, void* msgData)
+static void OnSegSrcChanged(const unsigned int senderEndpointId, const unsigned int, void* userData, void* msgData)
 {
    std::unique_lock lock(sourceMutex);
    const bool wasRendering = !selectedSources.empty();
@@ -668,7 +668,7 @@ MSGPI_EXPORT void MSGPIAPI AlphaDMDPluginLoad(const uint32_t sessionId, const Ms
    onSegSrcChangedId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_SEG_ON_SRC_CHG_MSG);
    getSegSrcId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_SEG_GET_SRC_MSG);
    msgApi->SubscribeMsg(endpointId, onSegSrcChangedId, OnSegSrcChanged, nullptr);
-   OnSegSrcChanged(onSegSrcChangedId, nullptr, nullptr);
+   OnSegSrcChanged(endpointId, onSegSrcChangedId, nullptr, nullptr);
 }
 
 MSGPI_EXPORT void MSGPIAPI AlphaDMDPluginUnload()

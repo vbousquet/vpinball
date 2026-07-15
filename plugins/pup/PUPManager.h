@@ -140,7 +140,7 @@ private:
    unsigned int m_onAuxRendererChgId = 0;
    unsigned int m_getVpxApiId = 0;
    static int Render(VPXRenderContext2D* const renderCtx, void* context);
-   static void OnGetRenderer(const unsigned int eventId, void* context, void* msgData);
+   static void OnGetRenderer(const unsigned int senderEndpointId, const unsigned int eventId, void* context, void* msgData);
 
    std::mutex m_eventMutex;
    std::unique_ptr<DOFEventStream> m_dofEventStream;

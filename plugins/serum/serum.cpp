@@ -229,7 +229,7 @@ static DisplayFrame GetRenderFrame(const CtlResId id)
       return { state->m_colorizedframeId, state->m_colorFrame };
 }
 
-static void OnGetRenderDMDSrc(const unsigned int eventId, void* userData, void* msgData)
+static void OnGetRenderDMDSrc(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* msgData)
 {
    if (pSerum == nullptr || state == nullptr || dmdId.id.id == 0)
       return;
@@ -282,7 +282,7 @@ static void OnGetRenderDMDSrc(const unsigned int eventId, void* userData, void* 
 }
 
 // Select the first DMD with a large enough size that supports frame identification
-static void OnDmdSrcChanged(const unsigned int, void*, void*)
+static void OnDmdSrcChanged(const unsigned int senderEndpointId, const unsigned int, void*, void*)
 {
    if (pSerum == nullptr)
       return;
@@ -322,7 +322,7 @@ static void StopColorization()
    dmdId.id.id = 0;
 }
 
-static void OnControllerGameStart(const unsigned int eventId, void* userData, void* msgData)
+static void OnControllerGameStart(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* msgData)
 {
    // FIXME: Temp fix for issues 3298, 3309, and maybe 3322?
    if (isRunning)
@@ -370,7 +370,7 @@ static void OnControllerGameStart(const unsigned int eventId, void* userData, vo
    LOGI("Loading from " + serumPath.string() + " for " + msg->gameId);
 
    pSerum = Serum_Load(serumPath.string().c_str(), msg->gameId, FLAG_REQUEST_32P_FRAMES | FLAG_REQUEST_64P_FRAMES);
-   OnDmdSrcChanged(onDmdSrcChangedId, nullptr, nullptr);
+   OnDmdSrcChanged(senderEndpointId, onDmdSrcChangedId, nullptr, nullptr);
    if (pSerum)
    {
       isRunning = true;
@@ -382,8 +382,7 @@ static void OnControllerGameStart(const unsigned int eventId, void* userData, vo
    }
 }
 
-static void OnControllerGameEnd(const unsigned int eventId, void* userData, void* msgData)
-{
+static void OnControllerGameEnd(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* msgData) {
    StopColorization();
 }
 

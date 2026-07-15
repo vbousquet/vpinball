@@ -135,7 +135,7 @@ static DisplayFrame GetRenderFrame(const CtlResId id)
    return { state->m_colorizedframeId, state->m_colorFrame };
 }
 
-static void OnGetRenderDMDSrc(const unsigned int eventId, void* userData, void* msgData)
+static void OnGetRenderDMDSrc(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* msgData)
 {
    if (pVni == nullptr || state == nullptr || dmdId.id.id == 0)
       return;
@@ -157,7 +157,7 @@ static void OnGetRenderDMDSrc(const unsigned int eventId, void* userData, void* 
    }
 }
 
-static void OnDmdSrcChanged(const unsigned int, void*, void*)
+static void OnDmdSrcChanged(const unsigned int senderEndpointId, const unsigned int, void*, void*)
 {
    if (pVni == nullptr)
       return;
@@ -196,7 +196,7 @@ static void StopColorization()
    dmdId.id.id = 0;
 }
 
-static void OnControllerGameStart(const unsigned int eventId, void* userData, void* msgData)
+static void OnControllerGameStart(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* msgData)
 {
    // FIXME: Temp fix for issues 3298, 3309, and maybe 3322?
    if (isRunning)
@@ -272,7 +272,7 @@ static void OnControllerGameStart(const unsigned int eventId, void* userData, vo
       LOGI("Loading VNI from " + vniPath.string());
 
    pVni = Vni_LoadFromPaths(palPath.string().c_str(), vniPath.empty() ? nullptr : vniPath.string().c_str(), nullptr, nullptr);
-   OnDmdSrcChanged(onDmdSrcChangedId, nullptr, nullptr);
+   OnDmdSrcChanged(senderEndpointId, onDmdSrcChangedId, nullptr, nullptr);
    if (pVni)
    {
       isRunning = true;
@@ -284,8 +284,7 @@ static void OnControllerGameStart(const unsigned int eventId, void* userData, vo
    }
 }
 
-static void OnControllerGameEnd(const unsigned int eventId, void* userData, void* msgData)
-{
+static void OnControllerGameEnd(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* msgData) {
    StopColorization();
 }
 

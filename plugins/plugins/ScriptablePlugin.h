@@ -461,7 +461,7 @@ public:
       msgApi->BroadcastMsg(m_endpointId, m_getScriptApiId, &m_scriptApi);
       msgApi->SubscribeMsg(m_endpointId, m_onPluginLoaded, OnPluginLoaded, this);
       msgApi->SubscribeMsg(m_endpointId, m_onPluginUnloaded, OnPluginUnloaded, this);
-      OnPluginLoaded(0, this, nullptr);
+      OnPluginLoaded(endpointId, 0, this, nullptr);
    }
    ~ScriptClassProxy()
    {
@@ -524,7 +524,7 @@ private:
       return (name1.length() == name2.length()) && std::equal(name1.begin(), name1.end(), name2.begin(), [](unsigned char a, unsigned char b) { return std::tolower(a) == std::tolower(b); });
    }
 
-   static void OnPluginLoaded(const unsigned int, void* userData, void*)
+   static void OnPluginLoaded(const unsigned int senderEndpointId, const unsigned int, void* userData, void*)
    {
       auto me = static_cast<ScriptClassProxy*>(userData);
       if (me->m_scriptApi && me->m_baseClassDef == nullptr)
@@ -537,7 +537,7 @@ private:
       }
    }
 
-   static void OnPluginUnloaded(const unsigned int, void* userData, void*)
+   static void OnPluginUnloaded(const unsigned int senderEndpointId, const unsigned int, void* userData, void*)
    {
       auto me = static_cast<ScriptClassProxy*>(userData);
       if (me->m_scriptApi && me->m_baseClassDef)

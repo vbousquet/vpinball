@@ -142,10 +142,10 @@ void Server::OnDevSrcChanged(const unsigned int msgId, void* userData, void* msg
 
    unsigned int getDevSrcMsgId = m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_GET_SRC_MSG);
    GetDevSrcMsg getSrcMsg = { 0, 0, nullptr };
-   m_msgApi->SendMsg(m_endpointId, getDevSrcMsgId, pinmameEndpoint, &getSrcMsg);
+   m_msgApi->SendMsg(m_endpointId, getDevSrcMsgId, &getSrcMsg, pinmameEndpoint);
    vector<DevSrcId> entries(getSrcMsg.count);
    getSrcMsg = { getSrcMsg.count, 0, entries.data() };
-   m_msgApi->SendMsg(m_endpointId, getDevSrcMsgId, pinmameEndpoint, &getSrcMsg);
+   m_msgApi->SendMsg(m_endpointId, getDevSrcMsgId, &getSrcMsg, pinmameEndpoint);
    m_msgApi->ReleaseMsgID(getDevSrcMsgId);
    for (unsigned int i = 0; i < getSrcMsg.count; i++)
    {

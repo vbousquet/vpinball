@@ -87,12 +87,12 @@ private:
 
    const unsigned int m_getDevSrcMsgId;
    const unsigned int m_onDevChangedMsgId;
-   static void OnDevSrcChanged(const unsigned int msgId, void *userData, void *msgData);
+   static void OnDevSrcChanged(const unsigned int senderEndpointId, const unsigned int msgId, void *userData, void *msgData);
    std::vector<DevSrcId> m_deviceSources;
 
    const unsigned int m_getInputSrcMsgId;
    const unsigned int m_onInputChangedMsgId;
-   static void OnInputSrcChanged(const unsigned int msgId, void *userData, void *msgData);
+   static void OnInputSrcChanged(const unsigned int senderEndpointId, const unsigned int msgId, void *userData, void *msgData);
    std::vector<InputSrcId> m_inputSources;
 
    using floatCacheLambda = std::function<float(const std::string &)>;
@@ -100,7 +100,7 @@ private:
 
    const unsigned int m_getSegSrcMsgId;
    const unsigned int m_onSegChangedMsgId;
-   static void OnSegSrcChanged(const unsigned int msgId, void *userData, void *msgData);
+   static void OnSegSrcChanged(const unsigned int senderEndpointId, const unsigned int msgId, void *userData, void *msgData);
    std::vector<SegSrcId> m_segSources;
 
    using segCacheLambda = std::function<SegDisplayState(const std::string &)>;
@@ -108,7 +108,7 @@ private:
 
    const unsigned int m_getDisplaySrcMsgId;
    const unsigned int m_onDisplayChangedMsgId;
-   static void OnDisplaySrcChanged(const unsigned int msgId, void *userData, void *msgData);
+   static void OnDisplaySrcChanged(const unsigned int senderEndpointId, const unsigned int msgId, void *userData, void *msgData);
    std::vector<DisplaySrcId> m_displaySources;
    std::function<bool(const DisplaySrcId& src)> m_displayFilter;
 

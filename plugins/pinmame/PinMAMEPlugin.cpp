@@ -245,7 +245,7 @@ static unsigned int getAudioSrcId;
 static AudioUpdateMsg* audioSrc = nullptr;
 static AudioSrcId audioSrcDef = {};
 
-static void OnGetAudioSrc(const unsigned int msgId, void* userData, void* msgData)
+static void OnGetAudioSrc(const unsigned int senderEndpointId, const unsigned int msgId, void* userData, void* msgData)
 {
    GetAudioSrcMsg* msg = static_cast<GetAudioSrcMsg*>(msgData);
    if (audioSrc != nullptr && msg->count < msg->maxEntryCount)
@@ -346,10 +346,10 @@ static void OnControllerGameStart(Controller*)
          {
             unsigned int getDevSrcMsgId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_GET_SRC_MSG);
             GetDevSrcMsg getSrcMsg = { 0, 0, nullptr };
-            msgApi->SendMsg(endpointId, getDevSrcMsgId, endpointId, &getSrcMsg);
+            msgApi->SendMsg(endpointId, getDevSrcMsgId, &getSrcMsg, endpointId);
             std::vector<DevSrcId> deviceSources(getSrcMsg.count);
             getSrcMsg = { getSrcMsg.count, 0, deviceSources.data() };
-            msgApi->SendMsg(endpointId, getDevSrcMsgId, endpointId, &getSrcMsg);
+            msgApi->SendMsg(endpointId, getDevSrcMsgId, &getSrcMsg, endpointId);
             LOGD("PinMAME Controller started");
             for (const auto& devSrc : deviceSources)
             {

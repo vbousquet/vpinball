@@ -246,7 +246,7 @@ std::string GetInputStatesJson()
    return root.dump();
 }
 
-void onCtlGameStart(const unsigned int eventId, void* userData, void* msgData)
+void onCtlGameStart(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* msgData)
 {
    const CtlOnGameStartMsg* msg = static_cast<const CtlOnGameStartMsg*>(msgData);
    std::string gameId = msg && msg->gameId ? msg->gameId : "Unknown Game";
@@ -254,7 +254,7 @@ void onCtlGameStart(const unsigned int eventId, void* userData, void* msgData)
    UpdateTreeCache();
 }
 
-void onCtlGameEnd(const unsigned int eventId, void* userData, void* msgData)
+void onCtlGameEnd(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* msgData)
 {
    if (!runningGames.empty())
    {
@@ -263,7 +263,7 @@ void onCtlGameEnd(const unsigned int eventId, void* userData, void* msgData)
    UpdateTreeCache();
 }
 
-void onSrcChanged(const unsigned int eventId, void* userData, void* msgData) { UpdateTreeCache(); }
+void onSrcChanged(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* msgData) { UpdateTreeCache(); }
 
 } // namespace Inspector
 

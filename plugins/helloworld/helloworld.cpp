@@ -11,7 +11,7 @@ VPXPluginAPI* vpxApi = nullptr;
 uint32_t endpointId;
 unsigned int getVpxApiId, onGameStartId, onGameEndId, onPrepareFrameId;
 
-void onGameStart(const unsigned int eventId, void* userData, void* eventData)
+void onGameStart(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* eventData)
 {
    // Game is starting (plugin can be loaded and kept alive through multiple game plays)
    // After this event, all functions of the API marked as 'in game only' can be called
@@ -19,13 +19,13 @@ void onGameStart(const unsigned int eventId, void* userData, void* eventData)
       vpxApi->PushNotification("Hello World", 5000);
 }
 
-void onGameEnd(const unsigned int eventId, void* userData, void* eventData)
+void onGameEnd(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* eventData)
 {
    // Game is ending
    // After this event, all functions of the API marked as 'in game only' may not be called anymore
 }
 
-void onPrepareFrame(const unsigned int eventId, void* userData, void* eventData)
+void onPrepareFrame(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* eventData)
 {
    // Called when the player is about to prepare a new frame
    // This can be used to tweak any visual parameter before building the frame (for example head tracking,...)

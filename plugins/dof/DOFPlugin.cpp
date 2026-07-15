@@ -206,7 +206,7 @@ static void MSGPIAPI OnB2SStateChg(unsigned int index, void* context)
    }
 }
 
-static void OnControllerGameStart(const unsigned int eventId, void* userData, void* msgData)
+static void OnControllerGameStart(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* msgData)
 {
    const CtlOnGameStartMsg* msg = static_cast<const CtlOnGameStartMsg*>(msgData);
    assert(msg != nullptr && msg->gameId != nullptr);
@@ -229,7 +229,7 @@ static void OnControllerGameStart(const unsigned int eventId, void* userData, vo
    }
 }
 
-static void OnControllerGameEnd(const unsigned int eventId, void* userData, void* msgData)
+static void OnControllerGameEnd(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* msgData)
 {
    if (pDOF) {
       LOGI("OnControllerGameEnd"s);
@@ -249,7 +249,7 @@ static void ClearDevices()
    memset(&b2sDevSrc, 0, sizeof(b2sDevSrc));
 }
 
-static void OnDevSrcChanged(const unsigned int eventId, void* userData, void* msgData)
+static void OnDevSrcChanged(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* msgData)
 {
    std::lock_guard lock(sourceMutex);
    ClearDevices();
@@ -291,7 +291,7 @@ static void OnDevSrcChanged(const unsigned int eventId, void* userData, void* ms
    LOGI(std::format("OnDevSrcChanged - Found {} PinMAME devices and {} B2S devices", pinmameDevSrc.nDevices, b2sDevSrc.nDevices));
 }
 
-static void OnInputSrcChanged(const unsigned int eventId, void* userData, void* msgData)
+static void OnInputSrcChanged(const unsigned int senderEndpointId, const unsigned int eventId, void* userData, void* msgData)
 {
    std::lock_guard lock(sourceMutex);
    delete[] pinmameInputSrc.inputDefs;
@@ -350,8 +350,8 @@ MSGPI_EXPORT void MSGPIAPI DOFPluginLoad(const uint32_t sessionId, const MsgPlug
    msgApi->SubscribeMsg(endpointId, onDevSrcChangedId, OnDevSrcChanged, nullptr);
    msgApi->SubscribeMsg(endpointId, onInputSrcChangedId, OnInputSrcChanged, nullptr);
 
-   OnDevSrcChanged(onDevSrcChangedId, nullptr, nullptr);
-   OnInputSrcChanged(onInputSrcChangedId, nullptr, nullptr);
+   OnDevSrcChanged(endpointId, onDevSrcChangedId, nullptr, nullptr);
+   OnInputSrcChanged(endpointId, onInputSrcChangedId, nullptr, nullptr);
 
    VPXInfo vpxInfo;
    vpxApi->GetVpxInfo(&vpxInfo);

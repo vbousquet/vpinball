@@ -152,7 +152,7 @@ static void UpdateThread()
    isRunning = false;
 }
 
-static void onDmdSrcChanged(const unsigned int msgId, void* userData, void* msgData)
+static void onDmdSrcChanged(const unsigned int senderEndpointId, const unsigned int msgId, void* userData, void* msgData)
 {
    DisplaySrcId newDmdId = {};
 
@@ -229,7 +229,7 @@ static void onDmdSrcChanged(const unsigned int msgId, void* userData, void* msgD
    }
 }
 
-static void onGameEnd(const unsigned int msgId, void* userData, void* msgData)
+static void onGameEnd(const unsigned int senderEndpointId, const unsigned int msgId, void* userData, void* msgData)
 {
    isRunning = false;
    if (updateThread.joinable())
@@ -302,7 +302,7 @@ MSGPI_EXPORT void MSGPIAPI DMDUtilPluginLoad(const uint32_t sessionId, const Msg
 
 MSGPI_EXPORT void MSGPIAPI DMDUtilPluginUnload()
 {
-   onGameEnd(onGameEndId, nullptr, nullptr);
+   onGameEnd(endpointId, onGameEndId, nullptr, nullptr);
 
    msgApi->UnsubscribeMsg(onGameEndId, onGameEnd, nullptr);
    msgApi->UnsubscribeMsg(onDmdSrcChangedId, onDmdSrcChanged, nullptr);
