@@ -67,6 +67,7 @@ typedef enum
    VPXWINDOW_Backglass,
    VPXWINDOW_ScoreView,
    VPXWINDOW_Topper,
+   VPXWINDOW_PlayfieldOverlay,
    VPXWINDOW_VRPreview,
 } VPXWindowId;
 

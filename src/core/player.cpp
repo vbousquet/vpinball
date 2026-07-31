@@ -2301,17 +2301,19 @@ void Player::OnAuxRendererChanged(const unsigned int msgId, void* userData, void
 {
    Player * const me = static_cast<Player *>(userData);
    const MsgPluginAPI *m_msgApi = &me->m_pluginManager.GetMsgAPI();
-   for (int i = 0; i <= VPXWindowId::VPXWINDOW_Topper; i++)
+   for (int i = 0; i <= VPXWindowId::VPXWINDOW_PlayfieldOverlay; i++)
    {
       const VPXWindowId window = (VPXWindowId) i;
       const string section = window == VPXWindowId::VPXWINDOW_Backglass ? "Backglass"s
-                           : window == VPXWindowId::VPXWINDOW_ScoreView ? "ScoreView"s
-                                                                        : "Topper"s;
+         : window == VPXWindowId::VPXWINDOW_ScoreView                   ? "ScoreView"s
+         : window == VPXWindowId::VPXWINDOW_Topper                      ? "Topper"s
+                                                                        : "PFOverlay"s;
       GetAncillaryRendererMsg getAuxRendererMsg { window, 0, 0, nullptr };
       m_msgApi->BroadcastMsg(me->m_pluginAPI.GetVPXEndPointId(), me->m_getAuxRendererId, &getAuxRendererMsg);
       me->m_ancillaryWndRenderers[window].resize(getAuxRendererMsg.count);
       getAuxRendererMsg = { window, getAuxRendererMsg.count, 0, me->m_ancillaryWndRenderers[window].data() };
       m_msgApi->BroadcastMsg(me->m_pluginAPI.GetVPXEndPointId(), me->m_getAuxRendererId, &getAuxRendererMsg);
+      //GetCtrlItems<AncillaryRendererDef>(m_msgApi, me->m_pluginAPI.GetVPXEndPointId(), me->m_getAuxRendererId, me->m_ancillaryWndRenderers[window]);
       auto& priorities = me->m_ancillaryWndRendererPriorities[window];
       for (const auto& renderer : me->m_ancillaryWndRenderers[window])
       {

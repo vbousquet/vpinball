@@ -694,6 +694,13 @@ int PUPManager::Render(VPXRenderContext2D* const renderCtx, void* context)
       padTop = pupSVPadTop_Get();
       padBottom = pupSVPadBottom_Get();
       break;
+   case VPXWindowId::VPXWINDOW_PlayfieldOverlay:
+      rootScreen = me->GetScreen(3);
+      padLeft = 0;
+      padRight = 0;
+      padTop = 0;
+      padBottom = 0;
+      break;
    default: break;
    }
    if (!isUsableRoot(rootScreen))
@@ -763,7 +770,8 @@ void PUPManager::OnGetRenderer(const unsigned int eventId, void* context, void* 
    auto me = static_cast<PUPManager*>(context);
    auto msg = static_cast<GetAncillaryRendererMsg*>(msgData);
    static constexpr AncillaryRendererDef entry = { "PUP", "PinUp Player", "Renderer for PinUp player backglass", nullptr, Render };
-   if (msg->window == VPXWindowId::VPXWINDOW_Backglass || msg->window == VPXWindowId::VPXWINDOW_ScoreView || msg->window == VPXWindowId::VPXWINDOW_Topper)
+   if (msg->window == VPXWindowId::VPXWINDOW_Backglass || msg->window == VPXWindowId::VPXWINDOW_ScoreView || msg->window == VPXWindowId::VPXWINDOW_Topper
+      || msg->window == VPXWindowId::VPXWINDOW_PlayfieldOverlay)
    {
       if (msg->count < msg->maxEntryCount) 
       {

@@ -109,6 +109,7 @@ void FlasherVisualsProperty::UpdateVisuals(const int dispid /*=-1*/)
             m_styleCombo.AddString("Backglass");
             m_styleCombo.AddString("Score View");
             m_styleCombo.AddString("Topper");
+            m_styleCombo.AddString("Playfield Overlay");
             UpdateVisuals(IDC_DMD);
             break;
          }
@@ -182,7 +183,7 @@ void FlasherVisualsProperty::UpdateVisuals(const int dispid /*=-1*/)
       {
          if (flash->m_d.m_renderMode == FlasherData::EXT_RENDER)
          {
-            m_styleCombo.SetCurSel(clamp(flash->m_d.m_renderStyle - VPXWindowId::VPXWINDOW_Backglass, 0, VPXWindowId::VPXWINDOW_Topper - VPXWindowId::VPXWINDOW_Backglass));
+            m_styleCombo.SetCurSel(clamp(flash->m_d.m_renderStyle - VPXWindowId::VPXWINDOW_Backglass, 0, VPXWindowId::VPXWINDOW_PlayfieldOverlay - VPXWindowId::VPXWINDOW_Backglass));
          }
          else
          {
@@ -309,7 +310,7 @@ void FlasherVisualsProperty::UpdateProperties(const int dispid)
          PropertyDialog::StartUndo(flash);
          if (flash->m_d.m_renderMode == FlasherData::EXT_RENDER)
          {
-            flash->m_d.m_renderStyle = clamp(m_styleCombo.GetCurSel() + VPXWindowId::VPXWINDOW_Backglass, VPXWindowId::VPXWINDOW_Backglass, VPXWindowId::VPXWINDOW_Topper);
+            flash->m_d.m_renderStyle = clamp(m_styleCombo.GetCurSel() + VPXWindowId::VPXWINDOW_Backglass, VPXWindowId::VPXWINDOW_Backglass, VPXWindowId::VPXWINDOW_PlayfieldOverlay);
          }
          else
          {
