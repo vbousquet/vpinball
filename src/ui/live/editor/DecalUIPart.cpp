@@ -31,14 +31,8 @@ void DecalUIPart::Render(const EditorRenderContext& ctx)
    if (ctx.NeedsLiveTableSync())
       m_visible = m_decal->m_d.m_visible;
 
-   const bool isUIVisible = m_decal->IsUIVisible(true);
-   if (isUIVisible && (ctx.IsSelected() || (!m_visible && ctx.IsShowInvisible())))
-   {
-      m_decal->m_d.m_visible = true;
-      // ctx.DrawWireframe(m_decal);
-   }
-
-   m_decal->m_d.m_visible = isUIVisible && m_visible;
+   // TODO draw a selection overlay (decals have no wireframe/hit objects to display)
+   m_decal->m_d.m_visible = m_decal->IsUIVisible(true) && m_visible;
 }
 
 void DecalUIPart::UpdatePropertyPane(PropertyPane& props)

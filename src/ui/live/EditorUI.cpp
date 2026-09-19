@@ -1118,8 +1118,7 @@ void EditorUI::UpdateOutlinerUI()
       };
       vector<Node> stack;
       int outlinerItem = 0;
-      const float eyeWidth = ImGui::CalcTextSize(ICON_FK_EYE, nullptr, true).x;
-      const float eyeX = ImGui::GetContentRegionAvail().x; // - eyeWidth;
+      const float eyeX = ImGui::GetContentRegionAvail().x;
       for (const auto &edit : m_editables)
       {
          const PartGroup *parent = edit->GetEditable()->GetPartGroup();

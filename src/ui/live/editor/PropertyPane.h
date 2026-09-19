@@ -61,11 +61,6 @@ public:
    template <class T> void CollectionCombo(T* obj, const string& label, const std::function<string(const T*)>& getter, const std::function<void(T*, const string&)>& setter);
 
    int GetModifiedField() const { return m_modified; }
-   void ResetModified()
-   {
-      m_modified = -1;
-      m_modifyFieldId = 0;
-   }
 
 private:
    static constexpr const char* ICON_SAVE = ICON_FK_FLOPPY_O;

@@ -16,11 +16,15 @@ BallUIPart::~BallUIPart() { m_ball->m_d.m_visible = m_visible; }
 
 BallUIPart::TransformMask BallUIPart::GetTransform(Matrix3D& transform)
 {
-   transform = Matrix3D::MatrixTranslate(m_ball->m_hitBall.m_d.m_pos);
+   transform = Matrix3D::MatrixScale(m_ball->m_hitBall.m_d.m_radius) * Matrix3D::MatrixTranslate(m_ball->m_hitBall.m_d.m_pos);
    return static_cast<TransformMask>(TM_TransAny | TM_ScaleAll);
 }
 
-void BallUIPart::SetTransform(const vec3& pos, const vec3& scale, const vec3& rot) { m_ball->m_hitBall.m_d.m_pos = pos; }
+void BallUIPart::SetTransform(const vec3& pos, const vec3& scale, const vec3& rot)
+{
+   m_ball->m_hitBall.m_d.m_pos = pos;
+   m_ball->m_hitBall.m_d.m_radius = (scale.x + scale.y + scale.z) / 3.f;
+}
 
 void BallUIPart::Render(const EditorRenderContext& ctx)
 {
