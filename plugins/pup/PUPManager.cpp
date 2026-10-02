@@ -976,9 +976,9 @@ void PUPManager::DefaultDisplaySize(int screenNum, unsigned int& width, unsigned
 
 void PUPManager::RefreshDisplaySources()
 {
-   if (m_displayRefreshPending)
+   // Callable from any thread: coalesce to a single queued rebuild
+   if (m_displayRefreshPending.exchange(true))
       return;
-   m_displayRefreshPending = true;
    m_msgApi->RunOnMainThread(
       m_endpointId, 0.,
       [](void* ctx)
@@ -991,8 +991,13 @@ void PUPManager::RefreshDisplaySources()
 }
 
 // Advertises one display source per canvas screen (root of a screen tree: no
-// parent, or a positioned screen that has children of its own). Screens in Off
-// or MusicOnly mode are not advertised, nor are child screens which are
+// parent, or a positioned screen that has children of its own). A canvas is
+// advertised once its visible subtree has rendered content: decoded media or
+// loaded images report their native size (PUPScreen::ReportContentSize), while
+// labels only qualify eligibility and fall back to the default layout size.
+// The surface is sized at the largest content seen (grow-only within a
+// session, clamped to bound the software compositing cost). Screens in Off or
+// MusicOnly mode are not advertised, nor are child screens which are
 // composited inside their root's surface.
 void PUPManager::RebuildDisplaySources()
 {
@@ -1005,8 +1010,35 @@ void PUPManager::RebuildDisplaySources()
          const bool isCanvas = (screen->GetParent() == nullptr) || screen->HasChildren();
          if (!isCanvas || screen->GetMode() == PUPScreen::Mode::Off || screen->GetMode() == PUPScreen::Mode::MusicOnly)
             continue;
-         unsigned int width, height;
-         DefaultDisplaySize(screenNum, width, height);
+
+         // Aggregate the content reported by every visible member of the tree
+         // (children are composited inside the canvas surface)
+         unsigned int width = 0, height = 0;
+         bool hasContent = false;
+         for (const auto& member : m_screenOrder)
+         {
+            const PUPScreen* parent = member.get();
+            while (parent && parent != screen.get())
+               parent = parent->GetParent();
+            if (parent == nullptr || member->GetMode() == PUPScreen::Mode::Off || member->GetMode() == PUPScreen::Mode::MusicOnly)
+               continue;
+            hasContent |= member->HasContent();
+            width = std::max(width, member->GetContentWidth());
+            height = std::max(height, member->GetContentHeight());
+         }
+         if (!hasContent)
+            continue;
+
+         if (width == 0 || height == 0)
+            DefaultDisplaySize(screenNum, width, height);
+         else if (width > 2048 || height > 2048)
+         {
+            // Bound the CPU compositing cost while preserving aspect
+            const float scale = 2048.f / static_cast<float>(std::max(width, height));
+            width = std::max(1u, static_cast<unsigned int>(width * scale));
+            height = std::max(1u, static_cast<unsigned int>(height * scale));
+         }
+
          screen->CreateSurface(width, height);
          DisplaySrcId src {};
          src.id = { m_endpointId, static_cast<uint32_t>(screenNum) };
@@ -1021,6 +1053,11 @@ void PUPManager::RebuildDisplaySources()
       }
       m_displaySourceScreens = std::move(advertised);
    }
+   // Skip the broadcasts when nothing changed: change events synchronously
+   // invalidate consumers (URI caches, device binding), so they must not fire
+   // for every content size report.
+   if (items == m_displayProvider.GetItems())
+      return;
    m_displayProvider.ClearItems();
    if (!items.empty())
       m_displayProvider.AddItems(items);

@@ -131,6 +131,14 @@ public:
    DisplayFrame GetRenderFrame();
    void RenderToSurface();
 
+   // Native size of the largest media content reported so far, used to size the
+   // advertised display surface. ReportContentSize may be called from any
+   // thread (video decode, image loader) and only grows within a session.
+   void ReportContentSize(int width, int height);
+   unsigned int GetContentWidth() const { return m_contentW.load(); }
+   unsigned int GetContentHeight() const { return m_contentH.load(); }
+   bool HasContent() const { return (m_contentW.load() != 0) || !m_labels.empty(); }
+
    static const string& ToString(Mode mode);
 
 private:
@@ -138,6 +146,10 @@ private:
    void UpdateTimers();
 
    PUPManager* const m_pManager = nullptr;
+   // Declared early so they outlive the media/image members: loader callbacks
+   // may still touch them while member destructors are draining their threads.
+   std::atomic<unsigned int> m_contentW { 0 };
+   std::atomic<unsigned int> m_contentH { 0 };
    const int m_screenNum;
    const string m_screenDes;
 

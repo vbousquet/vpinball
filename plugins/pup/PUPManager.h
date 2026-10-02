@@ -168,7 +168,8 @@ private:
    PinballPlugin::Controller::CtrlItemProvider<DisplaySrcId> m_displayProvider;
    const unsigned int m_onPrepareFrameId;
    std::atomic<double> m_gameTime { 0. };
-   bool m_displayRefreshPending = false;
+   // Settable from any thread (content size reports come from decode/loader threads)
+   std::atomic<bool> m_displayRefreshPending { false };
    // Screens referenced by the last advertised display list, kept alive one
    // rebuild cycle so a stale DisplaySrcId's callContext stays valid until
    // consumers have switched to the refreshed list.

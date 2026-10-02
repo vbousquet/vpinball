@@ -39,6 +39,11 @@ PUPScreen::PUPScreen(PUPManager* manager, PUPScreen::Mode mode, int screenNum, c
 {
    m_pMediaPlayerManager = std::make_unique<PUPMediaManager>(this);
 
+   // Media/image content size reports drive the advertised display surface size
+   m_background.SetOnLoadedCallback([this](int w, int h) { ReportContentSize(w, h); });
+   m_staticImage.SetOnLoadedCallback([this](int w, int h) { ReportContentSize(w, h); });
+   m_overlay.SetOnLoadedCallback([this](int w, int h) { ReportContentSize(w, h); });
+
    for (const PUPPlaylist* pPlaylist : playlists) {
       // make a copy of the playlist
       PUPPlaylist *pPlaylistCopy = new PUPPlaylist(*pPlaylist);
@@ -250,6 +255,9 @@ void PUPScreen::AddLabel(PUPLabel* pLabel)
    pLabel->SetScreen(this);
    m_labelMap[lowerCase(pLabel->GetName())] = pLabel;
    m_labels.push_back(pLabel);
+   // A label is renderable content: the screen may become eligible for display
+   // advertisement through the controller API
+   m_pManager->RefreshDisplaySources();
 }
 
 PUPLabel* PUPScreen::GetLabel(const string& szLabelName)
@@ -568,6 +576,22 @@ void PUPScreen::RenderToSurface()
    m_surface->BeginFrame();
    m_pManager->RenderScreenTree(this, m_surface->GetContext());
    m_surface->EndFrame();
+}
+
+void PUPScreen::ReportContentSize(int width, int height)
+{
+   if (width <= 0 || height <= 0)
+      return;
+   const unsigned int w = static_cast<unsigned int>(width);
+   const unsigned int h = static_cast<unsigned int>(height);
+   // Grow-only within a session: later smaller content does not shrink the surface
+   for (unsigned int cur = m_contentW.load(); cur < w && !m_contentW.compare_exchange_weak(cur, w);)
+   {
+   }
+   for (unsigned int cur = m_contentH.load(); cur < h && !m_contentH.compare_exchange_weak(cur, h);)
+   {
+   }
+   m_pManager->RefreshDisplaySources();
 }
 
 string PUPScreen::ToString(bool full) const

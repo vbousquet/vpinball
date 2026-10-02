@@ -52,6 +52,10 @@ void PUPImage::Load(const std::filesystem::path& szFile)
          std::lock_guard lock(m_loadMutex);
          m_pendingSurface = std::move(surface);
       }
+      // Report before clearing m_loading: the destructor waits on it, which
+      // keeps the owning screen alive while the callback runs.
+      if (m_pendingSurface && m_onLoaded)
+         m_onLoaded(m_pendingSurface->w, m_pendingSurface->h);
       m_loading.store(false);
    }).detach();
 }

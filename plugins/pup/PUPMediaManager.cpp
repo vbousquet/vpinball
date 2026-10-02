@@ -13,6 +13,7 @@ PUPMediaManager::PUPMediaManager(PUPScreen* pScreen)
    , m_pScreen(pScreen)
    , m_bounds()
 {
+   m_player.SetOnVideoSize([pScreen](int w, int h) { pScreen->ReportContentSize(w, h); });
 }
 
 PUPMediaManager::~PUPMediaManager() = default;

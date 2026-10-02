@@ -28,6 +28,13 @@ public:
 
    void SetName(const string& name);
    void SetOnEndCallback(const std::function<void()>& onEndCallback) { std::lock_guard lock(m_mutex); m_onEndCallback = onEndCallback; }
+   // Reports the native video size of newly decoded media, from the decode
+   // thread (used to size advertised display surfaces).
+   void SetOnVideoSize(const std::function<void(int width, int height)>& onVideoSize)
+   {
+      std::lock_guard lock(m_mutex);
+      m_onVideoSize = onVideoSize;
+   }
    void SetBounds(const SDL_Rect& rect);
    void SetMask(std::shared_ptr<SDL_Surface> mask);
 
@@ -41,6 +48,9 @@ private:
    string m_name;
    SDL_Rect m_bounds = {};
 
+   std::function<void(int, int)> m_onVideoSize;
+   int m_reportedWidth = 0;
+   int m_reportedHeight = 0;
    std::atomic<int> m_pendingPlay = 0;
    std::atomic<int> m_pendingStop = 0;
 

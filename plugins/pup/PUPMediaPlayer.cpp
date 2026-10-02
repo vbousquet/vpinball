@@ -626,6 +626,15 @@ void PUPMediaPlayer::HandleVideoFrame(AVFrame* frame)
    if (!m_running)
       return;
 
+   // Report the native media size to the owning screen (drives controller
+   // display surface sizing), deduplicated on the decode thread
+   if ((frame->width != m_reportedWidth || frame->height != m_reportedHeight) && m_onVideoSize)
+   {
+      m_reportedWidth = frame->width;
+      m_reportedHeight = frame->height;
+      m_onVideoSize(frame->width, frame->height);
+   }
+
    // Take ownership of the frame
    FrameInfo& selectedFrame = m_frames[selectedFrameSlot];
    int targetWidth, targetHeight;
