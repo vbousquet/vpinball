@@ -85,6 +85,11 @@ extern VPXTextureInfo* GetTextureInfo(VPXTexture texture);
 extern void UpdateTexture(VPXTexture* texture, int width, int height, VPXTextureFormat format, const void *image);
 extern void DeleteTexture(VPXTexture texture);
 
+// Returns the texture handle usable by the given render context: the plugin
+// owned texture block itself for the software compositor, or its lazily
+// uploaded host texture for GPU render contexts (upload happens on the API thread).
+extern VPXTexture ResolveTexture(VPXRenderContext2D *ctx, VPXTexture texture);
+
 extern void UpdateAudioStream(AudioUpdateMsg *msg);
 extern void StopAudioStream(uint32_t streamId);
 

@@ -18,6 +18,7 @@
     <ClCompile Include="../../plugins/pup/PUPPinDisplay.cpp" />
     <ClCompile Include="../../plugins/pup/PUPPlaylist.cpp" />
     <ClCompile Include="../../plugins/pup/PUPScreen.cpp" />
+    <ClCompile Include="../../plugins/pup/PUPSoftwareContext.cpp" />
     <ClCompile Include="../../plugins/pup/PUPTrigger.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -34,6 +35,7 @@
     <ClInclude Include="../../plugins/pup/PUPPinDisplay.h" />
     <ClInclude Include="../../plugins/pup/PUPPlaylist.h" />
     <ClInclude Include="../../plugins/pup/PUPScreen.h" />
+    <ClInclude Include="../../plugins/pup/PUPSoftwareContext.h" />
     <ClInclude Include="../../plugins/pup/PUPTrigger.h" />
   </ItemGroup>
   <ItemGroup>

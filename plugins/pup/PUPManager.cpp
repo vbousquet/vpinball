@@ -35,6 +35,8 @@ PUPManager::PUPManager(const MsgPluginAPI* msgApi, uint32_t endpointId, const st
    : m_szRootPath(rootPath)
    , m_endpointId(endpointId)
    , m_msgApi(msgApi)
+   , m_displayProvider(msgApi, endpointId, CTLPI_DISPLAY_GET_SRC_MSG, CTLPI_DISPLAY_ON_SRC_CHG_MSG)
+   , m_onPrepareFrameId(m_msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_PREPARE_FRAME))
    , m_getVpxApiId(m_msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_API))
    , m_getAuxRendererId(m_msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_AUX_RENDERER))
    , m_onAuxRendererChgId(m_msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_AUX_RENDERER_CHG))
@@ -66,12 +68,17 @@ PUPManager::PUPManager(const MsgPluginAPI* msgApi, uint32_t endpointId, const st
    m_msgApi->SubscribeMsg(m_endpointId, m_getAuxRendererId, OnGetRenderer, this);
    m_msgApi->BroadcastMsg(m_endpointId, m_onAuxRendererChgId, nullptr);
 
+   m_msgApi->SubscribeMsg(m_endpointId, m_onPrepareFrameId, OnPrepareFrame, this);
+
    m_msgApi->BroadcastMsg(m_endpointId, m_getVpxApiId, &m_vpxApi);
 }
 
 PUPManager::~PUPManager()
 {
    Unload();
+
+   m_msgApi->UnsubscribeMsg(m_onPrepareFrameId, OnPrepareFrame, this);
+   m_msgApi->ReleaseMsgID(m_onPrepareFrameId);
 
    m_msgApi->UnsubscribeMsg(m_getAudioSrcId, OnGetAudioSrc, this);
    m_msgApi->BroadcastMsg(m_endpointId, m_onAudioSrcChangedId, nullptr);
@@ -158,6 +165,7 @@ std::filesystem::path PUPManager::FindGameDir(const std::string_view& gameNs, co
 
 void PUPManager::ApplyGameDir(const std::filesystem::path& path, const std::string_view& gameId, const ControllerDef& controller)
 {
+   std::lock_guard lock(m_stateMutex);
    if (path.empty() || path == m_szPath)
       return;
 
@@ -319,6 +327,11 @@ ControllerDef PUPManager::SelectControllerForGame(const std::string_view& gameKe
 
 void PUPManager::Unload()
 {
+   // Stop the display render thread first: it must not be compositing while
+   // screens get cleared below. This waits for the thread, so it must not be
+   // done while holding the state mutex.
+   StopSurfaceRendering();
+
    // Run any still-queued trigger invokes (see QueueDOFEvent) while the triggers
    // and screens they point to are still alive.
    m_msgApi->FlushPendingCallbacks(m_endpointId);
@@ -326,24 +339,33 @@ void PUPManager::Unload()
    if (IsRunning())
       Stop();
 
-   m_screenOrder.clear();
-   m_screenMap.clear();
+   {
+      // Drop advertised displays before clearing screens: the change broadcast is
+      // processed synchronously by consumers which may wait on an in-flight
+      // GetRenderFrame taking the state mutex, so it happens before taking it.
+      m_displayProvider.ClearItems();
 
-   m_dmd = nullptr;
-   m_dmdTriggerCount = 0;
-   m_dmdTriggerDataLoaded = false;
-   m_reportedMissingIdentification = false;
+      std::lock_guard lock(m_stateMutex);
+      m_screenOrder.clear();
+      m_screenMap.clear();
+      m_displaySourceScreens.clear();
 
-   UnloadFonts();
+      m_dmd = nullptr;
+      m_dmdTriggerCount = 0;
+      m_dmdTriggerDataLoaded = false;
+      m_reportedMissingIdentification = false;
 
-   for (auto& playlist : m_playlists)
-      delete playlist;
-   m_playlists.clear();
+      UnloadFonts();
 
-   m_szPath.clear();
-   m_szRomName.clear();
-   m_controller = {};
-   m_controllerGameId.clear();
+      for (auto& playlist : m_playlists)
+         delete playlist;
+      m_playlists.clear();
+
+      m_szPath.clear();
+      m_szRomName.clear();
+      m_controller = {};
+      m_controllerGameId.clear();
+   }
 }
 
 void PUPManager::UnloadFonts()
@@ -423,7 +445,7 @@ void PUPManager::LoadPlaylists()
 
 bool PUPManager::AddScreen(std::shared_ptr<PUPScreen> pScreen)
 {
-   std::unique_lock lock(m_eventMutex);
+   std::unique_lock lock(m_stateMutex);
 
    if (std::shared_ptr<PUPScreen> existing = GetScreen(pScreen->GetScreenNum()); existing)
    {
@@ -474,6 +496,8 @@ bool PUPManager::AddScreen(std::shared_ptr<PUPScreen> pScreen)
 
    LOGI("Screen added: screen={" + pScreen->ToString() + '}');
 
+   RefreshDisplaySources();
+
    return true;
 }
 
@@ -485,6 +509,7 @@ bool PUPManager::AddScreen(int screenNum)
 
 void PUPManager::SendScreenToBack(const PUPScreen* screen)
 {
+   std::lock_guard lock(m_stateMutex);
    LOGD("Send screen to back " + std::to_string(screen->GetScreenNum()));
    auto it = std::ranges::find_if(m_screenOrder, [screen](std::shared_ptr<PUPScreen> s) { return s.get() == screen; });
    if (it != m_screenOrder.end())
@@ -497,6 +522,7 @@ void PUPManager::SendScreenToBack(const PUPScreen* screen)
 
 void PUPManager::SendScreenToFront(const PUPScreen* screen)
 {
+   std::lock_guard lock(m_stateMutex);
    LOGD("Send screen to front " + std::to_string(screen->GetScreenNum()));
    auto it = std::ranges::find_if(m_screenOrder, [screen](std::shared_ptr<PUPScreen> s) { return s.get() == screen; });
    if (it != m_screenOrder.end())
@@ -673,6 +699,7 @@ int PUPManager::ProcessDmdFrame(const DisplaySrcId& src, const uint8_t* frame)
 
 void PUPManager::DuckAllExcept(int masterScreenNum, float duckLevel)
 {
+   std::lock_guard lock(m_stateMutex);
    m_duckMasterScreen = masterScreenNum;
    m_preDuckVolumes.clear();
    for (const auto& [key, screen] : m_screenMap)
@@ -694,6 +721,7 @@ void PUPManager::DuckAllExcept(int masterScreenNum, float duckLevel)
 
 void PUPManager::Unduck()
 {
+   std::lock_guard lock(m_stateMutex);
    for (const auto& [key, volume] : m_preDuckVolumes)
    {
       auto screen = GetScreen(key);
@@ -714,7 +742,7 @@ void PUPManager::QueueDOFEvent(char c, int id, int value)
 {
    //LOGD(std::format("DOF Event {}{:03} = {}", c, id, value));
 
-   std::lock_guard lock(m_eventMutex);
+   std::lock_guard lock(m_stateMutex);
    for (const auto& [key, screen] : m_screenMap)
    {
       for (auto& [cmd, triggers] : screen->GetTriggers())
@@ -754,6 +782,8 @@ void PUPManager::QueueDOFEvent(char c, int id, int value)
 int PUPManager::Render(VPXRenderContext2D* const renderCtx, void* context)
 {
    auto me = static_cast<PUPManager*>(context);
+
+   std::lock_guard lock(me->m_stateMutex);
 
    if (float volume = pupMainVolume_Get(); volume != me->m_mainVolume)
    {
@@ -830,37 +860,38 @@ int PUPManager::Render(VPXRenderContext2D* const renderCtx, void* context)
    renderCtx->srcHeight = renderCtx->outHeight;
    rootScreen->SetBounds(padLeft, padTop, static_cast<int>(renderCtx->srcWidth) - padLeft - padRight, static_cast<int>(renderCtx->srcHeight) - padTop - padBottom);
 
-   // Render all children of rootScreen according to the following render order:
-   // - Back screens (ForceBack or SetAsBackground)
-   //   0. underlay
-   //   1. video
-   //   2. overlay
-   // - Front (others)
-   //   0. underlay
-   //   1. video
-   //   2. overlay
-   // - active label page (not sure if back/front apply to label pages)
+   me->RenderScreenTree(rootScreen.get(), renderCtx);
+
+   return true;
+}
+
+// Renders the screen tree rooted at rootScreen into the given render context
+// (GPU window context or software surface context). Called with the state mutex
+// held, from either the window render path or the display render thread.
+//
+// Render order - two tiers (non-topmost, topmost) mirroring Win32 HWND_TOPMOST behavior.
+// In the back (non-topmost) tier the popup video is drawn before the non-popup overlay so that
+// a full-window frame/overlay (e.g. a decorative backglass border) stays above the background
+// videos. In the front (topmost) tier popups are drawn last so callouts stay on top.
+void PUPManager::RenderScreenTree(PUPScreen* rootScreen, VPXRenderContext2D* ctx)
+{
    vector<std::shared_ptr<PUPScreen>> screens;
-   for (const auto& screen : me->m_screenOrder)
+   for (const auto& screen : m_screenOrder)
    {
       const PUPScreen* parent = screen.get();
-      while (parent && parent != rootScreen.get())
+      while (parent && parent != rootScreen)
          parent = parent->GetParent();
       if (parent)
          screens.push_back(screen);
    }
-   // Render order - two tiers (non-topmost, topmost) mirroring Win32 HWND_TOPMOST behavior.
-   // In the back (non-topmost) tier the popup video is drawn before the non-popup overlay so that
-   // a full-window frame/overlay (e.g. a decorative backglass border) stays above the background
-   // videos. In the front (topmost) tier popups are drawn last so callouts stay on top.
-   auto renderScreens = [&renderCtx, &screens](bool popup, bool topmost, int startPass, int endPass)
+   auto renderScreens = [ctx, &screens](bool popup, bool topmost, int startPass, int endPass)
    {
       for (int pass = startPass; pass <= endPass; pass++)
          std::ranges::for_each(screens,
-            [&renderCtx, pass, popup, topmost](const auto& screen)
+            [ctx, pass, popup, topmost](const auto& screen)
             {
                if (screen->IsPop() == popup && screen->IsTopmost() == topmost && screen->GetMode() != PUPScreen::Mode::Off)
-                  screen->Render(renderCtx, pass);
+                  screen->Render(ctx, pass);
             });
    };
 
@@ -872,14 +903,12 @@ int PUPManager::Render(VPXRenderContext2D* const renderCtx, void* context)
    renderScreens(true, true, 0, 3);
 
    // Set Game time after rendering to avoid updating while rendering if the decode thread are waiting for it
-   if (me->m_vpxApi)
+   if (m_vpxApi)
    {
-      double gameTime = me->m_vpxApi->GetGameTime();
-      for (const auto& [key, screen] : me->m_screenMap)
+      const double gameTime = m_gameTime.load();
+      for (const auto& [key, screen] : m_screenMap)
          screen->SetGameTime(gameTime);
    }
-
-   return true;
 }
 
 void PUPManager::OnGetRenderer(const unsigned int eventId, void* context, void* msgData)
@@ -905,6 +934,145 @@ void PUPManager::OnGetAudioSrc(const unsigned int eventId, void* context, void* 
    if (msg->count < msg->maxEntryCount) 
       msg->entries[msg->count] = me->m_audioSrcDef;
    msg->count++;
+}
+
+void PUPManager::OnPrepareFrame(const unsigned int eventId, void* context, void* msgData)
+{
+   auto me = static_cast<PUPManager*>(context);
+   // GetGameTime is restricted to the API thread: cache it for the display render thread
+   if (me->m_vpxApi)
+      me->m_gameTime = me->m_vpxApi->GetGameTime();
+}
+
+void PUPManager::DefaultDisplaySize(int screenNum, unsigned int& width, unsigned int& height)
+{
+   // Surfaces are advertised at the PUP default layout aspect ratios, scaled to
+   // a reasonable raster size. Content based sizing may be evaluated later.
+   switch (screenNum)
+   {
+   case PUP_SCREEN_TOPPER:
+   case PUP_SCREEN_DMD:
+      width = 1280;
+      height = 331;
+      break; // 290x75 layout
+   case PUP_SCREEN_BACKGLASS:
+      width = 1280;
+      height = 963;
+      break; // 290x218 layout
+   case PUP_SCREEN_PLAYFIELD:
+      width = 720;
+      height = 1280;
+      break; // 216x384 layout
+   case PUP_SCREEN_FULLDMD:
+      width = 1280;
+      height = 662;
+      break; // 290x150 layout
+   default:
+      width = 1280;
+      height = 720;
+      break;
+   }
+}
+
+void PUPManager::RefreshDisplaySources()
+{
+   if (m_displayRefreshPending)
+      return;
+   m_displayRefreshPending = true;
+   m_msgApi->RunOnMainThread(
+      m_endpointId, 0.,
+      [](void* ctx)
+      {
+         PUPManager* const me = static_cast<PUPManager*>(ctx);
+         me->m_displayRefreshPending = false;
+         me->RebuildDisplaySources();
+      },
+      this);
+}
+
+// Advertises one display source per canvas screen (root of a screen tree: no
+// parent, or a positioned screen that has children of its own). Screens in Off
+// or MusicOnly mode are not advertised, nor are child screens which are
+// composited inside their root's surface.
+void PUPManager::RebuildDisplaySources()
+{
+   vector<DisplaySrcId> items;
+   vector<std::shared_ptr<PUPScreen>> advertised;
+   {
+      std::lock_guard lock(m_stateMutex);
+      for (const auto& [screenNum, screen] : m_screenMap)
+      {
+         const bool isCanvas = (screen->GetParent() == nullptr) || screen->HasChildren();
+         if (!isCanvas || screen->GetMode() == PUPScreen::Mode::Off || screen->GetMode() == PUPScreen::Mode::MusicOnly)
+            continue;
+         unsigned int width, height;
+         DefaultDisplaySize(screenNum, width, height);
+         screen->CreateSurface(width, height);
+         DisplaySrcId src {};
+         src.id = { m_endpointId, static_cast<uint32_t>(screenNum) };
+         src.width = width;
+         src.height = height;
+         src.hardware = CTLPI_DISPLAY_HARDWARE_LCD_DISPLAY;
+         src.callContext = screen.get();
+         src.frameFormat = CTLPI_DISPLAY_FORMAT_SRGB888;
+         src.GetRenderFrame = &PinballPlugin::Controller::Trampoline<&PUPScreen::GetRenderFrame>::Call;
+         items.push_back(src);
+         advertised.push_back(screen);
+      }
+      m_displaySourceScreens = std::move(advertised);
+   }
+   m_displayProvider.ClearItems();
+   if (!items.empty())
+      m_displayProvider.AddItems(items);
+}
+
+// Called from PUPScreen::GetRenderFrame on the consumer's thread: lazily starts
+// the display render thread and queues a composite of the given screen.
+void PUPManager::RequestSurfaceRender(int screenNum)
+{
+   {
+      std::lock_guard lock(m_surfaceMutex);
+      if (!m_surfaceThread.joinable())
+         m_surfaceThread = std::thread(&PUPManager::SurfaceRenderThread, this);
+      // Coalesce requests: a queued screen number needs no duplicate entry, each
+      // queued composite already publishes the latest state of that screen.
+      if (std::ranges::find(m_pendingSurfaceRenders, screenNum) == m_pendingSurfaceRenders.end())
+         m_pendingSurfaceRenders.push_back(screenNum);
+   }
+   m_surfaceCv.notify_one();
+}
+
+void PUPManager::SurfaceRenderThread()
+{
+   SetThreadName("PUPDisplayRender"s);
+   while (true)
+   {
+      int screenNum;
+      {
+         std::unique_lock lock(m_surfaceMutex);
+         m_surfaceCv.wait(lock, [this] { return m_surfaceStop || !m_pendingSurfaceRenders.empty(); });
+         if (m_surfaceStop)
+            return;
+         screenNum = m_pendingSurfaceRenders.front();
+         m_pendingSurfaceRenders.pop_front();
+      }
+      std::lock_guard stateLock(m_stateMutex);
+      if (std::shared_ptr<PUPScreen> screen = GetScreen(screenNum))
+         screen->RenderToSurface();
+   }
+}
+
+void PUPManager::StopSurfaceRendering()
+{
+   {
+      std::lock_guard lock(m_surfaceMutex);
+      m_surfaceStop = true;
+      m_pendingSurfaceRenders.clear();
+   }
+   m_surfaceCv.notify_all();
+   if (m_surfaceThread.joinable())
+      m_surfaceThread.join();
+   m_surfaceStop = false;
 }
 
 const string& PlayActionToString(PlayAction value)

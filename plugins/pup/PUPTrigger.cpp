@@ -282,6 +282,7 @@ std::function<void()> PUPTrigger::Trigger() {
 }
 
 void PUPTrigger::Invoke() {
+   std::lock_guard lock(m_pScreen->GetManager()->StateMutex());
    // Remember this as the most recent trigger so LabelShowPage "returnplay" can replay it.
    m_pScreen->m_lastPlayedTrigger = this;
    Trigger()();

@@ -7,6 +7,7 @@
 #include "PUPPlaylist.h"
 #include "PUPLabel.h"
 #include "PUPMediaManager.h"
+#include "PUPSoftwareContext.h"
 
 namespace PUP {
 
@@ -35,7 +36,6 @@ PUPScreen::PUPScreen(PUPManager* manager, PUPScreen::Mode mode, int screenNum, c
    , m_transparent(transparent)
    , m_volume(volume)
    , m_pCustomPos(std::move(pCustomPos))
-   , m_apiThread(std::this_thread::get_id())
 {
    m_pMediaPlayerManager = std::make_unique<PUPMediaManager>(this);
 
@@ -119,7 +119,7 @@ std::unique_ptr<PUPScreen> PUPScreen::CreateDefault(PUPManager* manager, int scr
 
 void PUPScreen::LoadTriggers()
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    std::filesystem::path szPlaylistsPath = find_case_insensitive_file_path(m_pManager->GetPath() / "triggers.pup"sv);
    std::ifstream triggersFile;
    triggersFile.open(szPlaylistsPath, std::ifstream::in);
@@ -138,6 +138,7 @@ void PUPScreen::LoadTriggers()
 
 void PUPScreen::SetMode(Mode mode)
 {
+   std::lock_guard lock(m_pManager->StateMutex());
    if (mode == m_mode)
       return;
    bool wasVisible = (m_mode != Mode::Off && m_mode != Mode::MusicOnly);
@@ -145,25 +146,27 @@ void PUPScreen::SetMode(Mode mode)
    bool isVisible = (m_mode != Mode::Off && m_mode != Mode::MusicOnly);
    if (wasVisible && !isVisible)
       m_pMediaPlayerManager->Stop();
+   if (wasVisible != isVisible)
+      m_pManager->RefreshDisplaySources();
 }
 
 void PUPScreen::SetMainVolume(float volume)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    m_mainVolume = volume;
    m_pMediaPlayerManager->SetVolume(m_mainVolume * m_volume);
 }
 
 void PUPScreen::SetVolume(float volume)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    m_volume = volume;
    m_pMediaPlayerManager->SetVolume(m_mainVolume * m_volume);
 }
 
 void PUPScreen::OnMainMediaEnd()
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    // Resolve whatever LabelShowPage queued when a splash page started.
    // Clear state before any replay so a re-entrant trigger doesn't loop here.
    const HudReturn action = m_hudReturn;
@@ -176,25 +179,26 @@ void PUPScreen::OnMainMediaEnd()
 
 void PUPScreen::SetOnMainEndCallback(const std::function<void()>& callback)
 {
+   std::lock_guard lock(m_pManager->StateMutex());
    m_pMediaPlayerManager->SetOnMainEndCallback(callback);
 }
 
 void PUPScreen::SetVolumeCurrent(float volume)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    m_pMediaPlayerManager->SetVolume(m_mainVolume * volume);
 }
 
 void PUPScreen::AddChild(std::shared_ptr<PUPScreen> pScreen)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    m_children.push_back(pScreen);
    pScreen->m_pParent = this;
 }
 
 void PUPScreen::ReplaceChild(std::shared_ptr<PUPScreen> pChild, std::shared_ptr<PUPScreen> pScreen)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    for (size_t i = 0; i < m_children.size(); i++)
       if (m_children[i] == pChild)
          m_children[i] = pScreen;
@@ -204,7 +208,7 @@ void PUPScreen::ReplaceChild(std::shared_ptr<PUPScreen> pChild, std::shared_ptr<
    
 void PUPScreen::AddPlaylist(PUPPlaylist* pPlaylist)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    if (!pPlaylist)
       return;
 
@@ -213,14 +217,14 @@ void PUPScreen::AddPlaylist(PUPPlaylist* pPlaylist)
 
 PUPPlaylist* PUPScreen::GetPlaylist(const string& szFolder)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    ankerl::unordered_dense::map<string, PUPPlaylist*>::const_iterator it = m_playlistMap.find(lowerCase(szFolder));
    return it != m_playlistMap.end() ? it->second : nullptr;
 }
 
 void PUPScreen::AddTrigger(PUPTrigger* pTrigger)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    if (!pTrigger)
       return;
 
@@ -229,14 +233,14 @@ void PUPScreen::AddTrigger(PUPTrigger* pTrigger)
 
 vector<PUPTrigger*>* PUPScreen::GetTriggers(const string& szTrigger)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    ankerl::unordered_dense::map<string, vector<PUPTrigger*>>::iterator it = m_triggerMap.find(szTrigger);
    return it != m_triggerMap.end() ? &it->second : nullptr;
 }
 
 void PUPScreen::AddLabel(PUPLabel* pLabel)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    if (GetLabel(pLabel->GetName())) {
       LOGE(std::format("Duplicate label: screen={{{}}}, label={}", ToString(false), pLabel->ToString()));
       delete pLabel;
@@ -250,14 +254,14 @@ void PUPScreen::AddLabel(PUPLabel* pLabel)
 
 PUPLabel* PUPScreen::GetLabel(const string& szLabelName)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    auto it = m_labelMap.find(lowerCase(szLabelName));
    return it != m_labelMap.end() ? it->second : nullptr;
 }
 
 void PUPScreen::SendLabelToBack(PUPLabel* pLabel)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    auto it = std::find(m_labels.begin(), m_labels.end(), pLabel);
    if (it != m_labels.end())
       std::rotate(m_labels.begin(), it, it + 1);
@@ -265,7 +269,7 @@ void PUPScreen::SendLabelToBack(PUPLabel* pLabel)
 
 void PUPScreen::SendLabelToFront(PUPLabel* pLabel)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    auto it = std::find(m_labels.begin(), m_labels.end(), pLabel);
    if (it != m_labels.end())
       std::rotate(it, it + 1, m_labels.end());
@@ -273,7 +277,7 @@ void PUPScreen::SendLabelToFront(PUPLabel* pLabel)
 
 void PUPScreen::SetPage(int pagenum, int seconds)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
 
    // Reapply each label's on-show default ONLY when the page actually changes. A same-page
    // hold (e.g. KOTH ball-save LabelShowPage(5,1,3)) must leave script-toggled labels alone -
@@ -298,7 +302,7 @@ void PUPScreen::SetPage(int pagenum, int seconds)
 
 void PUPScreen::UpdateTimers()
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    const uint64_t now = SDL_GetTicks();
    if (m_pageExpiry && now >= m_pageExpiry)
    {
@@ -314,7 +318,7 @@ void PUPScreen::UpdateTimers()
 
 void PUPScreen::SetBounds(int x, int y, int w, int h)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    m_rect = m_pCustomPos ? m_pCustomPos->ScaledRect(w, h) : SDL_Rect { 0, 0, w, h };
    m_rect.x += x;
    m_rect.y += y;
@@ -326,15 +330,19 @@ void PUPScreen::SetBounds(int x, int y, int w, int h)
 
 void PUPScreen::SetCustomPos(const string& szCustomPos)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    m_pCustomPos = PUPCustomPos::CreateFromCSV(szCustomPos);
 }
 
-void PUPScreen::SetGameTime(double gameTime) { m_pMediaPlayerManager->SetGameTime(gameTime); }
+void PUPScreen::SetGameTime(double gameTime)
+{
+   std::lock_guard lock(m_pManager->StateMutex());
+   m_pMediaPlayerManager->SetGameTime(gameTime);
+}
 
 void PUPScreen::Play(const string& szPlaylist, const std::filesystem::path& szPlayFile, float volume, int priority, PlayAction action)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    PUPPlaylist* const pPlaylist = GetPlaylist(szPlaylist);
    if (!pPlaylist)
    {
@@ -346,7 +354,7 @@ void PUPScreen::Play(const string& szPlaylist, const std::filesystem::path& szPl
 
 void PUPScreen::Play(PUPPlaylist* pPlaylist, const std::filesystem::path& szPlayFile, float volume, int priority, PlayAction action, int length)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    //LOGD(std::format("play, screen={{{}}}, playlist={{{}}}, playFile={}, volume={:.0f}, priority={}", ToString(false), pPlaylist->ToString(), szPlayFile.string(), volume, priority));
    //StopMedia(); // Does it stop the played media on all request like overlays or alphas ? I don't think so but unsure
    const bool background = (action == PlayAction::SetBG);
@@ -426,50 +434,50 @@ void PUPScreen::Play(PUPPlaylist* pPlaylist, const std::filesystem::path& szPlay
 
 void PUPScreen::SetMask(const std::filesystem::path& path)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    m_pMediaPlayerManager->SetMask(path);
 }
 
 void PUPScreen::Stop()
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    m_pMediaPlayerManager->Stop();
    m_imageExpiry = 0;
 }
 
 void PUPScreen::Stop(int priority)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    m_pMediaPlayerManager->Stop(priority);
 }
 
 void PUPScreen::Stop(PUPPlaylist* pPlaylist, const std::filesystem::path& szPlayFile)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    m_pMediaPlayerManager->Stop(pPlaylist, szPlayFile);
 }
 
 void PUPScreen::Pause()
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    m_pMediaPlayerManager->Pause();
 }
 
 void PUPScreen::Resume()
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    m_pMediaPlayerManager->Resume();
 }
 
 void PUPScreen::SetLoop(int state)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    m_pMediaPlayerManager->SetLoop(state != 0);
 }
 
 void PUPScreen::SetLength(int length)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    m_pMediaPlayerManager->SetMaxLength(length);
    if (length > 0 && !m_staticImage.GetFile().empty())
       m_imageExpiry = SDL_GetTicks() + static_cast<uint64_t>(length) * 1000;
@@ -477,29 +485,29 @@ void PUPScreen::SetLength(int length)
 
 void PUPScreen::SetAsBackGround(int mode)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    m_pMediaPlayerManager->SetAsBackGround(mode != 0);
 }
 
 void PUPScreen::SetFadeStep(int step)
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    m_pMediaPlayerManager->SetFadeStep(step);
 }
 
 bool PUPScreen::IsMainPlaying() const {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    return m_pMediaPlayerManager->IsMainPlaying();
 }
 
 bool PUPScreen::IsBackgroundPlaying() const
 {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
    return m_pMediaPlayerManager->IsBackgroundPlaying();
 }
 
 void PUPScreen::Render(VPXRenderContext2D* const ctx, int pass) {
-   assert(std::this_thread::get_id() == m_apiThread);
+   std::lock_guard lock(m_pManager->StateMutex());
 
    UpdateTimers();
 
@@ -530,6 +538,36 @@ void PUPScreen::Render(VPXRenderContext2D* const ctx, int pass) {
          pLabel->Render(ctx, m_rect, m_pagenum, m_screenAlpha);
       break;
    }
+}
+
+void PUPScreen::CreateSurface(unsigned int width, unsigned int height)
+{
+   std::lock_guard lock(m_pManager->StateMutex());
+   if (m_surface == nullptr || m_surface->GetWidth() != width || m_surface->GetHeight() != height)
+      m_surface = std::make_unique<PUPSoftwareContext>(width, height);
+}
+
+DisplayFrame PUPScreen::GetRenderFrame()
+{
+   // Called by consumers on any thread: queue a composite on the display render
+   // thread and return the last completed frame (one frame of latency between
+   // the request and the returned content).
+   m_pManager->RequestSurfaceRender(m_screenNum);
+   std::lock_guard lock(m_pManager->StateMutex());
+   if (m_surface == nullptr)
+      return { 0, nullptr };
+   return m_surface->GetFrame();
+}
+
+void PUPScreen::RenderToSurface()
+{
+   std::lock_guard lock(m_pManager->StateMutex());
+   if (m_surface == nullptr)
+      return;
+   SetBounds(0, 0, static_cast<int>(m_surface->GetWidth()), static_cast<int>(m_surface->GetHeight()));
+   m_surface->BeginFrame();
+   m_pManager->RenderScreenTree(this, m_surface->GetContext());
+   m_surface->EndFrame();
 }
 
 string PUPScreen::ToString(bool full) const

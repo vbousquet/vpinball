@@ -9,6 +9,7 @@
 #include "PUPManager.h"
 #include "PUPScreen.h"
 #include "PUPPinDisplay.h"
+#include "PUPSoftwareContext.h"
 
 #include "LibAv.h"
 
@@ -127,10 +128,16 @@ PSC_CLASS_END()
 // Renderer
 //
 
+// Textures are plugin owned blocks holding the pixel data, so they can be
+// created and read on any thread (the VPX texture API is API thread only).
+// Upload to the host texture happens lazily when a texture is drawn through a
+// GPU render context (see ResolveTexture).
 void UpdateTexture(VPXTexture* texture, int width, int height, VPXTextureFormat format, const void* image)
 {
-   if (vpxApi)
-      vpxApi->UpdateTexture(texture, width, height, format, image);
+   PUPTextureBlock*& tex = *reinterpret_cast<PUPTextureBlock**>(texture);
+   if (tex == nullptr)
+      tex = new PUPTextureBlock();
+   tex->Set(width, height, format, image);
 }
 
 VPXTexture CreateTexture(SDL_Surface* surf)
@@ -142,18 +149,29 @@ VPXTexture CreateTexture(SDL_Surface* surf)
    return texture;
 }
 
-VPXTextureInfo* GetTextureInfo(VPXTexture texture)
-{
-   if (vpxApi)
-      return vpxApi->GetTextureInfo(texture);
-   else
-      return nullptr;
-}
+VPXTextureInfo* GetTextureInfo(VPXTexture texture) { return texture ? &static_cast<PUPTextureBlock*>(texture)->info : nullptr; }
 
 void DeleteTexture(VPXTexture texture)
 {
-   if (vpxApi)
-      vpxApi->DeleteTexture(texture);
+   if (texture == nullptr)
+      return;
+   PUPTextureBlock* const tex = static_cast<PUPTextureBlock*>(texture);
+   if (tex->hostTexture && vpxApi)
+      vpxApi->DeleteTexture(tex->hostTexture);
+   delete tex;
+}
+
+VPXTexture ResolveTexture(VPXRenderContext2D* ctx, VPXTexture texture)
+{
+   if (texture == nullptr || ctx->DrawImage == &PUPSoftwareContext::DrawImageImpl)
+      return texture;
+   PUPTextureBlock* const tex = static_cast<PUPTextureBlock*>(texture);
+   if (vpxApi && (tex->hostTexture == nullptr || tex->hostDirty))
+   {
+      vpxApi->UpdateTexture(&tex->hostTexture, static_cast<int>(tex->info.width), static_cast<int>(tex->info.height), tex->info.format, tex->pixels.data());
+      tex->hostDirty = false;
+   }
+   return tex->hostTexture;
 }
 
 

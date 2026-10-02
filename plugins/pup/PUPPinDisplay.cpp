@@ -295,6 +295,7 @@ void PUPPinDisplay::SendMSG(const string& szMsg)
                int sn = json["SN"s].as<int>();
                std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(sn);
                if (pScreen) {
+                  std::lock_guard lock(m_pupManager.StateMutex());
                   int fn = json["FN"s].as<int>();
                   switch (fn) {
                      case 2:
@@ -501,6 +502,7 @@ void PUPPinDisplay::SendMSG(const string& szMsg)
 */
 void PUPPinDisplay::LabelNew(int screenNum, const string& LabelName, const string& FontName, int Size, int Color, int Angle, int xAlign, int yAlign, int xMargin, int yMargin, int PageNum, bool Visible)
 {
+   std::lock_guard lock(m_pupManager.StateMutex());
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
    if (!pScreen)
       return;
@@ -531,6 +533,7 @@ void PUPPinDisplay::LabelNew(int screenNum, const string& LabelName, const strin
 */
 void PUPPinDisplay::LabelSet(int screenNum, const string& LabelName, const string& Caption, bool Visible, const string& Special)
 {
+   std::lock_guard lock(m_pupManager.StateMutex());
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
    if (!pScreen)
       return;
@@ -574,6 +577,7 @@ void PUPPinDisplay::LabelSetEx()
 
 void PUPPinDisplay::LabelShowPage(int screenNum, int PageNum, int Seconds, const string& Special)
 {
+   std::lock_guard lock(m_pupManager.StateMutex());
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
    if (!pScreen)
       return;
@@ -597,6 +601,7 @@ void PUPPinDisplay::LabelShowPage(int screenNum, int PageNum, int Seconds, const
 
 void PUPPinDisplay::LabelInit(int screenNum)
 {
+   std::lock_guard lock(m_pupManager.StateMutex());
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
    if (pScreen)
    {

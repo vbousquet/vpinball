@@ -16,6 +16,7 @@ namespace PUP {
 
 class PUPMediaManager;
 class PUPLabel;
+class PUPSoftwareContext;
 
 class PUPScreen final
 {
@@ -121,6 +122,15 @@ public:
    const SDL_Rect& GetRect() const { return m_rect; }
    void Render(VPXRenderContext2D* const ctx, int pass);
 
+   // Display surface advertised through the controller plugin API. The screen
+   // tree is composited into a CPU frame buffer on a dedicated render thread
+   // (started by the first frame request), each request returning the last
+   // completed frame.
+   void CreateSurface(unsigned int width, unsigned int height);
+   PUPSoftwareContext* GetSurface() const { return m_surface.get(); }
+   DisplayFrame GetRenderFrame();
+   void RenderToSurface();
+
    static const string& ToString(Mode mode);
 
 private:
@@ -153,7 +163,7 @@ private:
    uint64_t m_imageExpiry = 0;
    PUPScreen* m_pParent = nullptr;
    vector<std::shared_ptr<PUPScreen>> m_children;
-   const std::thread::id m_apiThread;
+   std::unique_ptr<PUPSoftwareContext> m_surface;
 };
 
 }

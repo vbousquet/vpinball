@@ -208,7 +208,8 @@ static void SelectSource(std::vector<DisplaySrcId>& items)
    constexpr unsigned int maxPixels = 256 * 64;
    auto isSupported = [](const DisplaySrcId& src)
    {
-      if ((src.hardware & CTLPI_DISPLAY_HARDWARE_FAMILY_MASK) == CTLPI_DISPLAY_HARDWARE_CRT_DISPLAY)
+      const uint32_t family = src.hardware & CTLPI_DISPLAY_HARDWARE_FAMILY_MASK;
+      if (family == CTLPI_DISPLAY_HARDWARE_CRT_DISPLAY || family == CTLPI_DISPLAY_HARDWARE_LCD_DISPLAY)
       {
          LOGI(std::format("Display source of {}x{} pixels is a video display and cannot be shown on DMD devices, skipping it", src.width, src.height));
          return false;

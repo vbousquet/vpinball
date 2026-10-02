@@ -80,10 +80,10 @@ void PUPImage::Render(VPXRenderContext2D* const ctx, const SDL_Rect& rect, float
    if (m_pTexture && alpha > 0.f)
    {
       VPXTextureInfo* texInfo = GetTextureInfo(m_pTexture);
-      ctx->DrawImage(ctx, m_pTexture, 1.f, 1.f, 1.f, alpha,
-         0.f, 0.f, static_cast<float>(texInfo->width), static_cast<float>(texInfo->height),
-         0.f, 0.f, 0.f,
-         static_cast<float>(rect.x), static_cast<float>(rect.y), static_cast<float>(rect.w), static_cast<float>(rect.h));
+      VPXTexture texture = ResolveTexture(ctx, m_pTexture);
+      if (texture)
+         ctx->DrawImage(ctx, texture, 1.f, 1.f, 1.f, alpha, 0.f, 0.f, static_cast<float>(texInfo->width), static_cast<float>(texInfo->height), 0.f, 0.f, 0.f, static_cast<float>(rect.x),
+            static_cast<float>(rect.y), static_cast<float>(rect.w), static_cast<float>(rect.h));
    }
 }
 

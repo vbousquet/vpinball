@@ -254,6 +254,9 @@ void ClipDrawImage(VPXRenderContext2D* ctx, VPXTexture texture,
    float pivotX, float pivotY, float rotation,
    const SDL_FRect& dest, const SDL_Rect& clipRect)
 {
+   texture = ResolveTexture(ctx, texture);
+   if (texture == nullptr)
+      return;
 #if PUP_CLIP_LABELS
    // TNA uses angle=1 (0.1) which prevents clipping. If rotation is near zero, clip anyway
    if (fabsf(rotation) < 0.5f)

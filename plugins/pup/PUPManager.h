@@ -16,8 +16,10 @@
 #include <unordered_dense.h>
 #include <vector>
 #include <queue>
+#include <deque>
 #include <mutex>
 #include <thread>
+#include <atomic>
 #include <condition_variable>
 
 #include <SDL3_ttf/SDL_ttf.h>
@@ -114,12 +116,33 @@ public:
    void DuckAllExcept(int masterScreenNum, float duckLevel);
    void Unduck();
 
+   // Serializes all screen state access against the display render thread
+   // (render path, script mutations and event processing).
+   std::recursive_mutex& StateMutex() { return m_stateMutex; }
+
+   // Advertised displays (controller plugin API). Each canvas screen exposes a
+   // surface composited on the display render thread.
+   // RefreshDisplaySources defers the actual rebuild to the main thread: the
+   // provider broadcasts synchronously processed change events and consumers may
+   // wait on an in-flight frame request taking the state mutex, so broadcasts
+   // must not happen while it is held.
+   void RefreshDisplaySources();
+   void RequestSurfaceRender(int screenNum);
+   void RenderScreenTree(PUPScreen* rootScreen, VPXRenderContext2D* ctx);
+   double GetGameTime() const { return m_gameTime.load(); }
+
 private:
    void ApplyGameDir(const std::filesystem::path& path, const std::string_view& gameId, const ControllerDef& controller);
    ControllerDef SelectControllerForGame(const std::string_view& gameKey);
    void UnloadFonts();
    void LoadFonts();
    void LoadPlaylists();
+
+   void SurfaceRenderThread();
+   void StopSurfaceRendering();
+   void RebuildDisplaySources();
+   static void OnPrepareFrame(const unsigned int eventId, void* context, void* msgData);
+   static void DefaultDisplaySize(int screenNum, unsigned int& width, unsigned int& height);
 
    void Start();
    void Stop();
@@ -142,6 +165,23 @@ private:
    const MsgPluginAPI* const m_msgApi;
    const VPXPluginAPI* m_vpxApi = nullptr;
 
+   PinballPlugin::Controller::CtrlItemProvider<DisplaySrcId> m_displayProvider;
+   const unsigned int m_onPrepareFrameId;
+   std::atomic<double> m_gameTime { 0. };
+   bool m_displayRefreshPending = false;
+   // Screens referenced by the last advertised display list, kept alive one
+   // rebuild cycle so a stale DisplaySrcId's callContext stays valid until
+   // consumers have switched to the refreshed list.
+   vector<std::shared_ptr<PUPScreen>> m_displaySourceScreens;
+
+   // Display render thread: lazily started by the first frame request, performs
+   // screen tree compositing into each surface frame buffer off the API thread.
+   std::thread m_surfaceThread;
+   std::mutex m_surfaceMutex;
+   std::condition_variable m_surfaceCv;
+   std::deque<int> m_pendingSurfaceRenders;
+   bool m_surfaceStop = false;
+
    std::unique_ptr<PUPDMD::DMD> m_dmd;
    // Triggers in the loaded pack that only a DMD frame match can fire, and what
    // is needed to report once that nothing can fire them.
@@ -163,7 +203,7 @@ private:
    const AudioSrcId m_audioSrcDef;
    static void OnGetAudioSrc(const unsigned int msgId, void* userData, void* msgData);
 
-   std::mutex m_eventMutex;
+   std::recursive_mutex m_stateMutex;
    std::unique_ptr<B2SPluginEventStream> m_B2SPluginEventStream;
 
    int m_duckMasterScreen = -1;

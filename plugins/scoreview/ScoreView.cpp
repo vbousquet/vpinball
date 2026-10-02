@@ -178,7 +178,7 @@ void ScoreView::Parse(const std::filesystem::path& path)
          expectedIndent = indent + 1;
          layout.visuals.push_back({VisualType::DMD});
          visual = &layout.visuals.back();
-         visual->srcUri = "ctrl://default/display";
+         visual->srcUri = "ctrl://default/display?dmd_only=1";
          visual->liveStyle = 1; // Default to Neon Plasma
          visual->tint = vec3(1.f, 1.f, 1.f);
          visual->glassTint = vec3(1.f, 1.f, 1.f);
