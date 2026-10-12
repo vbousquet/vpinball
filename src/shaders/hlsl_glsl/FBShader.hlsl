@@ -23,6 +23,7 @@ texture Texture2; // Color grade
 texture Texture3; // AO Result
 texture Texture4; // DepthBuffer
 texture Texture5; // AO Dither
+texture Texture6; // Shaded normals (depth prepass)
 
 sampler2D tex_fb_unfiltered : TEXUNIT0 = sampler_state // Framebuffer (unfiltered)
 {
@@ -102,6 +103,16 @@ sampler2D tex_ao_dither : TEXUNIT5 = sampler_state // AO dither
    MINFILTER = POINT;
    ADDRESSU  = Wrap;
    ADDRESSV  = Wrap;
+};
+
+sampler2D tex_normals : TEXUNIT6 = sampler_state // Shaded view space normals from the depth prepass (xy, viewer facing)
+{
+   Texture   = (Texture6);
+   MIPFILTER = NONE;
+   MAGFILTER = POINT;
+   MINFILTER = POINT;
+   ADDRESSU  = Clamp;
+   ADDRESSV  = Clamp;
 };
 
 struct VS_OUTPUT_2D
@@ -939,7 +950,16 @@ technique AO
    pass P0
    {
       VertexShader = compile vs_3_0 vs_main_no_trafo();
-      PixelShader  = compile ps_3_0 ps_main_ao();
+      PixelShader  = compile ps_3_0 ps_main_ao(false);
+   }
+}
+
+technique AO_shaded
+{
+   pass P0
+   {
+      VertexShader = compile vs_3_0 vs_main_no_trafo();
+      PixelShader  = compile ps_3_0 ps_main_ao(true);
    }
 }
 

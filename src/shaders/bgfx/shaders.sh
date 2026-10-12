@@ -222,6 +222,7 @@ if [ "$gen_postprocess" = true ]; then
         process_shader "fs_pp_bloom.sc" "postprocess.h" "fs_pp_bloom${st_output[$k]}" "fragment" "${stereo[$k]}"
         process_shader "fs_pp_irradiance.sc" "postprocess.h" "fs_pp_irradiance${st_output[$k]}" "fragment" "${stereo[$k]}"
         process_shader "fs_pp_ssao.sc" "postprocess.h" "fs_pp_ssao${st_output[$k]}" "fragment" "${stereo[$k]}"
+        process_shader "fs_pp_ssao.sc" "postprocess.h" "fs_pp_ssao_shaded${st_output[$k]}" "fragment" "${stereo[$k]}" "NORMAL_TEX"
         process_shader "fs_pp_ssr.sc" "postprocess.h" "fs_pp_ssr${st_output[$k]}" "fragment" "${stereo[$k]}"
         process_shader "fs_pp_ao_display.sc" "postprocess.h" "fs_pp_ao_display${st_output[$k]}" "fragment" "${stereo[$k]}"
         for variant in "FILTER" "NOFILTER"; do
