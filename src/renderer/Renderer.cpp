@@ -2457,7 +2457,7 @@ void Renderer::SetScreenOffset(const float x, const float y)
    m_screenOffset.y = x * s + y * c;
 }
 
-void Renderer::UpdateAmbientOcclusion(RenderTarget* renderedRT, unsigned int jitterIndex)
+void Renderer::UpdateAmbientOcclusion(RenderTarget* renderedRT, unsigned int jitterIndex, const bool useDepthPrepass)
 {
    m_renderDevice->ResetRenderState();
    m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
@@ -2476,8 +2476,19 @@ void Renderer::UpdateAmbientOcclusion(RenderTarget* renderedRT, unsigned int jit
    m_renderDevice->SetRenderTarget("ScreenSpace AO"s, GetAORenderTarget(0), false);
    m_renderDevice->AddRenderTargetDependency(GetAORenderTarget(1));
    m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_fb_filtered, GetAORenderTarget(1)->GetColorSampler());
-   m_renderDevice->AddRenderTargetDependency(renderedRT, true);
-   m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_depth, renderedRT->GetDepthSampler());
+   if (useDepthPrepass)
+   {
+      // Consume the opaque depth & shaded normals recorded by the prepass
+      RenderTarget* const prepassRT = GetDepthPrepassRenderTarget();
+      m_renderDevice->AddRenderTargetDependency(prepassRT);
+      m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_depth, prepassRT->GetDepthSampler());
+      m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_normals, prepassRT->GetColorSampler());
+   }
+   else
+   {
+      m_renderDevice->AddRenderTargetDependency(renderedRT, true);
+      m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_depth, renderedRT->GetDepthSampler());
+   }
    //m_renderDevice->m_FBShader->SetTexture(ShaderUniform::Texture1, m_pd3dDevice->GetPostProcessRenderTarget1()); // temporary normals
    m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_ao_dither, m_aoDitherSampler);
    m_renderDevice->m_FBShader->SetVector(ShaderUniform::w_h_height, (float)(1.0 / GetAORenderTarget(1)->GetWidth()), (float)(1.0 / GetAORenderTarget(1)->GetHeight()),
@@ -2485,8 +2496,9 @@ void Renderer::UpdateAmbientOcclusion(RenderTarget* renderedRT, unsigned int jit
       /*sobol*/ radical_inverse<3>(jitterIndex) * (float)(1. / 8.0)); // jitter within (64/8)x(64/8) neighborhood of 64x64 tex, good compromise between blotches and noise
    m_renderDevice->m_FBShader->SetVector(ShaderUniform::AO_scale_timeblur, m_table->m_AOScale, 0.4f, 0.f,
       0.f); //!! 0.4f: fake global option in video pref? or time dependent? //!! commonly used is 0.1, but would require to clear history for moving stuff
-   m_renderDevice->m_FBShader->SetTechnique(ShaderTechnique::AO);
+   m_renderDevice->m_FBShader->SetTechnique(useDepthPrepass ? ShaderTechnique::AO_shaded : ShaderTechnique::AO);
    m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
+   m_renderDevice->m_FBShader->SetTextureNull(ShaderUniform::tex_normals);
 
    // flip AO buffers (avoids copy)
    SwapAORenderTargets();
@@ -3602,7 +3614,7 @@ void Renderer::Render3DScene()
 
    // Compute AO contribution (to be applied later, with tonemapping)
    if (GetAOMode() == 2) // Only process for dynamic AO
-      UpdateAmbientOcclusion(GetBackBufferTexture(), g_pplayer->m_overall_frames % 2048);
+      UpdateAmbientOcclusion(GetBackBufferTexture(), g_pplayer->m_overall_frames % 2048, m_renderDevice->m_depthPrepassNormals);
 
    // Compute bloom (to be applied later, with tonemapping)
    UpdateBloom(renderedRT);
@@ -3778,7 +3790,7 @@ void Renderer::RenderDesktopScene(RenderTarget* outputRT)
 
    // Compute AO contribution (to be applied later, with tonemapping)
    if (GetAOMode() == 2) // Only process for dynamic AO
-      UpdateAmbientOcclusion(GetBackBufferTexture(), g_pplayer->m_overall_frames % 2048);
+      UpdateAmbientOcclusion(GetBackBufferTexture(), g_pplayer->m_overall_frames % 2048, m_renderDevice->m_depthPrepassNormals);
 
    // Compute bloom (to be applied later, with tonemapping)
    UpdateBloom(renderedRT);

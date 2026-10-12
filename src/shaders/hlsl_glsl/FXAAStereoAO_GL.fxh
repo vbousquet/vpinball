@@ -189,6 +189,12 @@ float3 decompress_normal(const float2 c)
 }
 #endif
 
+float3 get_shaded_normal(const float2 u)
+{
+   const float2 nxy = texStereoNoLod(tex_normals, u).xy;
+   return float3(nxy, sqrt(saturate(1.0 - dot(nxy, nxy))));
+}
+
 ////ps_main_ao
 
 void main()
@@ -215,8 +221,7 @@ void main()
 	const float radius = 0.001+/*frac*/(ushift.z)*0.009; // sample radius
 	const float depth_threshold_normal = 0.005;
 	const float total_strength = AO_scale_timeblur.x * (/*1.0 for uniform*/0.5 / samples_float);
-	const float3 normal = normalize(get_nonunit_normal(depth0, u, eye));
-	//const float3 normal = texNoLod(tex_normals, u).xyz *2.0-1.0; // use 8bitRGB pregenerated normals
+	const float3 normal = %PARAM0% ? get_shaded_normal(u) : normalize(get_nonunit_normal(depth0, u, eye));
 	const float radius_depth = radius/depth0;
 
 	float occlusion = 0.0;
@@ -229,8 +234,7 @@ void main()
 		//const float rdotn = dot(ray,normal);
 		const float2 hemi_ray = u + (radius_depth /** sign(rdotn) for uniform*/) * ray.xy;
 		const float occ_depth = texStereoNoLod(tex_depth, hemi_ray).x;
-		const float3 occ_normal = get_nonunit_normal(occ_depth, hemi_ray, eye);
-		//const float3 occ_normal = texNoLod(tex_normals, hemi_ray).xyz *2.0-1.0;  // use 8bitRGB pregenerated normals, can also omit normalization below then
+		const float3 occ_normal = %PARAM0% ? get_shaded_normal(hemi_ray) : get_nonunit_normal(occ_depth, hemi_ray, eye);
 		const float diff_depth = depth0 - occ_depth;
 		const float diff_norm = dot(occ_normal,normal);
 		occlusion += step(falloff, diff_depth) * /*abs(rdotn)* for uniform*/ (diff_depth < depth_threshold_normal ? (1.0-diff_norm*diff_norm/dot(occ_normal,occ_normal)) : 1.0) * (1.0-smoothstep(falloff, area, diff_depth));

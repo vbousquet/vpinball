@@ -1004,7 +1004,8 @@ void main()
 ////TECHNIQUES
 
 //normals:P0:vs_main_no_trafo():gs_main():ps_main_normals()
-AO:P0:vs_main_no_trafo():gs_main():ps_main_ao()
+AO:P0:vs_main_no_trafo():gs_main():ps_main_ao(false)
+AO_shaded:P0:vs_main_no_trafo():gs_main():ps_main_ao(true)
 //stereo:P0:vs_main_no_trafo():gs_main():ps_main_stereo()
 NFAA:P0:vs_main_no_trafo():gs_main():ps_main_nfaa()
 DLAA_edge:P0:vs_main_no_trafo():gs_main():ps_main_dlaa_edge()

@@ -183,6 +183,7 @@ Shader::TechniqueDef Shader::shaderTechniqueNames[static_cast<unsigned int>(Shad
    SHADER_TECHNIQUE(fb_blur_vert39x39),
 
    SHADER_TECHNIQUE(AO),
+   SHADER_TECHNIQUE(AO_shaded),
    SHADER_TECHNIQUE(fb_AO), // Display debug AO
    SHADER_TECHNIQUE(fb_AO_static), // Apply AO during static prerender pass (no tonemapping)
    SHADER_TECHNIQUE(fb_AO_no_filter_static), // Apply AO during static prerender pass (no tonemapping)
@@ -264,8 +265,7 @@ static unsigned int GetUniformStateSize(ShaderUniformType type, const int count)
    { ShaderUniformType::Sampler, #name, 1, GetUniformStateSize(ShaderUniformType::Sampler, 1), tex_unit, default_clampu, default_clampv, default_filter }
 ShaderUniformDef ShaderUniformDef::coreUniforms[static_cast<unsigned int>(ShaderUniform::COUNT)] {
    // Shared uniforms
-   SHADER_UNIFORM(ShaderUniformType::Int, layer, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float, alphaTestValue, 1),
+   SHADER_UNIFORM(ShaderUniformType::Int, layer, 1), SHADER_UNIFORM(ShaderUniformType::Float, alphaTestValue, 1),
    SHADER_UNIFORM(ShaderUniformType::Float4x4, matProj, 2), // +1 Matrix for stereo
    SHADER_UNIFORM(ShaderUniformType::Float4x4, matProjInv, 2), // +1 Matrix for stereo
    SHADER_UNIFORM(ShaderUniformType::Float4x4, matWorldViewProj, 2), // +1 Matrix for stereo
@@ -293,21 +293,17 @@ ShaderUniformDef ShaderUniformDef::coreUniforms[static_cast<unsigned int>(Shader
    SHADER_UNIFORM(ShaderUniformType::Bool, doNormalMapping, 1), // OpenGL & BGFX only
    SHADER_UNIFORM(ShaderUniformType::Float4v, basicPackedLights, 3), // DX9 only
    SHADER_UNIFORM(ShaderUniformType::Float4v, ballPackedLights, 15), // DX9 only
-   SHADER_UNIFORM(ShaderUniformType::Float4, Roughness_WrapL_Edge_Thickness, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float4, cBase_Alpha, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float2, fDisableLighting_top_below, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float2, fenvEmissionScale_TexWidth, 1),
+   SHADER_UNIFORM(ShaderUniformType::Float4, Roughness_WrapL_Edge_Thickness, 1), SHADER_UNIFORM(ShaderUniformType::Float4, cBase_Alpha, 1),
+   SHADER_UNIFORM(ShaderUniformType::Float2, fDisableLighting_top_below, 1), SHADER_UNIFORM(ShaderUniformType::Float2, fenvEmissionScale_TexWidth, 1),
    SHADER_UNIFORM(ShaderUniformType::Float4, cAmbient_LightRange, 1),
    SHADER_SAMPLER(tex_env, 1, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // environment
    SHADER_SAMPLER(tex_diffuse_env, 2, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // diffuse environment contribution/radiance
 
    // Basic Shader
-   SHADER_UNIFORM(ShaderUniformType::Float4, cClearcoat_EdgeAlpha, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float4, cGlossy_ImageLerp, 1),
+   SHADER_UNIFORM(ShaderUniformType::Float4, cClearcoat_EdgeAlpha, 1), SHADER_UNIFORM(ShaderUniformType::Float4, cGlossy_ImageLerp, 1),
    SHADER_UNIFORM(ShaderUniformType::Bool, doRefractions, 1), // OpenGL only
    SHADER_UNIFORM(ShaderUniformType::Float4, u_basic_shade_mode, 1), // BGFX Only
-   SHADER_UNIFORM(ShaderUniformType::Float4, refractionTint_thickness, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float4, mirrorNormal_factor, 1),
+   SHADER_UNIFORM(ShaderUniformType::Float4, refractionTint_thickness, 1), SHADER_UNIFORM(ShaderUniformType::Float4, mirrorNormal_factor, 1),
    SHADER_UNIFORM(ShaderUniformType::Bool, objectSpaceNormalMap, 1),
    SHADER_SAMPLER(tex_base_color, 0, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // base texture
    SHADER_SAMPLER(tex_base_transmission, 3, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // bulb light/transmission buffer texture
@@ -317,33 +313,27 @@ ShaderUniformDef ShaderUniformDef::coreUniforms[static_cast<unsigned int>(Shader
    SHADER_SAMPLER(tex_probe_depth, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // depth probe
 
    // Ball Shader
-   SHADER_UNIFORM(ShaderUniformType::Float4x3, orientation, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float4, invTableRes_reflection, 1),
+   SHADER_UNIFORM(ShaderUniformType::Float4x3, orientation, 1), SHADER_UNIFORM(ShaderUniformType::Float4, invTableRes_reflection, 1),
    SHADER_UNIFORM(ShaderUniformType::Float4, w_h_disableLighting, 1),
    SHADER_SAMPLER(tex_ball_color, 0, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // base texture
    SHADER_SAMPLER(tex_ball_playfield, 4, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // playfield
    SHADER_SAMPLER(tex_ball_decal, 3, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // ball decal
 
    // Light Shader
-   SHADER_UNIFORM(ShaderUniformType::Float, blend_modulate_vs_add, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float4, lightCenter_maxRange, 1), // Classic and Halo
+   SHADER_UNIFORM(ShaderUniformType::Float, blend_modulate_vs_add, 1), SHADER_UNIFORM(ShaderUniformType::Float4, lightCenter_maxRange, 1), // Classic and Halo
    SHADER_UNIFORM(ShaderUniformType::Float4, lightColor2_falloff_power, 1), // Classic and Halo
    SHADER_UNIFORM(ShaderUniformType::Float4, lightColor_intensity, 1), // Classic and Halo
    SHADER_UNIFORM(ShaderUniformType::Bool, lightingOff, 1), // Classic only
    SHADER_SAMPLER(tex_light_color, 0, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // Classic only
 
    // DMD Shader
-   SHADER_UNIFORM(ShaderUniformType::Float4, glassPad, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float4, glassArea, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float4, vRes_Alpha_time, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float4, backBoxSize, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float4, vColor_Intensity, 1),
+   SHADER_UNIFORM(ShaderUniformType::Float4, glassPad, 1), SHADER_UNIFORM(ShaderUniformType::Float4, glassArea, 1), SHADER_UNIFORM(ShaderUniformType::Float4, vRes_Alpha_time, 1),
+   SHADER_UNIFORM(ShaderUniformType::Float4, backBoxSize, 1), SHADER_UNIFORM(ShaderUniformType::Float4, vColor_Intensity, 1),
    SHADER_SAMPLER(tex_dmd, 0, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // DMD
    SHADER_SAMPLER(tex_sprite, 0, SamplerAddressMode::SA_MIRROR, SamplerAddressMode::SA_MIRROR, SamplerFilter::SF_TRILINEAR), // Sprite
 
    // Display Shader
-   SHADER_UNIFORM(ShaderUniformType::Float4, glassTint_Roughness, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float4, displayProperties, 1),
+   SHADER_UNIFORM(ShaderUniformType::Float4, glassTint_Roughness, 1), SHADER_UNIFORM(ShaderUniformType::Float4, displayProperties, 1),
    SHADER_UNIFORM(ShaderUniformType::Float4v, alphaSegState, 4),
    SHADER_SAMPLER(
       displayTex, 0, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // DMD (Point sampling), Alpha seg (bilinear sampling), Display (Point sampling)
@@ -351,19 +341,14 @@ ShaderUniformDef ShaderUniformDef::coreUniforms[static_cast<unsigned int>(Shader
    SHADER_SAMPLER(displayCov, 2, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // Alpha seg prefiltered coverage atlas
 
    // Flasher Shader
-   SHADER_UNIFORM(ShaderUniformType::Float4, alphaTestValueAB_filterMode_addBlend, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float3, amount_blend_modulate_vs_add_flasherMode, 1),
+   SHADER_UNIFORM(ShaderUniformType::Float4, alphaTestValueAB_filterMode_addBlend, 1), SHADER_UNIFORM(ShaderUniformType::Float3, amount_blend_modulate_vs_add_flasherMode, 1),
    SHADER_SAMPLER(tex_flasher_A, 0, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // base texture
    SHADER_SAMPLER(tex_flasher_B, 1, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // texB
 
    // Post Process Shader
-   SHADER_UNIFORM(ShaderUniformType::Float4, bloom_dither_colorgrade, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float4, exposure_wcg, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float4, agx_params, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float4, spline1, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float2, spline2, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float4, SSR_bumpHeight_fresnelRefl_scale_FS, 1),
-   SHADER_UNIFORM(ShaderUniformType::Float2, AO_scale_timeblur, 1),
+   SHADER_UNIFORM(ShaderUniformType::Float4, bloom_dither_colorgrade, 1), SHADER_UNIFORM(ShaderUniformType::Float4, exposure_wcg, 1),
+   SHADER_UNIFORM(ShaderUniformType::Float4, agx_params, 1), SHADER_UNIFORM(ShaderUniformType::Float4, spline1, 1), SHADER_UNIFORM(ShaderUniformType::Float2, spline2, 1),
+   SHADER_UNIFORM(ShaderUniformType::Float4, SSR_bumpHeight_fresnelRefl_scale_FS, 1), SHADER_UNIFORM(ShaderUniformType::Float2, AO_scale_timeblur, 1),
    SHADER_SAMPLER(tex_fb_unfiltered, 0, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // Framebuffer (unfiltered)
    SHADER_SAMPLER(tex_fb_filtered, 0, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // Framebuffer (filtered)
    SHADER_SAMPLER(tex_bloom, 1, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // Bloom
@@ -371,6 +356,7 @@ ShaderUniformDef ShaderUniformDef::coreUniforms[static_cast<unsigned int>(Shader
    SHADER_SAMPLER(tex_ao, 3, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // AO Result
    SHADER_SAMPLER(tex_depth, 4, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // Depth
    SHADER_SAMPLER(tex_ao_dither, 5, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_NONE), // AO dither
+   SHADER_SAMPLER(tex_normals, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // Shaded normals from the depth prepass
    //SHADER_SAMPLER(tex_tonemap_lut, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // Tonemap LUT
    SHADER_SAMPLER(edgesTex, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // SMAA
    SHADER_SAMPLER(blendTex, 8, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // SMAA
@@ -1452,6 +1438,7 @@ void Shader::Load()
       BGFX_EMBEDDED_SHADER_ST(fs_pp_ao_nofilter),
       BGFX_EMBEDDED_SHADER_ST(fs_pp_ao_display),
       BGFX_EMBEDDED_SHADER_ST(fs_pp_ssao),
+      BGFX_EMBEDDED_SHADER_ST(fs_pp_ssao_shaded),
       BGFX_EMBEDDED_SHADER_ST(fs_pp_bloom),
       BGFX_EMBEDDED_SHADER_ST(fs_pp_mirror),
       BGFX_EMBEDDED_SHADER_ST(fs_pp_copy),
@@ -1624,6 +1611,7 @@ void Shader::Load()
 
       // Ambient Occlusion and misc post process (SSR, Bloom, mirror, ...)
       loadProgram(embeddedShaders, ShaderTechnique::AO, STEREO(vs_postprocess), STEREO(fs_pp_ssao));
+      loadProgram(embeddedShaders, ShaderTechnique::AO_shaded, STEREO(vs_postprocess), STEREO(fs_pp_ssao_shaded));
       loadProgram(embeddedShaders, ShaderTechnique::fb_AO, STEREO(vs_postprocess), STEREO(fs_pp_ao_display));
       loadProgram(embeddedShaders, ShaderTechnique::fb_AO_static, STEREO(vs_postprocess), STEREO(fs_pp_ao_filter));
       loadProgram(embeddedShaders, ShaderTechnique::fb_AO_no_filter_static, STEREO(vs_postprocess), STEREO(fs_pp_ao_nofilter));
