@@ -199,6 +199,7 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(fb_blur_vert39x39),
 
    SHADER_TECHNIQUE(AO),
+   SHADER_TECHNIQUE(AO_shaded),
    SHADER_TECHNIQUE(fb_AO), // Display debug AO
    SHADER_TECHNIQUE(fb_prepass_depth), // Display debug depth prepass depth attachment
    SHADER_TECHNIQUE(fb_prepass_normal), // Display debug depth prepass shaded normals
