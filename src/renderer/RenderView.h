@@ -212,7 +212,7 @@ private:
    void DrawOutputQuad(Shader* shader, RenderTarget* target) const; // Draw a fullscreen quad, mapped to this view's area when target is its output
 
    // Postprocess passes
-   void UpdateAmbientOcclusion(RenderTarget* renderedRT, unsigned int jitterIndex);
+   void UpdateAmbientOcclusion(RenderTarget* renderedRT, unsigned int jitterIndex, bool useDepthPrepass = false);
    void UpdateBloom(RenderTarget* renderedRT);
    void SetupTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapRT, bool isFullTonemap);
    RenderTarget* ApplyTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapRT);

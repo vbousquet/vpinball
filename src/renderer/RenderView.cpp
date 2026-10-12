@@ -1159,7 +1159,7 @@ void RenderView::DrawBulbLightBuffer()
 
 #pragma region PostProcess
 
-void RenderView::UpdateAmbientOcclusion(RenderTarget* renderedRT, unsigned int jitterIndex)
+void RenderView::UpdateAmbientOcclusion(RenderTarget* renderedRT, unsigned int jitterIndex, const bool useDepthPrepass)
 {
    Renderer* const r = m_renderer;
    RenderDevice* const rd = r->m_renderDevice;
@@ -1172,8 +1172,19 @@ void RenderView::UpdateAmbientOcclusion(RenderTarget* renderedRT, unsigned int j
    rd->SetRenderTarget("ScreenSpace AO"s, GetAORenderTarget(0), false);
    rd->AddRenderTargetDependency(GetAORenderTarget(1));
    rd->m_FBShader->SetTexture(ShaderUniform::tex_fb_filtered, GetAORenderTarget(1)->GetColorSampler());
-   rd->AddRenderTargetDependency(renderedRT, true);
-   rd->m_FBShader->SetTexture(ShaderUniform::tex_depth, renderedRT->GetDepthSampler());
+   if (useDepthPrepass)
+   {
+      // Consume the opaque depth & shaded normals recorded by the prepass
+      RenderTarget* const prepassRT = GetDepthPrepassRenderTarget();
+      rd->AddRenderTargetDependency(prepassRT);
+      rd->m_FBShader->SetTexture(ShaderUniform::tex_depth, prepassRT->GetDepthSampler());
+      rd->m_FBShader->SetTexture(ShaderUniform::tex_normals, prepassRT->GetColorSampler());
+   }
+   else
+   {
+      rd->AddRenderTargetDependency(renderedRT, true);
+      rd->m_FBShader->SetTexture(ShaderUniform::tex_depth, renderedRT->GetDepthSampler());
+   }
    rd->m_FBShader->SetTexture(ShaderUniform::tex_ao_dither, r->m_aoDitherSampler);
    rd->m_FBShader->SetVector(ShaderUniform::w_h_height, (float)(1.0 / GetAORenderTarget(1)->GetWidth()), (float)(1.0 / GetAORenderTarget(1)->GetHeight()),
       radical_inverse(jitterIndex) * (float)(1. / 8.0),
@@ -1189,8 +1200,9 @@ void RenderView::UpdateAmbientOcclusion(RenderTarget* renderedRT, unsigned int j
       matProjInv[eye].Invert();
    }
    rd->m_FBShader->SetMatrix(ShaderUniform::matProjInv, &matProjInv[0], nEyes);
-   rd->m_FBShader->SetTechnique(ShaderTechnique::AO);
+   rd->m_FBShader->SetTechnique(useDepthPrepass ? ShaderTechnique::AO_shaded : ShaderTechnique::AO);
    rd->DrawFullscreenTexturedQuad(rd->m_FBShader);
+   rd->m_FBShader->SetTextureNull(ShaderUniform::tex_normals);
 
    // flip AO buffers (avoids copy)
    SwapAORenderTargets();
@@ -2218,7 +2230,7 @@ void RenderView::Render()
 
    // Compute AO contribution (to be applied later, with tonemapping)
    if (r->GetAOMode() == 2) // Only process for dynamic AO
-      UpdateAmbientOcclusion(GetBackBufferTexture(), g_pplayer->m_overall_frames % 2048);
+      UpdateAmbientOcclusion(GetBackBufferTexture(), g_pplayer->m_overall_frames % 2048, rd->m_depthPrepassNormals);
 
    // Compute bloom (to be applied later, with tonemapping)
    UpdateBloom(renderedRT);

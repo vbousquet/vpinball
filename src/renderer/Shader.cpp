@@ -200,6 +200,7 @@ Shader::TechniqueDef Shader::shaderTechniqueNames[static_cast<unsigned int>(Shad
    SHADER_TECHNIQUE(fb_blur_vert39x39),
 
    SHADER_TECHNIQUE(AO),
+   SHADER_TECHNIQUE(AO_shaded),
    SHADER_TECHNIQUE(fb_AO), // Display debug AO
    SHADER_TECHNIQUE(fb_prepass_depth), // Display debug depth prepass depth attachment
    SHADER_TECHNIQUE(fb_prepass_normal), // Display debug depth prepass shaded normals
@@ -393,6 +394,7 @@ ShaderUniformDef ShaderUniformDef::coreUniforms[static_cast<unsigned int>(Shader
    SHADER_SAMPLER(tex_ao, 3, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // AO Result
    SHADER_SAMPLER(tex_depth, 4, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // Depth
    SHADER_SAMPLER(tex_ao_dither, 5, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_NONE), // AO dither
+   SHADER_SAMPLER(tex_normals, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // Shaded normals from the depth prepass
    //SHADER_SAMPLER(tex_tonemap_lut, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // Tonemap LUT
    SHADER_SAMPLER(edgesTex, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // SMAA
    SHADER_SAMPLER(blendTex, 8, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // SMAA
@@ -1498,8 +1500,9 @@ void Shader::Load()
       BGFX_EMBEDDED_SHADER_ST(fs_pp_tonemap_wcg_ao_nofilter),
       // Screen Space post-processes
       BGFX_EMBEDDED_SHADER_ST(fs_pp_ao_filter), BGFX_EMBEDDED_SHADER_ST(fs_pp_ao_nofilter), BGFX_EMBEDDED_SHADER_ST(fs_pp_ao_display), BGFX_EMBEDDED_SHADER_ST(fs_pp_prepass_depth),
-      BGFX_EMBEDDED_SHADER_ST(fs_pp_prepass_normal), BGFX_EMBEDDED_SHADER_ST(fs_pp_ssao), BGFX_EMBEDDED_SHADER_ST(fs_pp_bloom), BGFX_EMBEDDED_SHADER_ST(fs_pp_mirror),
-      BGFX_EMBEDDED_SHADER_ST(fs_pp_copy), BGFX_EMBEDDED_SHADER_ST(fs_pp_ssr), BGFX_EMBEDDED_SHADER_ST(fs_pp_irradiance), BGFX_EMBEDDED_SHADER_ST(fs_pp_copy_depth),
+      BGFX_EMBEDDED_SHADER_ST(fs_pp_prepass_normal), BGFX_EMBEDDED_SHADER_ST(fs_pp_ssao), BGFX_EMBEDDED_SHADER_ST(fs_pp_ssao_shaded), BGFX_EMBEDDED_SHADER_ST(fs_pp_bloom),
+      BGFX_EMBEDDED_SHADER_ST(fs_pp_mirror), BGFX_EMBEDDED_SHADER_ST(fs_pp_copy), BGFX_EMBEDDED_SHADER_ST(fs_pp_ssr), BGFX_EMBEDDED_SHADER_ST(fs_pp_irradiance),
+      BGFX_EMBEDDED_SHADER_ST(fs_pp_copy_depth),
       BGFX_EMBEDDED_SHADER(fs_pp_passthrough),
       // Motion Blur as post-processes
       BGFX_EMBEDDED_SHADER_ST(fs_pp_motionblur),
@@ -1643,6 +1646,7 @@ void Shader::Load()
 
       // Ambient Occlusion and misc post process (SSR, Bloom, mirror, ...)
       loadProgram(embeddedShaders, ShaderTechnique::AO, STEREO(vs_postprocess), STEREO(fs_pp_ssao));
+      loadProgram(embeddedShaders, ShaderTechnique::AO_shaded, STEREO(vs_postprocess), STEREO(fs_pp_ssao_shaded));
       loadProgram(embeddedShaders, ShaderTechnique::fb_AO, STEREO(vs_postprocess), STEREO(fs_pp_ao_display));
       loadProgram(embeddedShaders, ShaderTechnique::fb_prepass_depth, STEREO(vs_postprocess), STEREO(fs_pp_prepass_depth));
       loadProgram(embeddedShaders, ShaderTechnique::fb_prepass_normal, STEREO(vs_postprocess), STEREO(fs_pp_prepass_normal));
