@@ -22,6 +22,9 @@ uniform vec4 AO_scale_timeblur; // actually vec2 extended to vec4
 SAMPLER2DSTEREO(tex_fb_filtered,  0); // Framebuffer (filtered)
 SAMPLER2DSTEREO(tex_depth,        4); // DepthBuffer
 SAMPLER2D      (tex_ao_dither,    5); // AO Dither
+#ifdef NORMAL_TEX
+SAMPLER2DSTEREO(tex_normals,      6); // Shaded view space normals from the depth prepass (xy, viewer facing)
+#endif
 
 #ifdef STEREO
 	uniform mat4 matProjInv[2];
@@ -32,7 +35,7 @@ SAMPLER2D      (tex_ao_dither,    5); // AO Dither
 #endif
 
 #ifdef STEREO
-float depthToViewZ(const vec2 u, const float d, const float v_eye) // view space z from depth buffer value
+float depthToViewZ(const vec2 u, const float d, const float v_eye) // view space distance from camera
 #else
 float depthToViewZ(const vec2 u, const float d)
 #endif
@@ -63,6 +66,18 @@ vec3 get_nonunit_normal(const float depth0, const vec2 u) // use neighboring pix
    return vec3(w_h_height.y * (depth2 - depth0), (depth1 - depth0) * w_h_height.x, w_h_height.y * w_h_height.x); //!!
 }
 
+#ifdef NORMAL_TEX
+#ifdef STEREO
+vec3 get_shaded_normal(const vec2 u, const float v_eye)
+#else
+vec3 get_shaded_normal(const vec2 u)
+#endif
+{
+   const vec2 nxy = texStereoNoLod(tex_normals, u).xy;
+   return vec3(nxy, sqrt(saturate(1.0 - dot(nxy, nxy))));
+}
+#endif
+
 void main()
 {
 	const vec2 u = v_texcoord0;
@@ -92,12 +107,17 @@ void main()
 	const float falloff = 0.5;
 	const float area = 200.0; // fade out of occluders deeper than ~2 balls (must cover real occluder gaps in VPU)
 	const float total_strength = AO_scale_timeblur.x * (/*1.0 for uniform*/0.5 / samples_float);
-	#ifdef STEREO
+	#ifdef NORMAL_TEX
+		#ifdef STEREO
+		const vec3 normal = get_shaded_normal(u, v_eye);
+		#else
+		const vec3 normal = get_shaded_normal(u);
+		#endif
+	#elif defined(STEREO)
 	const vec3 normal = normalize(get_nonunit_normal(depth0, u, v_eye));
 	#else
 	const vec3 normal = normalize(get_nonunit_normal(depth0, u));
 	#endif
-	//const vec3 normal = texNoLod(tex_normals, u).xyz *2.0-1.0; // use 8bitRGB pregenerated normals
 	// Screen footprint of a view space hemisphere: uv radius = radius * P / (2 * z), with
 	// P = 1/matProjInv[1][1] the projection's vertical scale for a perspective matrix
 	#ifdef STEREO
@@ -118,13 +138,18 @@ void main()
 		//const float rdotn = dot(ray,normal);
 		const vec2 hemi_ray = u + (radius_depth /** sign(rdotn) for uniform*/) * ray.xy;
 		const float occ_depth = texStereoNoLod(tex_depth, hemi_ray).x;
-		#ifdef STEREO
+		#ifdef NORMAL_TEX
+			#ifdef STEREO
+			const vec3 occ_normal = get_shaded_normal(hemi_ray, v_eye);
+			#else
+			const vec3 occ_normal = get_shaded_normal(hemi_ray);
+			#endif
+		#elif defined(STEREO)
 		const vec3 occ_normal = get_nonunit_normal(occ_depth, hemi_ray, v_eye);
 		#else
 		const vec3 occ_normal = get_nonunit_normal(occ_depth, hemi_ray);
 		#endif
-		//const vec3 occ_normal = texNoLod(tex_normals, hemi_ray).xyz *2.0-1.0;  // use 8bitRGB pregenerated normals, can also omit normalization below then
-		// View space z is negative in front of the camera: a closer sample has a LARGER z
+		// Occluder = closer to the camera, whatever the view space handedness
 		#ifdef STEREO
 			const float diff_depth = depthToViewZ(hemi_ray, occ_depth, v_eye) - z0;
 		#else
