@@ -22,6 +22,9 @@ uniform vec4 AO_scale_timeblur; // actually vec2 extended to vec4
 SAMPLER2DSTEREO(tex_fb_filtered,  0); // Framebuffer (filtered)
 SAMPLER2DSTEREO(tex_depth,        4); // DepthBuffer
 SAMPLER2D      (tex_ao_dither,    5); // AO Dither
+#ifdef NORMAL_TEX
+SAMPLER2DSTEREO(tex_normals,      6); // Shaded view space normals from the depth prepass (xy, viewer facing)
+#endif
 
 #ifdef STEREO
 	uniform mat4 matProjInv[2];
@@ -89,6 +92,18 @@ vec3 get_nonunit_normal(const float depth0, const vec2 u) // use neighboring pix
    return vec3(w_h_height.y * (depth2 - depth0), (depth1 - depth0) * w_h_height.x, w_h_height.y * w_h_height.x); //!!
 }
 
+#ifdef NORMAL_TEX
+#ifdef STEREO
+vec3 get_shaded_normal(const vec2 u, const float v_eye)
+#else
+vec3 get_shaded_normal(const vec2 u)
+#endif
+{
+   const vec2 nxy = texStereoNoLod(tex_normals, u).xy;
+   return vec3(nxy, sqrt(saturate(1.0 - dot(nxy, nxy))));
+}
+#endif
+
 void main()
 {
 	const vec2 u = v_texcoord0;
@@ -118,12 +133,17 @@ void main()
 	const float falloff = 0.5;
 	const float area = 200.0; // fade out of occluders deeper than ~4 ball diameters (must cover real occluder gaps in VPU)
 	const float total_strength = AO_scale_timeblur.x * (/*1.0 for uniform*/0.5 / samples_float);
-	#ifdef STEREO
+	#ifdef NORMAL_TEX
+		#ifdef STEREO
+		const vec3 normal = get_shaded_normal(u, v_eye);
+		#else
+		const vec3 normal = get_shaded_normal(u);
+		#endif
+	#elif defined(STEREO)
 	const vec3 normal = normalize(get_nonunit_normal(depth0, u, v_eye));
 	#else
 	const vec3 normal = normalize(get_nonunit_normal(depth0, u));
 	#endif
-	//const vec3 normal = texNoLod(tex_normals, u).xyz *2.0-1.0; // use 8bitRGB pregenerated normals
 	// Screen footprint of the view space sampling disc: view space units per uv unit
 	// ratio, evaluated by unprojecting the neighboring texels. This supports the rotated,
 	// scaled and sheared projections of the cabinet/legacy view setups, for which the
@@ -160,13 +180,18 @@ void main()
 		//const float rdotn = dot(ray,normal);
 		const vec2 hemi_ray = u + (radius_uv /** sign(rdotn) for uniform*/) * ray.xy;
 		const float occ_depth = texStereoNoLod(tex_depth, hemi_ray).x;
-		#ifdef STEREO
+		#ifdef NORMAL_TEX
+			#ifdef STEREO
+			const vec3 occ_normal = get_shaded_normal(hemi_ray, v_eye);
+			#else
+			const vec3 occ_normal = get_shaded_normal(hemi_ray);
+			#endif
+		#elif defined(STEREO)
 		const vec3 occ_normal = get_nonunit_normal(occ_depth, hemi_ray, v_eye);
 		#else
 		const vec3 occ_normal = get_nonunit_normal(occ_depth, hemi_ray);
 		#endif
-		//const vec3 occ_normal = texNoLod(tex_normals, hemi_ray).xyz *2.0-1.0;  // use 8bitRGB pregenerated normals, can also omit normalization below then
-		// View space z is negative in front of the camera: a closer sample has a LARGER z
+		// Occluder = closer to the camera, whatever the view space handedness
 		#ifdef STEREO
 			const float diff_depth = depthToViewZ(hemi_ray, occ_depth, v_eye) - z0;
 		#else
@@ -177,9 +202,20 @@ void main()
 	}
 	// weight with result(s) from previous frames
 	const float ao = 1.0 - total_strength * occlusion;
-	gl_FragColor = vec4((texStereoNoLod(tex_fb_filtered, uv0).x //abuse bilerp for filtering (by using half texel/pixel shift)
-	                    +texStereoNoLod(tex_fb_filtered, uv1).x
-	                    +texStereoNoLod(tex_fb_filtered, vec2(uv0.x,uv1.y)).x
-	                    +texStereoNoLod(tex_fb_filtered, vec2(uv1.x,uv0.y)).x)
-		*(0.25*(1.0-AO_scale_timeblur.y))+saturate(ao /*+base*/)*AO_scale_timeblur.y, 0.,0.,0.);
+	#if defined(NORMAL_TEX) && defined(MOTION)
+		// Reproject the previous frame AO using the camera motion vectors stored in the prepass (avoids
+		// smearing the temporal accumulation when the camera is dynamic, e.g. VR or headtracking).
+		// The reprojection has no disocclusion test (no previous frame depth is kept): fade out the
+		// history weight where the motion is large, as the reprojected result there is likely stale
+		const vec2 mv = texStereoNoLod(tex_normals, u).zw;
+		const float newFrameWeight = max(AO_scale_timeblur.y, saturate(8.0 * length(mv)));
+	#else
+		const vec2 mv = vec2_splat(0.0);
+		const float newFrameWeight = AO_scale_timeblur.y;
+	#endif
+	gl_FragColor = vec4((texStereoNoLod(tex_fb_filtered, uv0 - mv).x //abuse bilerp for filtering (by using half texel/pixel shift)
+	                    +texStereoNoLod(tex_fb_filtered, uv1 - mv).x
+	                    +texStereoNoLod(tex_fb_filtered, vec2(uv0.x,uv1.y) - mv).x
+	                    +texStereoNoLod(tex_fb_filtered, vec2(uv1.x,uv0.y) - mv).x)
+		*(0.25*(1.0-newFrameWeight))+saturate(ao /*+base*/)*newFrameWeight, 0.,0.,0.);
 }

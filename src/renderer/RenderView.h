@@ -199,6 +199,17 @@ public:
    int m_depthPrepassSlot = 0; // Last used prepass slot, for LRU recycling when both are occupied
    RenderTarget* GetDepthPrepassRenderTarget();
 
+   // Camera transforms under which the scene was recorded for the current and the previous frame, per space
+   // reference (each has its own transform). They feed the camera motion vectors written by the depth prepass
+   // to its color attachment, consumed by the AO temporal accumulation when the camera is dynamic (e.g. VR).
+   // The camera relative view x projection matrix and the camera world position are stored per eye.
+   Matrix3D m_curFrameCamViewProj[4][2]; // Indexed by PartGroupData::SpaceReference (clamped to 0..3), then eye
+   Matrix3D m_prevFrameCamViewProj[4][2];
+   vec4 m_curFrameCamPos[4][2];
+   vec4 m_prevFrameCamPos[4][2];
+   unsigned int m_curFrameCamViewProjMask = 0; // Space references for which a camera transform was recorded this frame
+   unsigned int m_prevFrameCamViewProjMask = 0;
+
    // Lazily created render target chain (called once targets size is known), released by destructor
    void SetupTargets(const int width, const int height, const SurfaceType rtType, const colorFormat format, const int nMSAASamples);
    void ReleaseTargets();
@@ -221,7 +232,7 @@ private:
    void DrawOutputQuad(Shader* shader, RenderTarget* target) const; // Draw a fullscreen quad, mapped to this view's area when target is its output
 
    // Postprocess passes
-   void UpdateAmbientOcclusion(RenderTarget* renderedRT, unsigned int jitterIndex);
+   void UpdateAmbientOcclusion(RenderTarget* renderedRT, unsigned int jitterIndex, bool useDepthPrepass = false);
    void UpdateBloom(RenderTarget* renderedRT);
    void SetupTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapRT, bool isFullTonemap);
    RenderTarget* ApplyTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapRT);

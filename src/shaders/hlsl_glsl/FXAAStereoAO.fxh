@@ -208,7 +208,13 @@ float depthToViewZ(const float2 u, const float d) // view space z from depth buf
    return depthToViewPos(u, d).z;
 }
 
-float4 ps_main_ao(const in VS_OUTPUT_2D IN) : COLOR
+float3 get_shaded_normal(const float2 u)
+{
+   const float2 nxy = texStereoNoLod(tex_normals, u).xy;
+   return float3(nxy, sqrt(saturate(1.0 - dot(nxy, nxy))));
+}
+
+float4 ps_main_ao(const in VS_OUTPUT_2D IN, uniform bool use_tex_normals) : COLOR
 {
 	const float2 u = IN.tex0;
 	const float2 uv0 = u - w_h_height.xy * 0.5 + w_h_height.xy; // half pixel shift in x & y for filter
@@ -233,8 +239,7 @@ float4 ps_main_ao(const in VS_OUTPUT_2D IN) : COLOR
 	const float falloff = 0.5;
 	const float area = 200.0; // fade out of occluders deeper than ~4 ball diameters (must cover real occluder gaps in VPU)
 	const float total_strength = AO_scale_timeblur.x * (/*1.0 for uniform*/0.5 / samples);
-	const float3 normal = normalize(get_nonunit_normal(depth0, u));
-	//const float3 normal = texNoLod(tex_normals, u).xyz *2.0-1.0; // use 8bitRGB pregenerated normals
+	const float3 normal = use_tex_normals ? get_shaded_normal(u) : normalize(get_nonunit_normal(depth0, u));
 	// Screen footprint of the view space sampling disc: view space units per uv unit
 	// ratio, evaluated by unprojecting the neighboring texels. This supports the rotated,
 	// scaled and sheared projections of the cabinet/legacy view setups, for which the
@@ -261,8 +266,7 @@ float4 ps_main_ao(const in VS_OUTPUT_2D IN) : COLOR
 		//const float rdotn = dot(ray,normal);
 		const float2 hemi_ray = u + (radius_uv /** sign(rdotn) for uniform*/) * ray.xy;
 		const float occ_depth = texStereoNoLod(tex_depth, hemi_ray).x;
-		const float3 occ_normal = get_nonunit_normal(occ_depth, hemi_ray);
-		//const float3 occ_normal = texNoLod(tex_normals, hemi_ray).xyz *2.0-1.0;  // use 8bitRGB pregenerated normals, can also omit normalization below then
+		const float3 occ_normal = use_tex_normals ? get_shaded_normal(hemi_ray) : get_nonunit_normal(occ_depth, hemi_ray);
 		// View space z is negative in front of the camera: a closer sample has a LARGER z
 		const float diff_depth = depthToViewZ(hemi_ray, occ_depth) - z0;
 		const float diff_norm = dot(occ_normal,normal);

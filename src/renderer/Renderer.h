@@ -255,6 +255,7 @@ public:
    int GetAOMode() const; // 0=Off, 1=Static, 2=Dynamic (effective mode, also accounts for table/display capabilities)
    int GetSelectedAOMode() const { return m_disableAO ? 0 : (m_dynamicAO ? 2 : 1); } // User selected AO mode
    void SetAOMode(int mode); // 0=Disabled, 1=Static, 2=Dynamic
+   bool IsMotionVectorPrepass() const; // True when the shaded depth prepass also generates camera motion vectors
 
    bool UseAnisoFiltering() const;
    void SetAnisoFiltering(bool enable);

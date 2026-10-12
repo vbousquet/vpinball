@@ -44,6 +44,8 @@ static void TestRender(const string& tableFile, const string& imageName, VPXBack
 
 #elif defined(ENABLE_BGFX)
 
+   g_settingsService.GetAppSettings().SetPlayer_DepthPrepass(2, false);
+
    if ((int)backends & (int)VPXBackends::BGFX_VULKAN)
       SUBCASE("BGFX-Vulkan")
       {

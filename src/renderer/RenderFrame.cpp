@@ -232,8 +232,11 @@ bool RenderFrame::Execute(const bool log)
                depthPass = targetPass;
          if (depthPass == nullptr)
             continue;
-         // The clone variant is defined by the prepass target format: RG16F carries the shaded normals, GREY8 is depth only
-         const bool prepassNormals = depthPass->m_rt->GetColorFormat() == colorFormat::RG16F;
+         // The clone variant is defined by the prepass target format: RG16F/RGBA16F carry the shaded normals
+         // (RGBA16F also the camera motion vectors), GREY8 is depth only
+         const colorFormat prepassFormat = depthPass->m_rt->GetColorFormat();
+         const bool prepassNormals = prepassFormat == colorFormat::RG16F || prepassFormat == colorFormat::RGBA16F;
+         const bool prepassMotion = prepassFormat == colorFormat::RGBA16F;
          for (RenderCommand* cmd : pass->m_commands)
          {
             if (!cmd->IsDrawMeshCommand())
@@ -253,7 +256,7 @@ bool RenderFrame::Execute(const bool log)
                continue; // Kicker 'holes' carve the playfield in the shaded render: they must not occlude in the prepass
             RenderCommand* clone = NewCommand();
             clone->CopyFrom(cmd);
-            const ShaderTechnique depthTech = Shader::GetDepthPrepassTechnique(tech, prepassNormals);
+            const ShaderTechnique depthTech = Shader::GetDepthPrepassTechnique(tech, prepassNormals, prepassMotion);
             clone->GetShaderState()->SetTechnique(depthTech);
             if (prepassNormals)
             {

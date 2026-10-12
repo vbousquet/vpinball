@@ -56,6 +56,7 @@ enum InfoMode
    IF_RENDER_PROBES,
    IF_DEPTH,
    IF_NORMAL,
+   IF_MOTION_VECTORS,
    IF_INVALID
 };
 
