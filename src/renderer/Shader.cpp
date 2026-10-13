@@ -184,6 +184,7 @@ Shader::TechniqueDef Shader::shaderTechniqueNames[static_cast<unsigned int>(Shad
 
    SHADER_TECHNIQUE(AO),
    SHADER_TECHNIQUE(fb_AO), // Display debug AO
+   SHADER_TECHNIQUE(fb_prepass_depth), // Display debug depth prepass depth attachment
    SHADER_TECHNIQUE(fb_AO_static), // Apply AO during static prerender pass (no tonemapping)
    SHADER_TECHNIQUE(fb_AO_no_filter_static), // Apply AO during static prerender pass (no tonemapping)
    SHADER_TECHNIQUE(fb_motionblur),
@@ -1451,6 +1452,7 @@ void Shader::Load()
       BGFX_EMBEDDED_SHADER_ST(fs_pp_ao_filter),
       BGFX_EMBEDDED_SHADER_ST(fs_pp_ao_nofilter),
       BGFX_EMBEDDED_SHADER_ST(fs_pp_ao_display),
+      BGFX_EMBEDDED_SHADER_ST(fs_pp_prepass_depth),
       BGFX_EMBEDDED_SHADER_ST(fs_pp_ssao),
       BGFX_EMBEDDED_SHADER_ST(fs_pp_bloom),
       BGFX_EMBEDDED_SHADER_ST(fs_pp_mirror),
@@ -1625,6 +1627,7 @@ void Shader::Load()
       // Ambient Occlusion and misc post process (SSR, Bloom, mirror, ...)
       loadProgram(embeddedShaders, ShaderTechnique::AO, STEREO(vs_postprocess), STEREO(fs_pp_ssao));
       loadProgram(embeddedShaders, ShaderTechnique::fb_AO, STEREO(vs_postprocess), STEREO(fs_pp_ao_display));
+      loadProgram(embeddedShaders, ShaderTechnique::fb_prepass_depth, STEREO(vs_postprocess), STEREO(fs_pp_prepass_depth));
       loadProgram(embeddedShaders, ShaderTechnique::fb_AO_static, STEREO(vs_postprocess), STEREO(fs_pp_ao_filter));
       loadProgram(embeddedShaders, ShaderTechnique::fb_AO_no_filter_static, STEREO(vs_postprocess), STEREO(fs_pp_ao_nofilter));
       loadProgram(embeddedShaders, ShaderTechnique::fb_bloom, STEREO(vs_postprocess), STEREO(fs_pp_bloom));
