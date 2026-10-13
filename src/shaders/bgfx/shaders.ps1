@@ -90,7 +90,13 @@ if ($gen_basic)
 		  Process-Shader "fs_classic_light.sc" "basic.h" ("fs_classic_light_" + $variant.ToLower() + "_" + $variant2.ToLower() + $stOutput[$k]) "fragment" @($stereo[$k], $variant, $variant2, "NOSHADOW")
 		  Process-Shader "fs_unshaded.sc"      "basic.h" ("fs_unshaded_" + $variant.ToLower() + "_" + $variant2.ToLower() + $stOutput[$k]) "fragment" @($stereo[$k], $variant, $variant2, "NOSHADOW")
 		  Process-Shader "fs_unshaded.sc"      "basic.h" ("fs_unshaded_" + $variant.ToLower() + "_ballshadow_" + $variant2.ToLower() + $stOutput[$k]) "fragment" @($stereo[$k], $variant, $variant2, "SHADOW")
+		  # Depth prepass variants
+		  Process-Shader "fs_depth.sc"         "basic.h" ("fs_depth_" + $variant.ToLower() + "_" + $variant2.ToLower() + $stOutput[$k]) "fragment" @($stereo[$k], $variant, $variant2)
+		  Process-Shader "fs_depth.sc"         "basic.h" ("fs_depth_" + $variant.ToLower() + "_n_" + $variant2.ToLower() + $stOutput[$k]) "fragment" @($stereo[$k], $variant, $variant2, "OUT_NORMAL")
 		}
+		Process-Shader "fs_depth.sc" "basic.h" ("fs_depth_tex_at_" + $variant2.ToLower() + $stOutput[$k]) "fragment" @($stereo[$k], "TEX", $variant2, "AT")
+		Process-Shader "fs_depth.sc" "basic.h" ("fs_depth_tex_at_n_" + $variant2.ToLower() + $stOutput[$k]) "fragment" @($stereo[$k], "TEX", $variant2, "AT", "OUT_NORMAL")
+		Process-Shader "vs_depth.sc" "basic.h" ("vs_depth_" + $variant2.ToLower() + $stOutput[$k]) "vertex" @($stereo[$k], $variant2)
 	  }
 	}
 }

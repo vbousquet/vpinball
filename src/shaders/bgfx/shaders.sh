@@ -100,7 +100,13 @@ if [ "$gen_basic" = true ]; then
                 process_shader "fs_classic_light.sc" "basic.h" "fs_classic_light_${variant_lower}_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "$variant" "$variant2" "NOSHADOW"
                 process_shader "fs_unshaded.sc" "basic.h" "fs_unshaded_${variant_lower}_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "$variant" "$variant2" "NOSHADOW"
                 process_shader "fs_unshaded.sc" "basic.h" "fs_unshaded_${variant_lower}_ballshadow_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "$variant" "$variant2" "SHADOW"
+                # Depth prepass variants
+                process_shader "fs_depth.sc" "basic.h" "fs_depth_${variant_lower}_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "$variant" "$variant2"
+                process_shader "fs_depth.sc" "basic.h" "fs_depth_${variant_lower}_n_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "$variant" "$variant2" "OUT_NORMAL"
             done
+            process_shader "fs_depth.sc" "basic.h" "fs_depth_tex_at_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT"
+            process_shader "fs_depth.sc" "basic.h" "fs_depth_tex_at_n_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT" "OUT_NORMAL"
+            process_shader "vs_depth.sc" "basic.h" "vs_depth_${variant2_lower}${st_output[$k]}" "vertex" "${stereo[$k]}" "$variant2"
         done
     done
 fi
