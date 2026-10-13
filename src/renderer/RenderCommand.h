@@ -43,6 +43,9 @@ public:
    // Clone this command (used to emit the depth prepass draw calls from the recorded scene commands)
    void CopyFrom(const RenderCommand* src);
    void DisableColorWrites();
+   void DisableAlphaBlend();
+
+   Shader* GetShader() const { return m_shader; }
 
    string ToString(bool detailled) const;
 

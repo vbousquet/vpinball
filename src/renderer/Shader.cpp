@@ -122,6 +122,15 @@ Shader::TechniqueDef Shader::shaderTechniqueNames[static_cast<unsigned int>(Shad
 
    SHADER_TECHNIQUE(basic_DMD),
    SHADER_TECHNIQUE(basic_DMD_world),
+   // Depth prepass variants. 'basic_depth_*_nm_n' are only used by DX9 (other backends apply normal mapping through the u_basic_shade_mode/doNormalMapping uniforms)
+   SHADER_TECHNIQUE(basic_depth),
+   SHADER_TECHNIQUE(basic_depth_at),
+   SHADER_TECHNIQUE(basic_depth_n),
+   SHADER_TECHNIQUE(basic_depth_at_n),
+   SHADER_TECHNIQUE(basic_depth_nm_n),
+   SHADER_TECHNIQUE(basic_depth_at_nm_n),
+   SHADER_TECHNIQUE(ball_depth),
+   SHADER_TECHNIQUE(ball_depth_n),
 
    SHADER_TECHNIQUE(display_DMD),
    SHADER_TECHNIQUE(display_DMD_world),
@@ -185,6 +194,7 @@ Shader::TechniqueDef Shader::shaderTechniqueNames[static_cast<unsigned int>(Shad
    SHADER_TECHNIQUE(AO),
    SHADER_TECHNIQUE(fb_AO), // Display debug AO
    SHADER_TECHNIQUE(fb_prepass_depth), // Display debug depth prepass depth attachment
+   SHADER_TECHNIQUE(fb_prepass_normal), // Display debug depth prepass shaded normals
    SHADER_TECHNIQUE(fb_AO_static), // Apply AO during static prerender pass (no tonemapping)
    SHADER_TECHNIQUE(fb_AO_no_filter_static), // Apply AO during static prerender pass (no tonemapping)
    SHADER_TECHNIQUE(fb_motionblur),
@@ -897,6 +907,69 @@ void Shader::SetTechniqueMaterial(ShaderTechnique technique, const Material& mat
    SetTechnique(tech);
 }
 
+ShaderTechnique Shader::GetDepthPrepassTechnique(const ShaderTechnique technique, const bool withNormals)
+{
+   switch (technique)
+   {
+   // Ball draws (the ball shader does not support normal mapping)
+   case ShaderTechnique::RenderBall:
+   case ShaderTechnique::RenderBall_DecalMode:
+   case ShaderTechnique::RenderBall_SphericalMap:
+   case ShaderTechnique::RenderBall_SphericalMap_DecalMode:
+   case ShaderTechnique::RenderBall_Debug:
+   case ShaderTechnique::RenderBallTrail: return withNormals ? ShaderTechnique::ball_depth_n : ShaderTechnique::ball_depth;
+
+   // Alpha tested material variants (DX9 only bakes normal mapping in the technique, other backends use the u_basic_shade_mode/doNormalMapping uniforms)
+   case ShaderTechnique::basic_with_texture_at_normal:
+   case ShaderTechnique::basic_with_texture_at_normal_isMetal:
+   case ShaderTechnique::basic_with_texture_at_refl_normal:
+   case ShaderTechnique::basic_with_texture_at_refl_normal_isMetal:
+   case ShaderTechnique::basic_with_texture_at_refr_normal:
+   case ShaderTechnique::basic_with_texture_at_refr_normal_isMetal:
+   case ShaderTechnique::basic_with_texture_at_refr_refl_normal:
+   case ShaderTechnique::basic_with_texture_at_refr_refl_normal_isMetal: return withNormals ? ShaderTechnique::basic_depth_at_nm_n : ShaderTechnique::basic_depth_at;
+
+   case ShaderTechnique::basic_with_texture_normal:
+   case ShaderTechnique::basic_with_texture_normal_isMetal:
+   case ShaderTechnique::basic_with_texture_refl_normal:
+   case ShaderTechnique::basic_with_texture_refl_normal_isMetal:
+   case ShaderTechnique::basic_with_texture_refr_normal:
+   case ShaderTechnique::basic_with_texture_refr_normal_isMetal:
+   case ShaderTechnique::basic_with_texture_refr_refl_normal:
+   case ShaderTechnique::basic_with_texture_refr_refl_normal_isMetal: return withNormals ? ShaderTechnique::basic_depth_nm_n : ShaderTechnique::basic_depth;
+
+   // Alpha tested materials need their base texture to preserve the fragment discard
+   case ShaderTechnique::basic_with_texture_at:
+   case ShaderTechnique::basic_with_texture_at_isMetal:
+   case ShaderTechnique::basic_with_texture_at_refl:
+   case ShaderTechnique::basic_with_texture_at_refl_isMetal:
+   case ShaderTechnique::basic_with_texture_at_refr:
+   case ShaderTechnique::basic_with_texture_at_refr_isMetal:
+   case ShaderTechnique::basic_with_texture_at_refr_refl:
+   case ShaderTechnique::basic_with_texture_at_refr_refl_isMetal:
+   case ShaderTechnique::bg_decal_with_texture:
+      return withNormals ? ShaderTechnique::basic_depth_at_n : ShaderTechnique::basic_depth_at;
+
+   // Everything else drawn with the basic shader (untextured or non alpha tested materials, unshaded, decals and light inserts)
+   default: return withNormals ? ShaderTechnique::basic_depth_n : ShaderTechnique::basic_depth;
+   }
+}
+
+void Shader::DisableDepthPrepassNormalMapping(ShaderState* const state)
+{
+#if defined(ENABLE_BGFX)
+   if (state->HasUniform(ShaderUniform::u_basic_shade_mode))
+   {
+      vec4 shadeMode = state->GetVector(ShaderUniform::u_basic_shade_mode);
+      shadeMode.y = 0.f; // u_basic_shade_mode.y is the normal mapping flag
+      state->SetVector(ShaderUniform::u_basic_shade_mode, &shadeMode);
+   }
+#elif defined(ENABLE_OPENGL)
+   if (state->HasUniform(ShaderUniform::doNormalMapping))
+      state->SetBool(ShaderUniform::doNormalMapping, false);
+#endif
+}
+
 void Shader::SetTechnique(ShaderTechnique technique)
 {
    assert(current_shader != this); // Changing the technique of a used shader is not allowed (between Begin/End)
@@ -1457,6 +1530,7 @@ void Shader::Load()
       BGFX_EMBEDDED_SHADER_ST(fs_pp_ao_nofilter),
       BGFX_EMBEDDED_SHADER_ST(fs_pp_ao_display),
       BGFX_EMBEDDED_SHADER_ST(fs_pp_prepass_depth),
+      BGFX_EMBEDDED_SHADER_ST(fs_pp_prepass_normal),
       BGFX_EMBEDDED_SHADER_ST(fs_pp_ssao),
       BGFX_EMBEDDED_SHADER_ST(fs_pp_bloom),
       BGFX_EMBEDDED_SHADER_ST(fs_pp_mirror),
@@ -1632,6 +1706,7 @@ void Shader::Load()
       loadProgram(embeddedShaders, ShaderTechnique::AO, STEREO(vs_postprocess), STEREO(fs_pp_ssao));
       loadProgram(embeddedShaders, ShaderTechnique::fb_AO, STEREO(vs_postprocess), STEREO(fs_pp_ao_display));
       loadProgram(embeddedShaders, ShaderTechnique::fb_prepass_depth, STEREO(vs_postprocess), STEREO(fs_pp_prepass_depth));
+      loadProgram(embeddedShaders, ShaderTechnique::fb_prepass_normal, STEREO(vs_postprocess), STEREO(fs_pp_prepass_normal));
       loadProgram(embeddedShaders, ShaderTechnique::fb_AO_static, STEREO(vs_postprocess), STEREO(fs_pp_ao_filter));
       loadProgram(embeddedShaders, ShaderTechnique::fb_AO_no_filter_static, STEREO(vs_postprocess), STEREO(fs_pp_ao_nofilter));
       loadProgram(embeddedShaders, ShaderTechnique::fb_bloom, STEREO(vs_postprocess), STEREO(fs_pp_bloom));

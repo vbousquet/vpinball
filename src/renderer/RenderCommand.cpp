@@ -457,6 +457,11 @@ void RenderCommand::DisableColorWrites()
    m_renderState.SetRenderState(RenderState::COLORWRITEENABLE, RenderState::RGBMASK_NONE);
 }
 
+void RenderCommand::DisableAlphaBlend()
+{
+   m_renderState.SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
+}
+
 string RenderCommand::ToString(bool detailled) const
 {
    std::stringstream ss;
