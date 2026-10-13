@@ -3427,6 +3427,9 @@
     <None Include="$(SolutionDir)/../../src/shaders/bgfx/fs_pp_nfaa.sc">
       <Filter>shaders\bgfx</Filter>
     </None>
+    <None Include="$(SolutionDir)/../../src/shaders/bgfx/fs_pp_prepass_display.sc">
+      <Filter>shaders\bgfx</Filter>
+    </None>
     <None Include="$(SolutionDir)/../../src/shaders/bgfx/fs_pp_smaa_BlendingWeightCalculation.sc">
       <Filter>shaders\bgfx</Filter>
     </None>
