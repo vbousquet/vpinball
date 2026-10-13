@@ -186,7 +186,13 @@ public:
    int m_staticPrepassAccumCount = 0; // Number of samples accumulated so far in the static parts prerender
    unsigned int m_statsDrawnStaticTriangles = 0;
    bool IsUsingStaticPrepass() const;
+   bool IsUsingDepthPrepass() const;
    bool IsTemporalAccumulationInProgress() const; // True while the static parts prerender is still accumulating samples (this view or any render probe)
+
+   // Depth prepass target (private non-MSAA depth surface), lazily created, one per scene render target (they ping pong)
+   RenderTarget* m_depthPrepassRT[2] = { nullptr, nullptr };
+   RenderTarget* m_depthPrepassSceneRT[2] = { nullptr, nullptr };
+   RenderTarget* GetDepthPrepassRenderTarget();
 
    // Lazily created render target chain (called once targets size is known), released by destructor
    void SetupTargets(const int width, const int height, const SurfaceType rtType, const colorFormat format, const int nMSAASamples);

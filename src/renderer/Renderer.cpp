@@ -300,6 +300,7 @@ void Renderer::ApplyTableSettings()
    m_exposure = m_table->GetSettings().GetTableOverride_Exposure();
    m_dynamicAO = m_table->GetSettings().GetPlayer_DynamicAO();
    m_disableAO = m_table->GetSettings().GetPlayer_DisableAO();
+   m_depthPrepassMode = m_table->GetSettings().GetPlayer_DepthPrepass();
    for (int wnd = VPXWindowId::VPXWINDOW_Backglass; wnd <= VPXWindowId::VPXWINDOW_Topper; wnd++)
       m_ancillaryWndRotation[wnd] = 90 * clamp(m_table->GetSettings().GetWindow_Rotation(wnd), 0, 3); // Setting is an index in the 0 / 90 / 180 / 270 literals
    m_vrDesktop = static_cast<VRDesktopMode>(m_table->GetSettings().GetPlayerVR_DesktopDisplay());
