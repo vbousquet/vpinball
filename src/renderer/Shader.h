@@ -170,6 +170,22 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(light_with_texture_isMetal),
    SHADER_TECHNIQUE(light_without_texture_isMetal),
 
+   // Depth prepass variants. 'basic_depth_*_nm_n' are only used by DX9 (other backends apply normal mapping through the u_basic_shade_mode/doNormalMapping uniforms)
+   SHADER_TECHNIQUE(basic_depth, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorld, ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverseTranspose,
+      ShaderUniform::clip_plane),
+   SHADER_TECHNIQUE(basic_depth_at, ShaderUniform::layer, ShaderUniform::alphaTestValue, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorld, ShaderUniform::matWorldView,
+      ShaderUniform::matWorldViewInverseTranspose, ShaderUniform::tex_base_color, ShaderUniform::clip_plane),
+   SHADER_TECHNIQUE(basic_depth_n, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorld, ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverseTranspose,
+      ShaderUniform::u_basic_shade_mode, ShaderUniform::objectSpaceNormalMap, ShaderUniform::tex_base_normalmap, ShaderUniform::clip_plane),
+   SHADER_TECHNIQUE(basic_depth_at_n, ShaderUniform::layer, ShaderUniform::alphaTestValue, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorld, ShaderUniform::matWorldView,
+      ShaderUniform::matWorldViewInverseTranspose, ShaderUniform::u_basic_shade_mode, ShaderUniform::objectSpaceNormalMap, ShaderUniform::tex_base_color, ShaderUniform::tex_base_normalmap, ShaderUniform::clip_plane),
+   SHADER_TECHNIQUE(basic_depth_nm_n),
+   SHADER_TECHNIQUE(basic_depth_at_nm_n),
+   SHADER_TECHNIQUE(ball_depth, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverse, ShaderUniform::orientation,
+      ShaderUniform::clip_plane),
+   SHADER_TECHNIQUE(ball_depth_n, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverse, ShaderUniform::orientation,
+      ShaderUniform::clip_plane),
+
    SHADER_TECHNIQUE(basic_DMD, ShaderUniform::glassPad, ShaderUniform::glassArea, ShaderUniform::vRes_Alpha_time, ShaderUniform::vColor_Intensity, ShaderUniform::tex_dmd),
    SHADER_TECHNIQUE(basic_DMD_world, ShaderUniform::glassPad, ShaderUniform::glassArea, ShaderUniform::matWorld, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::vRes_Alpha_time, ShaderUniform::vColor_Intensity,
       ShaderUniform::tex_dmd, ShaderUniform::clip_plane),
@@ -492,6 +508,8 @@ public:
    static ShaderUniformDef coreUniforms[static_cast<unsigned int>(ShaderUniform::COUNT)];
 };
 
+class ShaderState;
+
 class Shader final
 {
 public:
@@ -505,6 +523,10 @@ public:
    bool HasError() const { return m_hasError; }
    static Shader* GetCurrentShader();
    static string GetTechniqueName(ShaderTechnique technique);
+   // Selects the depth prepass variant of a (basic or ball shader) material technique
+   static ShaderTechnique GetDepthPrepassTechnique(const ShaderTechnique technique, const bool withNormals);
+   // Disables the normal mapping flag of a depth prepass state whose source is not a material technique (unshaded, decals, ... holding a stale flag). No-op on DX9 which bakes it in the technique.
+   static void DisableDepthPrepassNormalMapping(ShaderState* const state);
    void SetTechnique(const ShaderTechnique technique);
    void SetTechniqueMaterial(ShaderTechnique technique, const Material& mat, const bool doAlphaTest = false, const bool doNormalMapping = false, const bool doReflection = false, const bool doRefraction = false);
    void SetBasic(const Material * const mat, Texture * const pin);
@@ -688,6 +710,8 @@ public:
       memset(m_state.data(), 0, m_state.size());
       m_samplers.clear();
    }
+
+   bool HasUniform(const ShaderUniform uniformName) const { return m_stateOffsets[static_cast<unsigned int>(uniformName)] != -1; }
 
    uint8_t* GetUniformStatePtr(const ShaderUniform uniformName)
    {

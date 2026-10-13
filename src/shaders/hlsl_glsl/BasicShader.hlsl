@@ -464,6 +464,34 @@ float4 ps_main_bg_decal_texture(const in VS_OUTPUT IN) : COLOR
 }
 
 //------------------------------------------
+// Depth prepass
+
+float4 ps_depth(const in VS_DEPTH_ONLY_NOTEX_OUTPUT IN) : COLOR
+{
+   return 0.;
+}
+
+float4 ps_depth_at(const in VS_DEPTH_ONLY_TEX_OUTPUT IN) : COLOR
+{
+   clip(tex2D(tex_base_color, IN.tex0).a <= alphaTestValue ? -1 : 1); // stop the pixel shader if alpha test should reject pixel
+   return 0.;
+}
+
+float4 ps_depth_normal(const in VS_OUTPUT IN, uniform bool has_alphatest, uniform bool doNormalMapping) : COLOR
+{
+   BRANCH if (has_alphatest)
+      clip(tex2D(tex_base_color, IN.tex0).a <= alphaTestValue ? -1 : 1); // stop the pixel shader if alpha test should reject pixel
+   const float3 V = normalize(/*camera=0,0,0,1*/-IN.worldPos);
+   float3 N = normalize(IN.normal);
+   BRANCH if (doNormalMapping)
+      N = normal_map(N, V, IN.tex0);
+   // Flip the normal to always face the viewer so that z can be reconstructed from xy
+   if (N.z < 0.)
+      N = -N;
+   return float4(N.xy, 0., 1.);
+}
+
+//------------------------------------------
 // Kicker boolean vertex shader
 
 VS_NOTEX_OUTPUT vs_kicker (const in float4 vPosition : POSITION0,
@@ -544,5 +572,12 @@ technique bg_decal_with_texture { pass P0 { VertexShader = compile vs_3_0 vs_mai
 
 technique kickerBoolean_isMetal { pass P0 { VertexShader = compile vs_3_0 vs_kicker(); PixelShader = compile ps_3_0 ps_main(1, 0, 0); } }
 technique kickerBoolean { pass P0 { VertexShader = compile vs_3_0 vs_kicker(); PixelShader = compile ps_3_0 ps_main(0, 0, 0); } }
+
+technique basic_depth        { pass P0 { VertexShader = compile vs_3_0 vs_depth_only_main_without_texture(); PixelShader = compile ps_3_0 ps_depth(); } }
+technique basic_depth_at     { pass P0 { VertexShader = compile vs_3_0 vs_depth_only_main_with_texture();    PixelShader = compile ps_3_0 ps_depth_at(); } }
+technique basic_depth_n      { pass P0 { VertexShader = compile vs_3_0 vs_main();                          PixelShader = compile ps_3_0 ps_depth_normal(0, 0); } }
+technique basic_depth_at_n   { pass P0 { VertexShader = compile vs_3_0 vs_main();                          PixelShader = compile ps_3_0 ps_depth_normal(1, 0); } }
+technique basic_depth_nm_n   { pass P0 { VertexShader = compile vs_3_0 vs_main();                          PixelShader = compile ps_3_0 ps_depth_normal(0, 1); } }
+technique basic_depth_at_nm_n{ pass P0 { VertexShader = compile vs_3_0 vs_main();                          PixelShader = compile ps_3_0 ps_depth_normal(1, 1); } }
 
 #include "ClassicLightShader.hlsl"

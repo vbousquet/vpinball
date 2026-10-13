@@ -669,6 +669,70 @@ void main()
 }
 
 
+//------------------------------------------
+// Depth prepass
+
+////ps_depth
+
+void main()
+{
+   color = vec4(0.);
+}
+
+////ps_depth_at
+
+in vec2 tex0;
+
+void main()
+{
+   if (texture(tex_base_color, tex0).a <= alphaTestValue)
+      discard; //stop the pixel shader if alpha test should reject pixel
+   color = vec4(0.);
+}
+
+////ps_depth_normal
+
+in vec2 tex01;
+in vec3 worldPos;
+in vec3 normal;
+flat in float eye;
+
+void main()
+{
+   FS_LAYER_TO_GLOBAL;
+   const float3 V = normalize(-worldPos);
+   float3 N = normalize(normal);
+   BRANCH if (doNormalMapping)
+      N = normal_map(N, V, tex01, eye);
+   // Flip the normal to always face the viewer so that z can be reconstructed from xy
+   if (N.z < 0.)
+      N = -N;
+   color = vec4(N.xy, 0., 1.);
+}
+
+////ps_depth_at_normal
+
+in vec2 tex01;
+in vec3 worldPos;
+in vec3 normal;
+flat in float eye;
+
+void main()
+{
+   FS_LAYER_TO_GLOBAL;
+   if (texture(tex_base_color, tex01).a <= alphaTestValue)
+      discard; //stop the pixel shader if alpha test should reject pixel
+   const float3 V = normalize(-worldPos);
+   float3 N = normalize(normal);
+   BRANCH if (doNormalMapping)
+      N = normal_map(N, V, tex01, eye);
+   // Flip the normal to always face the viewer so that z can be reconstructed from xy
+   if (N.z < 0.)
+      N = -N;
+   color = vec4(N.xy, 0., 1.);
+}
+
+
 ////ps_main_unshaded_without_texture
 
 void main()
@@ -796,6 +860,11 @@ unshaded_with_texture_shadow:P0:vs_main_unshaded_with_texture_shadow():gs_main_u
 
 bg_decal_without_texture:P0:vs_notex_main():gs_notex_main():ps_main_bg_decal()
 bg_decal_with_texture:P0:vs_main():gs_main():ps_main_bg_decal_texture()
+
+basic_depth:P0:vs_depth_only_main_without_texture():gs_depth_only_main_without_texture():ps_depth()
+basic_depth_at:P0:vs_depth_only_main_with_texture():gs_depth_only_main_with_texture():ps_depth_at()
+basic_depth_n:P0:vs_main():gs_main():ps_depth_normal()
+basic_depth_at_n:P0:vs_main():gs_main():ps_depth_at_normal()
 
 kickerBoolean:P0:vs_kicker():gs_kicker_main():ps_main_notex()
 

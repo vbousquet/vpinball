@@ -270,6 +270,22 @@ float4 psBallTrail( in voutTrail IN ) : COLOR
       return float4((cBase_Alpha.rgb*(0.075*0.25) + ballImageColor)*fenvEmissionScale_TexWidth.x, IN.tex0_alpha.z); //!! just add the ballcolor in, this is a whacky trail anyhow
 }
 
+// Depth prepass
+
+float4 psBallDepth(in vout IN) : COLOR
+{
+   return 0.;
+}
+
+float4 psBallDepthNormal(in vout IN) : COLOR
+{
+   float3 N = normalize(IN.normal_t0x.xyz);
+   // Flip the normal to always face the viewer so that z can be reconstructed from xy
+   if (N.z < 0.)
+      N = -N;
+   return float4(N.xy, 0., 1.);
+}
+
 //------------------------------------
 // Techniques
 
@@ -279,3 +295,6 @@ technique RenderBall_SphericalMap {	pass p0	{ vertexshader = compile vs_3_0 vsBa
 technique RenderBall_SphericalMap_DecalMode { pass p0 { vertexshader = compile vs_3_0 vsBall(); pixelshader = compile ps_3_0 psBall(false, true); }}
 technique RenderBall_Debug { pass p0 { vertexshader = compile vs_3_0 vsBall(); pixelshader = compile ps_3_0 psBallDebug(); }}
 technique RenderBallTrail {	pass p0	{ vertexshader = compile vs_3_0 vsBallTrail(); pixelshader  = compile ps_3_0 psBallTrail();	}}
+
+technique ball_depth   { pass p0 { vertexshader = compile vs_3_0 vsBall(); pixelshader = compile ps_3_0 psBallDepth(); } }
+technique ball_depth_n { pass p0 { vertexshader = compile vs_3_0 vsBall(); pixelshader = compile ps_3_0 psBallDepthNormal(); } }

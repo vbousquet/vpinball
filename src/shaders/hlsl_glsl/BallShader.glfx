@@ -309,6 +309,26 @@ void main()
       color = float4((cBase_Alpha.rgb*(0.075*0.25) + ballImageColor)*fenvEmissionScale_TexWidth.x, tex0_alpha.z); //!! just add the ballcolor in, this is a whacky trail anyhow
 }
 
+////psBallDepth
+
+void main()
+{
+   color = float4(0.0);
+}
+
+////psBallDepthNormal
+
+in vec4 normal_t0x;
+
+void main()
+{
+   float3 N = normalize(normal_t0x.xyz);
+   // Flip the normal to always face the viewer so that z can be reconstructed from xy
+   if (N.z < 0.)
+      N = -N;
+   color = float4(N.xy, 0., 1.);
+}
+
 //------------------------------------
 // Techniques
 
@@ -320,3 +340,5 @@ RenderBall_SphericalMap:P0:vsBall():gsBall():psBall(false, false)
 RenderBall_SphericalMap_DecalMode:P0:vsBall():gsBall():psBall(false, true)
 RenderBall_Debug:P0:vsBall():gsBall():psBallDebug()
 RenderBallTrail:P0:vsBallTrail():gsBallTrail():psBallTrail()
+ball_depth:P0:vsBall():gsBall():psBallDepth()
+ball_depth_n:P0:vsBall():gsBall():psBallDepthNormal()
