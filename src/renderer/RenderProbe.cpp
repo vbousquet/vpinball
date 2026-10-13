@@ -269,6 +269,7 @@ void RenderProbe::RenderScreenSpaceTransparency()
    const vector<RenderPass*>& framePasses = m_renderer->m_renderDevice->GetRenderFramePasses();
    m_probePasses.insert(m_probePasses.end(), framePasses.begin() + firstPass, framePasses.end());
    m_renderer->m_renderDevice->SetRenderTarget(renderedPass->m_name, renderedPass->m_rt, false);
+   m_renderer->m_renderDevice->GetCurrentPass()->m_emitDepthPrepass = renderedPass->m_emitDepthPrepass;
    m_renderer->m_renderDevice->GetCurrentPass()->AddPrecursor(renderedPass);
    renderedPass->MarkInterrupted();
 }
@@ -507,6 +508,8 @@ RenderTarget* RenderProbe::RenderReflectionProbe(const unsigned int renderMask)
    const vector<RenderPass*>& framePasses = m_renderer->m_renderDevice->GetRenderFramePasses();
    m_probePasses.insert(m_probePasses.end(), framePasses.begin() + firstPass, framePasses.end());
    m_renderer->m_renderDevice->SetRenderTarget(previousRT->m_name, previousRT->m_rt);
+   m_renderer->m_renderDevice->GetCurrentPass()->m_emitDepthPrepass = previousRT->m_emitDepthPrepass;
+   m_renderer->m_renderDevice->GetCurrentPass()->AddPrecursor(previousRT);
    previousRT->MarkInterrupted();
    m_rendering = false;
 

@@ -33,6 +33,7 @@ public:
    string m_name;
    bool m_depthReadback = false;
    bool m_mergeable = true; // true if this pass can be merged with its precursor if they are on the same render target, leading to sorting the render commands of both passes together
+   bool m_emitDepthPrepass = false; // true if this pass's draw commands that write to the depth buffer must be cloned into the depth prepass
 
    vector<RenderCommand*> m_commands;
    vector<RenderPass*> m_dependencies; // List of render passes that must have been performed before executing this pass (i.e. this passes uses the render target of its dependencies)

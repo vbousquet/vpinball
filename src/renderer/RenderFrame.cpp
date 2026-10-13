@@ -122,6 +122,7 @@ void RenderFrame::SortPasses(RenderPass* finalPass, vector<RenderPass*>& sortedP
       if (nextPass != sortedPasses.end() && (*nextPass)->m_mergeable && (*itPass)->m_rt == (*nextPass)->m_rt && (*itPass)->m_singleLayerRendering == (*nextPass)->m_singleLayerRendering)
       {
          (*nextPass)->m_depthReadback |= (*itPass)->m_depthReadback;
+         (*nextPass)->m_emitDepthPrepass |= (*itPass)->m_emitDepthPrepass;
          (*nextPass)->m_commands.insert((*nextPass)->m_commands.begin(), (*itPass)->m_commands.begin(), (*itPass)->m_commands.end());
          (*itPass)->m_commands.clear();
          itPass = sortedPasses.erase(itPass);
@@ -200,6 +201,7 @@ bool RenderFrame::Execute(const bool log)
                // Add the pass just before the rendercommand. Warning: this only supports the refraction use scheme where we add a single pass to perform the screen copy
                (*it)->m_dependency->m_sortKey = 1;
                RenderPass* const splitPass = AddPass((*itPass)->m_name + " [Split before " + (*it)->m_dependency->m_name + ']', (*itPass)->m_rt);
+               splitPass->m_emitDepthPrepass = (*itPass)->m_emitDepthPrepass;
                splitPass->m_commands.insert(splitPass->m_commands.begin(), (*itPass)->m_commands.begin(), it);
                (*itPass)->m_commands.erase((*itPass)->m_commands.begin(), it);
                it = (*itPass)->m_commands.begin(); // Continue with remaining commands after split
@@ -208,6 +210,39 @@ bool RenderFrame::Execute(const bool log)
                SortPasses((*it)->m_dependency, subPasses);
                for (RenderPass* subPass : subPasses)
                   itPass = sortedPasses.insert(itPass, subPass) + 1; // itPass points after the added dependency pass
+            }
+         }
+      }
+
+      // Emit the depth prepass: the prepass pass was recorded before the scene (holding a depth buffer clear or a
+      // static prerender depth copy). Fill it with clones of all the scene draw calls that write to the depth buffer.
+      // Cloned commands are appended to the last recorded prepass pass, which supports setups recording one scene per eye (e.g. DX9 stereo).
+      if (m_rd->m_depthPrepassTarget != nullptr)
+      {
+         RenderPass* depthPass = nullptr;
+         for (RenderPass* pass : sortedPasses)
+         {
+            if (pass->m_rt == m_rd->m_depthPrepassTarget)
+            {
+               depthPass = pass;
+               continue;
+            }
+            if (depthPass == nullptr || !pass->m_emitDepthPrepass)
+               continue;
+            for (RenderCommand* cmd : pass->m_commands)
+            {
+               if (!cmd->IsDrawMeshCommand())
+                  continue;
+               // Draws that do not write to the depth buffer (e.g. classic light inserts) can not contribute to the prepass
+               if (cmd->GetRenderState().GetRenderState(RenderState::ZWRITEENABLE) != RenderState::RS_TRUE || cmd->GetRenderState().GetRenderState(RenderState::ZENABLE) != RenderState::RS_TRUE)
+                  continue;
+               const ShaderTechnique tech = cmd->GetShaderState()->GetTechnique();
+               if (tech == ShaderTechnique::kickerBoolean || tech == ShaderTechnique::kickerBoolean_isMetal)
+                  continue; // Kicker 'holes' carve the playfield in the shaded render: they must not occlude in the prepass
+               RenderCommand* clone = NewCommand();
+               clone->CopyFrom(cmd);
+               clone->DisableColorWrites();
+               depthPass->Submit(clone);
             }
          }
       }

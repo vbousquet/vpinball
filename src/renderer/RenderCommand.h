@@ -40,6 +40,10 @@ public:
    void SetDrawTexturedQuad(Shader* shader, const Vertex3D_TexelOnly* vertices, const bool isTransparent = false, const float depth = 0.f);
    void SetDrawTexturedQuad(Shader* shader, const Vertex3D_NoTex2* vertices, const bool isTransparent = false, const float depth = 0.f);
 
+   // Clone this command (used to emit the depth prepass draw calls from the recorded scene commands)
+   void CopyFrom(const RenderCommand* src);
+   void DisableColorWrites();
+
    string ToString(bool detailled) const;
 
    RenderPass* m_dependency = nullptr;
