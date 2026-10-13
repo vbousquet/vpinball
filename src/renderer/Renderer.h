@@ -47,6 +47,7 @@ public:
 
    void DisableStaticPrePass(const bool disable);
    bool IsUsingStaticPrepass() const;
+   bool IsUsingDepthPrepass() const;
    bool IsTemporalAccumulationInProgress() const; // True while the static parts prerender is still accumulating samples (main renderer or any render probe)
    unsigned int GetNPrerenderTris() const { return m_statsDrawnStaticTriangles; }
 
@@ -354,6 +355,11 @@ private:
    int m_staticPrepassAccumCount = 0; // Number of samples accumulated so far by the temporal static prerendering
    unsigned int m_statsDrawnStaticTriangles = 0;
    RenderProbe::ReflectionMode m_maxReflectionMode;
+
+   int m_depthPrepassMode = 0; // Player_DepthPrepass setting: 0 = disabled, 1 = depth, 2 = depth & shaded normals
+   RenderTarget* m_depthPrepassRT[2] = { nullptr, nullptr };
+   RenderTarget* m_depthPrepassSceneRT[2] = { nullptr, nullptr };
+   RenderTarget* GetDepthPrepassRenderTarget();
 
    bool m_noBackdrop = false;
    unsigned int m_visibilityMask = 0xFFFF;

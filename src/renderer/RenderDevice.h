@@ -244,6 +244,8 @@ public:
 
    int m_singleLayerRendering = -1; // if positive, newly created passes will only render to the corresponding layer of their stereo render target
 
+   RenderTarget* m_depthPrepassTarget = nullptr; // When set, draw commands of passes flagged with RenderPass::m_emitDepthPrepass that write to the depth buffer are cloned into the pass targeting it
+
 private:
    const bool m_isAnaglyph;
    const bool m_isVR;
