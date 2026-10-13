@@ -126,6 +126,16 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(light_with_texture_isMetal),
    SHADER_TECHNIQUE(light_without_texture_isMetal),
 
+   // Depth prepass variants. 'basic_depth_*_nm_n' are only used by DX9 (other backends apply normal mapping through the u_basic_shade_mode/doNormalMapping uniforms)
+   SHADER_TECHNIQUE(basic_depth),
+   SHADER_TECHNIQUE(basic_depth_at),
+   SHADER_TECHNIQUE(basic_depth_n),
+   SHADER_TECHNIQUE(basic_depth_at_n),
+   SHADER_TECHNIQUE(basic_depth_nm_n),
+   SHADER_TECHNIQUE(basic_depth_at_nm_n),
+   SHADER_TECHNIQUE(ball_depth),
+   SHADER_TECHNIQUE(ball_depth_n),
+
    SHADER_TECHNIQUE(basic_DMD),
    SHADER_TECHNIQUE(basic_DMD_world),
 
@@ -191,6 +201,7 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(AO),
    SHADER_TECHNIQUE(fb_AO), // Display debug AO
    SHADER_TECHNIQUE(fb_prepass_depth), // Display debug depth prepass depth attachment
+   SHADER_TECHNIQUE(fb_prepass_normal), // Display debug depth prepass shaded normals
    SHADER_TECHNIQUE(fb_AO_static), // Apply AO during static prerender pass (no tonemapping)
    SHADER_TECHNIQUE(fb_AO_no_filter_static), // Apply AO during static prerender pass (no tonemapping)
    SHADER_TECHNIQUE(fb_motionblur),
@@ -367,6 +378,7 @@ enum class ShaderUniform : unsigned int
    SHADER_SAMPLER(tex_ao, 3, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // AO Result
    SHADER_SAMPLER(tex_depth, 4, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // Depth
    SHADER_SAMPLER(tex_ao_dither, 5, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_NONE), // AO dither
+   SHADER_SAMPLER(tex_normals, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // Shaded normals from the depth prepass
    //SHADER_SAMPLER(tex_tonemap_lut, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // Tonemap LUT
    SHADER_SAMPLER(edgesTex, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // SMAA
    SHADER_SAMPLER(blendTex, 8, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // SMAA
@@ -416,6 +428,8 @@ public:
    static ShaderUniformDef coreUniforms[static_cast<unsigned int>(ShaderUniform::COUNT)];
 };
 
+class ShaderState;
+
 class Shader final
 {
 public:
@@ -429,6 +443,10 @@ public:
    bool HasError() const { return m_hasError; }
    static Shader* GetCurrentShader();
    static string GetTechniqueName(ShaderTechnique technique);
+   // Selects the depth prepass variant of a (basic or ball shader) material technique
+   static ShaderTechnique GetDepthPrepassTechnique(const ShaderTechnique technique, const bool withNormals);
+   // Disables the normal mapping flag of a depth prepass state whose source is not a material technique (unshaded, decals, ... holding a stale flag). No-op on DX9 which bakes it in the technique.
+   static void DisableDepthPrepassNormalMapping(ShaderState* const state);
    void SetTechnique(const ShaderTechnique technique);
    void SetTechniqueMaterial(ShaderTechnique technique, const Material& mat, const bool doAlphaTest = false, const bool doNormalMapping = false, const bool doReflection = false, const bool doRefraction = false);
    void SetBasic(const Material * const mat, Texture * const pin);
@@ -613,6 +631,8 @@ public:
       memset(m_state.data(), 0, m_state.size());
       m_samplers.clear();
    }
+
+   bool HasUniform(const ShaderUniform uniformName) const { return m_stateOffsets[static_cast<unsigned int>(uniformName)] != -1; }
 
    uint8_t* GetUniformStatePtr(const ShaderUniform uniformName)
    {

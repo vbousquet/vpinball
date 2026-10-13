@@ -2857,6 +2857,15 @@ void RenderDevice::DrawFullscreenTexturedQuad(Shader* shader)
 
 void RenderDevice::DrawMesh(Shader* shader, const bool isTranparentPass, const Vertex3Ds& center, const float depthBias, std::shared_ptr<MeshBuffer> mb, const PrimitiveTypes type, const uint32_t startIndex, const uint32_t indexCount)
 {
+   // When recording directly into the depth prepass (static parts in 'Depth & Shaded Normals' mode),
+   // only depth-writing draws of the shaders having a depth prepass variant contribute, using their depth technique. Kicker 'hole' carving draws are excluded.
+   const bool depthPrepass = (m_depthPrepassTarget != nullptr) && (m_currentPass->m_rt == m_depthPrepassTarget);
+   if (depthPrepass)
+   {
+      const ShaderTechnique tech = shader->m_state->GetTechnique();
+      if ((shader != m_basicShader && shader != m_ballShader) || tech == ShaderTechnique::kickerBoolean || tech == ShaderTechnique::kickerBoolean_isMetal)
+         return;
+   }
    RenderCommand* cmd = m_renderFrame->NewCommand();
    float depth;
    if (g_pplayer->m_renderer == nullptr)
@@ -2873,6 +2882,25 @@ void RenderDevice::DrawMesh(Shader* shader, const bool isTranparentPass, const V
       depth = g_pplayer->m_renderer->IsRenderPass(Renderer::REFLECTION_PASS) ? depthBias + center.z : depthBias - center.z;
    // We can not use the real opacity from render states since some legacy code uses the alpha part that writes to the depth buffer (rendered during transparent pass) to mask out opaque parts
    cmd->SetDrawMesh(shader, mb, type, startIndex, indexCount, isTranparentPass /* && !GetRenderState().IsOpaque() */, depth);
+   if (depthPrepass)
+   {
+      // Draws that do not write to the depth buffer (e.g. classic light inserts) can not contribute to the prepass
+      if (cmd->GetRenderState().GetRenderState(RenderState::ZWRITEENABLE) != RenderState::RS_TRUE || cmd->GetRenderState().GetRenderState(RenderState::ZENABLE) != RenderState::RS_TRUE)
+         return;
+      const ShaderTechnique tech = cmd->GetShaderState()->GetTechnique();
+      const ShaderTechnique depthTech = Shader::GetDepthPrepassTechnique(tech, m_depthPrepassNormals);
+      cmd->GetShaderState()->SetTechnique(depthTech);
+      if (m_depthPrepassNormals)
+      {
+         if (tech == ShaderTechnique::unshaded_without_texture || tech == ShaderTechnique::unshaded_with_texture || tech == ShaderTechnique::unshaded_without_texture_shadow
+            || tech == ShaderTechnique::unshaded_with_texture_shadow || tech == ShaderTechnique::basic_reflection_only || tech == ShaderTechnique::bg_decal_without_texture
+            || tech == ShaderTechnique::bg_decal_with_texture)
+            Shader::DisableDepthPrepassNormalMapping(cmd->GetShaderState()); // Non material sources may carry a stale normal mapping flag
+         cmd->DisableAlphaBlend(); // The normal output must not be blended over previously written normals
+      }
+      else
+         cmd->DisableColorWrites();
+   }
    cmd->m_dependency = m_nextRenderCommandDependency;
    m_nextRenderCommandDependency = nullptr;
    m_currentPass->Submit(cmd);
