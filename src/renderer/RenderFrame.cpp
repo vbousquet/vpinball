@@ -232,6 +232,8 @@ bool RenderFrame::Execute(const bool log)
                depthPass = targetPass;
          if (depthPass == nullptr)
             continue;
+         // The clone variant is defined by the prepass target format: RG16F carries the shaded normals, GREY8 is depth only
+         const bool prepassNormals = depthPass->m_rt->GetColorFormat() == colorFormat::RG16F;
          for (RenderCommand* cmd : pass->m_commands)
          {
             if (!cmd->IsDrawMeshCommand())
@@ -243,12 +245,26 @@ bool RenderFrame::Execute(const bool log)
             // the prepass their whole quad would occlude, with its own motion and depth, unless nearly opaque
             if (cmd->IsSeeThroughBlend())
                continue;
+            // Only the basic and ball shaders have a depth prepass variant: other scene draws (DMD, displays, flashers, ...) are skipped
+            if (cmd->GetShader() != m_rd->m_basicShader && cmd->GetShader() != m_rd->m_ballShader)
+               continue;
             const ShaderTechnique tech = cmd->GetShaderState()->GetTechnique();
             if (tech == ShaderTechnique::kickerBoolean || tech == ShaderTechnique::kickerBoolean_isMetal)
                continue; // Kicker 'holes' carve the playfield in the shaded render: they must not occlude in the prepass
             RenderCommand* clone = NewCommand();
             clone->CopyFrom(cmd);
-            clone->DisableColorWrites();
+            const ShaderTechnique depthTech = Shader::GetDepthPrepassTechnique(tech, prepassNormals);
+            clone->GetShaderState()->SetTechnique(depthTech);
+            if (prepassNormals)
+            {
+               if (tech == ShaderTechnique::unshaded_without_texture || tech == ShaderTechnique::unshaded_with_texture || tech == ShaderTechnique::unshaded_without_texture_shadow
+                  || tech == ShaderTechnique::unshaded_with_texture_shadow || tech == ShaderTechnique::basic_reflection_only || tech == ShaderTechnique::bg_decal_without_texture
+                  || tech == ShaderTechnique::bg_decal_with_texture)
+                  Shader::DisableDepthPrepassNormalMapping(clone->GetShaderState()); // Non material sources may carry a stale normal mapping flag
+               clone->DisableAlphaBlend(); // The normal output must not be blended over previously written normals
+            }
+            else
+               clone->DisableColorWrites();
             depthPass->Submit(clone);
          }
       }
