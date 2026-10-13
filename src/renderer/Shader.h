@@ -190,6 +190,7 @@ enum class ShaderTechnique : unsigned int
 
    SHADER_TECHNIQUE(AO),
    SHADER_TECHNIQUE(fb_AO), // Display debug AO
+   SHADER_TECHNIQUE(fb_prepass_depth), // Display debug depth prepass depth attachment
    SHADER_TECHNIQUE(fb_AO_static), // Apply AO during static prerender pass (no tonemapping)
    SHADER_TECHNIQUE(fb_AO_no_filter_static), // Apply AO during static prerender pass (no tonemapping)
    SHADER_TECHNIQUE(fb_motionblur),

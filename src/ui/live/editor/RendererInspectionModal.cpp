@@ -47,6 +47,8 @@ void RendererInspectionModal::Render()
       ImGui::RadioButton("Transmitted light pass", &m_passSelection, IF_LIGHT_BUFFER_ONLY);
       if (m_editor.m_player->m_renderer->GetAOMode() != 0)
          ImGui::RadioButton("Ambient Occlusion pass", &m_passSelection, IF_AO_ONLY);
+      if (m_editor.m_player->m_renderer->IsUsingDepthPrepass())
+         ImGui::RadioButton("Depth prepass depth", &m_passSelection, IF_DEPTH);
       for (size_t i = 0; i < m_editor.m_table->m_vrenderprobe.size(); i++)
       {
          ImGui::RadioButton(m_editor.m_table->m_vrenderprobe[i]->GetName().c_str(), &m_passSelection, 100 + (int)i);
