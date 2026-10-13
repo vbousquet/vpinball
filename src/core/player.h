@@ -54,6 +54,7 @@ enum InfoMode
    IF_AO_ONLY,
    IF_LIGHT_BUFFER_ONLY,
    IF_RENDER_PROBES,
+   IF_DEPTH,
    IF_INVALID
 };
 

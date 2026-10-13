@@ -73,6 +73,12 @@ void RenderView::ReleaseTargets()
 {
    delete m_staticPrepassRT;
    m_staticPrepassRT = nullptr;
+   delete m_depthPrepassRT[0];
+   m_depthPrepassRT[0] = nullptr;
+   delete m_depthPrepassRT[1];
+   m_depthPrepassRT[1] = nullptr;
+   m_depthPrepassSceneRT[0] = nullptr;
+   m_depthPrepassSceneRT[1] = nullptr;
    delete m_pOffscreenBackBufferTexture1;
    m_pOffscreenBackBufferTexture1 = nullptr;
    delete m_pOffscreenBackBufferTexture2;
@@ -807,6 +813,16 @@ bool RenderView::IsUsingStaticPrepass() const
       && m_disableStaticPrepass <= 0; // Something resuested to disable static part accumulation (for example headtracking,...)
 }
 
+bool RenderView::IsUsingDepthPrepass() const
+{
+#if defined(ENABLE_BGFX)
+   // The VR desktop mirror scene shares this renderer but its own render targets: keep it on the legacy path
+   return m_renderer->m_depthPrepassMode != 0 && !IsMirror();
+#else
+   return false; // The depth prepass shaders are only implemented for the BGFX backend
+#endif
+}
+
 bool RenderView::IsTemporalAccumulationInProgress() const
 {
    if (IsUsingStaticPrepass() && (m_isStaticPrepassDirty || m_staticPrepassAccumCount < STATIC_PRERENDER_ITERATIONS))
@@ -824,6 +840,39 @@ void RenderView::SetStaticPrepassDisabled(const bool disable)
    m_isStaticPrepassDirty |= wasUsingStaticPrepass != IsUsingStaticPrepass();
 }
 
+RenderTarget* RenderView::GetDepthPrepassRenderTarget()
+{
+   // Lazily creates the prepass target. Its depth surface is always a private non-MSAA one: it can not be shared
+   // with the scene since blended parts may write to the depth buffer, and prepopulating them in the scene depth
+   // would wrongly cull the parts rendered before them but behind them (besides, MSAA depth can not be shared).
+   // The scene's render targets ping pong between the two back buffer render targets (previous frame history), so
+   // one prepass target is kept per scene render target, recreated on surface change.
+   RenderTarget* const sceneRT = GetMSAABackBufferTexture();
+   for (int i = 0; i < 2; i++)
+   {
+      if (m_depthPrepassRT[i] == nullptr || m_depthPrepassSceneRT[i] != sceneRT)
+         continue;
+      if (m_depthPrepassRT[i]->GetWidth() == sceneRT->GetWidth() && m_depthPrepassRT[i]->GetHeight() == sceneRT->GetHeight())
+      {
+         m_depthPrepassSlot = i;
+         return m_depthPrepassRT[i];
+      }
+      delete m_depthPrepassRT[i];
+      m_depthPrepassRT[i] = nullptr;
+      m_depthPrepassSceneRT[i] = nullptr;
+   }
+   // Pick a slot for the new target: prefer a free one, otherwise recycle the slot used the longest ago (the two
+   // scene targets both stay live while ping ponging, so recycling a fixed slot would thrash a target each frame
+   // after a back buffer recreation)
+   const int slot = m_depthPrepassRT[0] == nullptr ? 0 : m_depthPrepassRT[1] == nullptr ? 1 : 1 - m_depthPrepassSlot;
+   m_depthPrepassSlot = slot;
+   delete m_depthPrepassRT[slot];
+   m_depthPrepassSceneRT[slot] = sceneRT;
+   m_depthPrepassRT[slot] = new RenderTarget(m_renderer->m_renderDevice, GetBackBufferTexture()->m_type, "DepthPrepass"s, sceneRT->GetWidth(), sceneRT->GetHeight(),
+      colorFormat::GREY8, true, 1, "Unable to create depth prepass render target!");
+   return m_depthPrepassRT[slot];
+}
+
 void RenderView::RenderStatics()
 {
    Renderer* const r = m_renderer;
@@ -833,11 +882,26 @@ void RenderView::RenderStatics()
    m_isStaticPrepassDirty |= useStaticPrepass && !m_wasUsingStaticPrepass;
    m_wasUsingStaticPrepass = useStaticPrepass;
 
+   // The depth prepass is recorded before the scene pass. The frame then fills it with clones of the scene draw
+   // commands that write to the depth buffer, into a dedicated non-MSAA depth surface (the scene depth can not be
+   // shared since blended parts may write to it, breaking rendering of the parts behind them).
+   const bool useDepthPrepass = IsUsingDepthPrepass();
+   rd->m_depthPrepassTarget = useDepthPrepass ? GetDepthPrepassRenderTarget() : nullptr;
+
    if (!useStaticPrepass)
    {
       rd->SetRenderTarget("Render Background"s, GetMSAABackBufferTexture());
+      rd->GetCurrentPass()->m_depthPrepassTarget = rd->m_depthPrepassTarget;
       DrawBackground();
+      if (useDepthPrepass)
+      {
+         rd->SetRenderTarget("PreRender Depth"s, GetDepthPrepassRenderTarget());
+         rd->Clear(clearType::ZBUFFER, 0);
+      }
       rd->SetRenderTarget("Render Scene"s, GetMSAABackBufferTexture(), true, true); // Force new pass to avoid sorting background draw calls with 3D rendering draw calls
+      rd->GetCurrentPass()->m_depthPrepassTarget = rd->m_depthPrepassTarget;
+      if (useDepthPrepass)
+         rd->AddRenderTargetDependency(GetDepthPrepassRenderTarget());
       return;
    }
 
@@ -975,6 +1039,12 @@ void RenderView::RenderStatics()
    }
 
    // Copy the accumulated background + static part renders
+   if (useDepthPrepass)
+   {
+      // Static depth is seeded into the prepass's own depth surface so that it covers the static parts
+      rd->SetRenderTarget("PreRender Depth"s, GetDepthPrepassRenderTarget());
+      rd->BlitRenderTarget(m_staticPrepassRT, GetDepthPrepassRenderTarget(), false, true);
+   }
    rd->SetRenderTarget("PreRender Compose"s, GetMSAABackBufferTexture());
    rd->AddRenderTargetDependency(m_staticPrepassRT);
    if (m_staticPrepassAccumCount >= STATIC_PRERENDER_ITERATIONS)
@@ -1000,6 +1070,9 @@ void RenderView::RenderStatics()
       rd->m_FBShader->SetTextureNull(ShaderUniform::tex_fb_unfiltered);
    }
    rd->SetRenderTarget("Render Scene"s, GetMSAABackBufferTexture(), true, true); // Force new pass to avoid sorting the statics composite draw calls with 3D rendering draw calls
+   rd->GetCurrentPass()->m_depthPrepassTarget = rd->m_depthPrepassTarget;
+   if (useDepthPrepass)
+      rd->AddRenderTargetDependency(GetDepthPrepassRenderTarget());
 }
 
 void RenderView::RenderDynamics()
@@ -1165,6 +1238,7 @@ void RenderView::DrawBulbLightBuffer()
 
    // Restore state and render target
    rd->SetRenderTarget(initial_rt->m_name, initial_rt->m_rt);
+   rd->GetCurrentPass()->m_depthPrepassTarget = initial_rt->m_depthPrepassTarget;
    initial_rt->MarkInterrupted();
 
    if (hasLight)
@@ -1417,6 +1491,13 @@ void RenderView::SetupTonemapping(RenderTarget* renderedRT, RenderTarget* tonema
    const bool filtered = resample || (m_screenOffset.x != 0.f) || (m_screenOffset.y != 0.f);
    if (infoMode == IF_AO_ONLY)
       tonemapTechnique = ShaderTechnique::fb_AO;
+   else if (infoMode == IF_DEPTH)
+   {
+      tonemapTechnique = ShaderTechnique::fb_prepass_depth;
+      RenderTarget* const prepassRT = GetDepthPrepassRenderTarget();
+      rd->AddRenderTargetDependency(prepassRT);
+      rd->m_FBShader->SetTexture(ShaderUniform::tex_depth, prepassRT->GetDepthSampler());
+   }
    else if (infoMode == IF_RENDER_PROBES)
       tonemapTechnique = r->m_toneMapper == TM_REINHARD ? ShaderTechnique::fb_rhtonemap
          : r->m_toneMapper == TM_FILMIC                 ? ShaderTechnique::fb_fmtonemap

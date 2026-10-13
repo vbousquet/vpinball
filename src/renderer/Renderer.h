@@ -149,6 +149,7 @@ public:
    void DisableStaticPrePass(const bool disable); // Disable static part prerendering on all views (reference counted)
    void MarkStaticsDirty(); // The accumulated static part prerender of the views is stale (scene content or lighting changed): re-accumulate it on the next render
    bool IsUsingStaticPrepass() const { return m_activeView->IsUsingStaticPrepass(); }
+   bool IsUsingDepthPrepass() const { return m_activeView->IsUsingDepthPrepass(); }
    bool IsTemporalAccumulationInProgress() const
    {
       for (const RenderView* view : m_renderViews)
@@ -421,6 +422,7 @@ private:
    RenderTarget* GetMotionBlurBufferTexture() { return m_activeView->GetMotionBlurBufferTexture(); }
    RenderTarget* GetBloomBufferTexture() const { return m_activeView->GetBloomBufferTexture(); }
    RenderTarget* GetBloomTmpBufferTexture() const { return m_activeView->GetBloomTmpBufferTexture(); }
+   RenderTarget* GetDepthPrepassRenderTarget() { return m_activeView->GetDepthPrepassRenderTarget(); }
 
    // Ancillary window rendering
 
@@ -477,6 +479,8 @@ private:
    PinTable* m_table;
 
    RenderProbe::ReflectionMode m_maxReflectionMode;
+
+   int m_depthPrepassMode = 0; // Player_DepthPrepass setting: 0 = disabled, 1 = depth, 2 = depth & shaded normals
 
    vector<IRenderable*> m_renderableToInit;
    vector<IRenderable*> m_renderableToSetup;

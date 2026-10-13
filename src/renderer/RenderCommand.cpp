@@ -520,6 +520,58 @@ void RenderCommand::SetDrawTexturedQuad(Shader* shader, const Vertex3D_NoTex2* v
    m_shader->m_state->CopyTo(true, m_shaderState);
 }
 
+void RenderCommand::CopyFrom(const RenderCommand* src)
+{
+   m_command = src->m_command;
+   m_shader = src->m_shader;
+   if (src->m_shaderState)
+   {
+      if (m_shaderState)
+         m_shaderState->SetShader(m_shader);
+      else
+         m_shaderState = new ShaderState(m_shader, m_rd->UseLowPrecision());
+      src->m_shaderState->CopyTo(true, m_shaderState);
+   }
+   m_renderState = src->m_renderState;
+   m_isTransparent = src->m_isTransparent;
+   m_clearARGB = src->m_clearARGB;
+   m_clearFlags = src->m_clearFlags;
+   m_copyFrom = src->m_copyFrom;
+   m_copyTo = src->m_copyTo;
+   m_copyColor = src->m_copyColor;
+   m_copyDepth = src->m_copyDepth;
+   m_copySrcRect = src->m_copySrcRect;
+   m_copyDstRect = src->m_copyDstRect;
+   m_copySrcLayer = src->m_copySrcLayer;
+   m_copyDstLayer = src->m_copyDstLayer;
+   memcpy(m_vertices, src->m_vertices, sizeof(m_vertices));
+   m_mb = src->m_mb;
+   m_primitiveType = src->m_primitiveType;
+   m_indicesCount = src->m_indicesCount;
+   m_startIndex = src->m_startIndex;
+   m_depth = src->m_depth;
+   m_dependency = nullptr;
+}
+
+bool RenderCommand::IsSeeThroughBlend() const
+{
+   if (m_renderState.GetRenderState(RenderState::ALPHABLENDENABLE) != RenderState::RS_TRUE)
+      return false;
+   // Additive blending (ball shadow quads, flares, ...) never carries meaningful depth
+   if (m_renderState.GetRenderState(RenderState::DESTBLEND) == RenderState::ONE)
+      return true;
+   // The blend weight is the fragment alpha: tex.a * cBase_Alpha.a * staticColor_Alpha.a for the basic shader,
+   // cBase_Alpha.a for the ball impostor (texture alpha is per pixel and can not be evaluated here)
+   const float alpha = (m_shaderState->HasUniform(ShaderUniform::cBase_Alpha) ? m_shaderState->GetVector(ShaderUniform::cBase_Alpha).w : 1.f)
+      * (m_shaderState->HasUniform(ShaderUniform::staticColor_Alpha) ? m_shaderState->GetVector(ShaderUniform::staticColor_Alpha).w : 1.f);
+   return alpha <= 0.5f;
+}
+
+void RenderCommand::DisableColorWrites()
+{
+   m_renderState.SetRenderState(RenderState::COLORWRITEENABLE, RenderState::RGBMASK_NONE);
+}
+
 string RenderCommand::ToString(bool detailled) const
 {
    std::stringstream ss;

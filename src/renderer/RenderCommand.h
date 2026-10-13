@@ -37,6 +37,9 @@ public:
 
    bool IsFullClear(const bool hasDepth) const;
    bool IsTransparent() const { return m_isTransparent; }
+   // Alpha blended draws are see-through even when they write depth (ball shadow quads, decals): only nearly opaque
+   // ones can contribute to a depth prepass, that is with a non additive blending and an authored alpha above 0.5
+   bool IsSeeThroughBlend() const;
    bool IsDrawCommand() const { return m_command == RC_DRAW_MESH || m_command == RC_DRAW_TRANSIENT || m_command == RC_DRAW_QUAD_PT || m_command == RC_DRAW_QUAD_PNT; }
    bool IsDrawMeshCommand() const { return m_command == RC_DRAW_MESH; }
    RenderState GetRenderState() const { return m_renderState; }
@@ -61,6 +64,10 @@ public:
 #endif
    void SetDrawTexturedQuad(Shader* shader, const Vertex3D_TexelOnly* vertices, const bool isTransparent = false, const float depth = 0.f);
    void SetDrawTexturedQuad(Shader* shader, const Vertex3D_NoTex2* vertices, const bool isTransparent = false, const float depth = 0.f);
+
+   // Clone this command (used to emit the depth prepass draw calls from the recorded scene commands)
+   void CopyFrom(const RenderCommand* src);
+   void DisableColorWrites();
 
    string ToString(bool detailled) const;
 

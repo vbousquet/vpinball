@@ -38,6 +38,9 @@ public:
    RenderView(Renderer* renderer, Kind kind);
    ~RenderView();
 
+   // The VSM page marking and per-space view setup drive the view's camera internals mid-render
+   friend class Renderer;
+
    bool IsMirror() const { return m_kind == Kind::VRMirror; }
 
    // Output: a window backbuffer, possibly shared with other views, each view drawing to its own
@@ -178,6 +181,7 @@ public:
 
    // Static part prerendering (temporal accumulation)
    bool IsUsingStaticPrepass() const;
+   bool IsUsingDepthPrepass() const;
    bool IsTemporalAccumulationInProgress() const; // True while the static parts prerender is still accumulating samples (this view or any render probe)
    void MarkPrepassDirty() { m_isStaticPrepassDirty = true; } // The accumulated static part prerender is stale: re-accumulate it on the next render
    void ResetStaticPrepass()
@@ -188,6 +192,12 @@ public:
    } // Fully re-evaluate the static prerendering (e.g. after a table switch)
    void SetStaticPrepassDisabled(const bool disable); // Reference counted disable, re-accumulates when re-enabled
    unsigned int GetDrawnStaticTriangles() const { return m_statsDrawnStaticTriangles; }
+
+   // Depth prepass target (private non-MSAA depth surface), lazily created, one per scene render target (they ping pong)
+   RenderTarget* m_depthPrepassRT[2] = { nullptr, nullptr };
+   RenderTarget* m_depthPrepassSceneRT[2] = { nullptr, nullptr };
+   int m_depthPrepassSlot = 0; // Last used prepass slot, for LRU recycling when both are occupied
+   RenderTarget* GetDepthPrepassRenderTarget();
 
    // Lazily created render target chain (called once targets size is known), released by destructor
    void SetupTargets(const int width, const int height, const SurfaceType rtType, const colorFormat format, const int nMSAASamples);

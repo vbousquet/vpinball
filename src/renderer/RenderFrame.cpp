@@ -123,6 +123,8 @@ void RenderFrame::SortPasses(RenderPass* finalPass, vector<RenderPass*>& sortedP
          && (*itPass)->m_areaOfInterest == (*nextPass)->m_areaOfInterest) // A scissored pass cannot absorb commands clipped to a different area
       {
          (*nextPass)->m_depthReadback |= (*itPass)->m_depthReadback;
+         if ((*nextPass)->m_depthPrepassTarget == nullptr)
+            (*nextPass)->m_depthPrepassTarget = (*itPass)->m_depthPrepassTarget;
          (*nextPass)->m_commands.insert((*nextPass)->m_commands.begin(), (*itPass)->m_commands.begin(), (*itPass)->m_commands.end());
          (*itPass)->m_commands.clear();
          itPass = sortedPasses.erase(itPass);
@@ -201,6 +203,7 @@ bool RenderFrame::Execute(const bool log)
                // Add the pass just before the rendercommand. Warning: this only supports the refraction use scheme where we add a single pass to perform the screen copy
                (*it)->m_dependency->m_sortKey = 1;
                RenderPass* const splitPass = AddPass((*itPass)->m_name + " [Split before " + (*it)->m_dependency->m_name + ']', (*itPass)->m_rt);
+               splitPass->m_depthPrepassTarget = (*itPass)->m_depthPrepassTarget;
                splitPass->m_commands.insert(splitPass->m_commands.begin(), (*itPass)->m_commands.begin(), it);
                (*itPass)->m_commands.erase((*itPass)->m_commands.begin(), it);
                it = (*itPass)->m_commands.begin(); // Continue with remaining commands after split
@@ -210,6 +213,43 @@ bool RenderFrame::Execute(const bool log)
                for (RenderPass* subPass : subPasses)
                   itPass = sortedPasses.insert(itPass, subPass) + 1; // itPass points after the added dependency pass
             }
+         }
+      }
+
+      // Emit the depth prepasses: each prepass pass was recorded before its view's scene pass (holding a depth buffer
+      // clear or a static prerender depth copy). Fill it with clones of the draw calls of the passes flagged to emit into
+      // it that write to the depth buffer. Each view owns its prepass target (the emit flag stores it), so the clones of
+      // a view can not leak into another view's prepass when several views record their scene in the same frame.
+      // Cloned commands are appended to the last pass on the prepass target, which supports setups recording one scene
+      // per eye (e.g. DX9 stereo).
+      for (RenderPass* pass : sortedPasses)
+      {
+         if (pass->m_depthPrepassTarget == nullptr)
+            continue;
+         RenderPass* depthPass = nullptr;
+         for (RenderPass* targetPass : sortedPasses)
+            if (targetPass->m_rt == pass->m_depthPrepassTarget)
+               depthPass = targetPass;
+         if (depthPass == nullptr)
+            continue;
+         for (RenderCommand* cmd : pass->m_commands)
+         {
+            if (!cmd->IsDrawMeshCommand())
+               continue;
+            // Draws that do not write to the depth buffer (e.g. classic light inserts) can not contribute to the prepass
+            if (cmd->GetRenderState().GetRenderState(RenderState::ZWRITEENABLE) != RenderState::RS_TRUE || cmd->GetRenderState().GetRenderState(RenderState::ZENABLE) != RenderState::RS_TRUE)
+               continue;
+            // Alpha blended draws are see-through even when they write depth (a table's ball shadow quads, decals): in
+            // the prepass their whole quad would occlude, with its own motion and depth, unless nearly opaque
+            if (cmd->IsSeeThroughBlend())
+               continue;
+            const ShaderTechnique tech = cmd->GetShaderState()->GetTechnique();
+            if (tech == ShaderTechnique::kickerBoolean || tech == ShaderTechnique::kickerBoolean_isMetal)
+               continue; // Kicker 'holes' carve the playfield in the shaded render: they must not occlude in the prepass
+            RenderCommand* clone = NewCommand();
+            clone->CopyFrom(cmd);
+            clone->DisableColorWrites();
+            depthPass->Submit(clone);
          }
       }
 
