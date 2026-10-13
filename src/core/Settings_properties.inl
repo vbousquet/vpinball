@@ -152,6 +152,7 @@ PropBool(Player, UseNVidiaAPI, "Alternative Depth Buffer"s, "Use NVidia API to m
 PropBool(Player, SoftwareVertexProcessing, "Software Vertex Processing"s, "Activate this on a DirectX 9 build, if you have issues using an old Intel graphics chip"s, false);
 PropBool(Player, DisableAO, "Disable Ambient Occlusion"s, ""s, false);
 PropBool(Player, DynamicAO, "Dynamic Ambient Occlusion"s, ""s, true);
+PropEnum(Player, DepthPrepass, "Depth Prepass"s, "Render an opaque depth (and optionally shaded normal) prepass before the main scene."s, int, 0, "Disabled"s, "Depth"s, "Depth & Shaded Normals"s);
 PropEnum(Player, PFReflection, "Reflection Quality"s,
    "Limit the quality of reflections for better performance.\n'Dynamic' is recommended and will give the best results, but may harm performance.\n'Static Only' has no performance cost (except for VR rendering).\nOther options feature different trade-offs between quality and performance."s,
    int, 5, "Disable Reflections"s, "Balls Only"s, "Static Only"s, "Static & Balls"s, "Static & Unsynced Dynamic"s, "Dynamic"s);
