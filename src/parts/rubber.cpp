@@ -47,6 +47,9 @@ HRESULT Rubber::Init(const float x, const float y, const bool fromMouseClick, co
 #define LinkProp(field, prop) field = fromMouseClick ? g_settingsService.GetAppSettings().GetDefaultPropsRubber_##prop() : Settings::GetDefaultPropsRubber_##prop##_Default()
 void Rubber::SetDefaults(const bool fromMouseClick)
 {
+   m_d.m_szNormalMap.clear();
+   m_d.m_szORMMap.clear();
+   m_d.m_szEmissionMap.clear();
    LinkProp(m_d.m_height, Height);
    LinkProp(m_d.m_thickness, Thickness);
    LinkProp(m_d.m_hitEvent, HitEvent);
@@ -630,6 +633,9 @@ void Rubber::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteInt(FID(TMIN), m_timerInterval);
    writer.WriteWideString(FID(NAME), MakeWString(m_name));
    writer.WriteString(FID(IMAG), m_d.m_szImage);
+   writer.WriteString(FID(NRMA), m_d.m_szNormalMap);
+   writer.WriteString(FID(ORMA), m_d.m_szORMMap);
+   writer.WriteString(FID(EMIS), m_d.m_szEmissionMap);
    writer.WriteFloat(FID(ELAS), m_d.m_elasticity);
    writer.WriteFloat(FID(ELFO), m_d.m_elasticityFalloff);
    writer.WriteFloat(FID(RFCT), m_d.m_friction);
@@ -667,6 +673,9 @@ void Rubber::Load(IObjectReader& reader)
          case FID(TMON): m_timerEnabled = reader.AsBool(); break;
          case FID(TMIN): m_timerInterval = reader.AsInt(); break;
          case FID(IMAG): m_d.m_szImage = reader.AsString(); break;
+         case FID(NRMA): m_d.m_szNormalMap = reader.AsString(); break;
+         case FID(ORMA): m_d.m_szORMMap = reader.AsString(); break;
+         case FID(EMIS): m_d.m_szEmissionMap = reader.AsString(); break;
          case FID(NAME): m_name = MakeString(reader.AsWideString()); break;
          case FID(ELAS): m_d.m_elasticity = reader.AsFloat(); break;
          case FID(ELFO): m_d.m_elasticityFalloff = reader.AsFloat(); break;

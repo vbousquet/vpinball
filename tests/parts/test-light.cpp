@@ -33,7 +33,7 @@ TEST_CASE("Light part")
       light->m_d.m_depthBias = 4.f;
       light->m_d.m_showReflectionOnBall = false;
       light->m_d.m_imageMode = true;
-      light->m_d.m_BulbLight = true;
+      light->m_d.m_type = LightType::Halo;
       light->m_d.m_bulbHaloHeight = 35.f;
       light->m_d.m_transmissionScale = 0.8f;
       light->m_d.m_modulate_vs_add = 0.99f;
@@ -73,7 +73,7 @@ TEST_CASE("Light part")
       CHECK(copy->m_d.m_depthBias == 4.f);
       CHECK(copy->m_d.m_showReflectionOnBall == false);
       CHECK(copy->m_d.m_imageMode == true);
-      CHECK(copy->m_d.m_BulbLight == true);
+      CHECK(copy->m_d.m_type == LightType::Halo);
       CHECK(copy->m_d.m_bulbHaloHeight == 35.f);
       CHECK(copy->m_d.m_transmissionScale == 0.8f);
       CHECK(copy->m_d.m_modulate_vs_add == 0.99f);
