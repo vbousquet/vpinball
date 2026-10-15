@@ -21,6 +21,9 @@ private:
     ComboBox  m_typeCombo;
     ComboBox  m_materialCombo;
     ComboBox  m_surfaceCombo;
+    ComboBox  m_normalMapCombo;
+    ComboBox  m_ormMapCombo;
+    ComboBox  m_emissionMapCombo;
     EditBox   m_xposEdit;
     EditBox   m_yposEdit;
     EditBox   m_lengthEdit;

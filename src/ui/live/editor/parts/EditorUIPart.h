@@ -35,11 +35,15 @@ public:
    virtual bool IsSelected() const = 0;
    virtual bool IsShowInvisible() const = 0;
    virtual ViewMode GetViewMode() const = 0;
+   virtual bool IsOrthographic() const = 0; // The view is rendered through an orthographic projection (2D views, ortho 3D cams)
    virtual ImDrawList* GetDrawList() const = 0;
    virtual ImVec2 Project(const Vertex3Ds& point) const = 0;
 
    virtual void DrawLine(const Vertex3Ds& a, const Vertex3Ds& b, ImU32 color) const = 0;
    virtual void DrawCircle(const Vertex3Ds& center, const Vertex3Ds& x, const Vertex3Ds& y, float radius, ImU32 color) const = 0;
+   // Draws a circle in the plane perpendicular to the view direction through 'center': under an
+   // orthographic projection this is the silhouette of the sphere of that center and radius
+   virtual void DrawViewPlaneCircle(const Vertex3Ds& center, float radius, ImU32 color) const = 0;
    virtual void DrawHitObjects(IEditable* editable) const = 0;
    virtual void DrawWireframe(IEditable* editable) const = 0;
    // Records a scene part into the view being rendered (used for parts the scene record skips, like

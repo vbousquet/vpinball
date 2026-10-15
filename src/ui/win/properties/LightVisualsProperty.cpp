@@ -27,6 +27,7 @@ LightVisualsProperty::LightVisualsProperty(const vector<IWinUIPart *> *pvsel) : 
     m_typeCombo.SetDialog(this);
     m_surfaceCombo.SetDialog(this);
     m_faderCombo.SetDialog(this);
+    m_shadowModeCombo.SetDialog(this);
 }
 
 void LightVisualsProperty::UpdateLightType(const int mode)
@@ -120,8 +121,9 @@ void LightVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
 
         if (dispid == IDC_REFLECT_ON_BALLS || dispid == -1)
             PropertyDialog::SetCheckboxState(m_hRelectOnBalls, light->m_d.m_showReflectionOnBall);
-        if (dispid == IDC_SHADOWS || dispid == -1)
-            PropertyDialog::SetCheckboxState(m_hRaytracedBallShadows, light->m_d.m_shadows == ShadowMode::RAYTRACED_BALL_SHADOWS);
+        if (dispid == IDC_SHADOW_MODE_COMBO || dispid == -1)
+           m_shadowModeCombo.SetCurSel((int)light->m_d.m_shadows);
+
 
         if (dispid == IDC_POS_X || dispid == -1)
             PropertyDialog::SetFloatTextbox(m_posXEdit, light->m_d.m_vCenter.x);
@@ -224,9 +226,8 @@ void LightVisualsProperty::UpdateProperties(const int dispid)
             case IDC_REFLECT_ON_BALLS:
                 CHECK_UPDATE_ITEM(light->m_d.m_showReflectionOnBall, PropertyDialog::GetCheckboxState(m_hRelectOnBalls), light);
                 break;
-            case IDC_SHADOWS:
-                CHECK_UPDATE_ITEM(light->m_d.m_shadows, PropertyDialog::GetCheckboxState(m_hRaytracedBallShadows) ? ShadowMode::RAYTRACED_BALL_SHADOWS : ShadowMode::NONE, light);
-                break;
+            case IDC_SHADOW_MODE_COMBO: CHECK_UPDATE_ITEM(light->m_d.m_shadows, (ShadowMode)m_shadowModeCombo.GetCurSel(), light); break;
+
 
             case IDC_POS_X:
                 CHECK_UPDATE_ITEM(light->m_d.m_vCenter.x, PropertyDialog::GetFloatTextbox(m_posXEdit), light);
@@ -390,8 +391,14 @@ BOOL LightVisualsProperty::OnInitDialog()
     m_resizer.AddChild(GetDlgItem(IDC_STATIC21), CResizer::topleft, RD_STRETCH_WIDTH); // Ball & reflections group box
     m_hRelectOnBalls = GetDlgItem(IDC_REFLECT_ON_BALLS);
     m_resizer.AddChild(m_hRelectOnBalls, CResizer::topleft, RD_STRETCH_WIDTH);
-    m_hRaytracedBallShadows = GetDlgItem(IDC_SHADOWS);
-    m_resizer.AddChild(m_hRaytracedBallShadows, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_shadowModeCombo.AttachItem(IDC_SHADOW_MODE_COMBO);
+    m_shadowModeCombo.AddString("None");
+    m_shadowModeCombo.AddString("Raytraced Ball");
+    m_shadowModeCombo.AddString("PBR Static");
+    m_shadowModeCombo.AddString("PBR Static + Ball");
+    m_shadowModeCombo.AddString("PBR Static + Dynamic");
+    m_resizer.AddChild(m_shadowModeCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+
 
     m_resizer.AddChild(GetDlgItem(IDC_STATIC22), CResizer::topleft, RD_STRETCH_WIDTH); // Bulb group box
     m_hShowMeshCheck = GetDlgItem(IDC_SHOW_BULB_MESH);

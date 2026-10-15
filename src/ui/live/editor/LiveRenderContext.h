@@ -23,6 +23,7 @@ public:
    bool IsSelected() const override { return m_isSelected; }
    bool IsShowInvisible() const override;
    ViewMode GetViewMode() const override { return m_viewMode; }
+   bool IsOrthographic() const override { return m_isOrtho; }
    ImDrawList *GetDrawList() const override { return m_drawlist; }
 
    ImVec2 Project(const Vertex3Ds &v) const override;
@@ -33,17 +34,21 @@ public:
    // Reference space the draw op coordinates are expressed in, folded into the pane projection:
    // each part draws its markers in its own reference space (see ViewportPane::PartSpaceToView)
    void SetSpaceTransform(const Matrix3D &transform) { m_spaceTransform = transform; }
+   // Camera right/up axes of the view being drawn, in its reference space (see DrawViewPlaneCircle)
+   void SetViewPlaneAxes(const Vertex3Ds &right, const Vertex3Ds &up) { m_viewRight = right, m_viewUp = up; }
    // UI colliders are kept in the playfield space (the UI quadtree is a single quadtree): transform
    // applied to project them (playfield space -> the space the pane's view renders in)
    void SetColliderSpaceTransform(const Matrix3D &transform) { m_colliderSpaceTransform = transform; }
    void DrawLine(const Vertex3Ds &a, const Vertex3Ds &b, ImU32 color) const override;
    void DrawCircle(const Vertex3Ds &center, const Vertex3Ds &x, const Vertex3Ds &y, float radius, ImU32 color) const override;
+   void DrawViewPlaneCircle(const Vertex3Ds &center, float radius, ImU32 color) const override;
    void DrawHitObjects(IEditable *editable) const override;
    void DrawWireframe(IEditable *editable) const override;
    void DrawScenePart(IEditable *editable) const override;
 
    bool m_isSelected = false;
    bool m_isActive = false;
+   bool m_isOrtho = false; // The rendering view projects orthographically (set by the owning pane)
    int m_selectionDisplay = 0; // 0 = edges only, 1 = edges and tint, 2 = hidden (Editor/NavSelectionDisplay)
 
 private:
@@ -57,6 +62,7 @@ private:
    Matrix3D m_spaceTransform = Matrix3D::MatrixIdentity(); // Coordinate space of the draw ops (see SetSpaceTransform)
    Matrix3D m_colliderSpaceTransform = Matrix3D::MatrixIdentity(); // Coordinate space of the UI colliders (see SetColliderSpaceTransform)
    Matrix3D m_paneMvp {}; // Pane projection override (see SetPaneProjection), used when m_hasPaneMvp
+   Vertex3Ds m_viewRight { 1.f, 0.f, 0.f }, m_viewUp { 0.f, 1.f, 0.f }; // Camera view-plane axes in the view's reference space (see SetViewPlaneAxes)
    bool m_hasPaneMvp = false;
    ImVec2 m_projOrigin { 0.f, 0.f };
    ImVec2 m_projScale { 1.f, 1.f };

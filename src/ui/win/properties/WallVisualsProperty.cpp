@@ -15,6 +15,9 @@ WallVisualsProperty::WallVisualsProperty(const vector<IWinUIPart *> *pvsel) : Ba
     m_bottomHeightEdit.SetDialog(this);
     m_topImageCombo.SetDialog(this);
     m_sideImageCombo.SetDialog(this);
+    m_normalMapCombo.SetDialog(this);
+    m_ormMapCombo.SetDialog(this);
+    m_emissionMapCombo.SetDialog(this);
     m_topMaterialCombo.SetDialog(this);
     m_sideMaterialCombo.SetDialog(this);
     m_slingshotMaterialCombo.SetDialog(this);
@@ -29,6 +32,12 @@ void WallVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
 
     if (dispid == DISPID_Image2 || dispid == -1)
         PropertyDialog::UpdateTextureComboBox(wall->GetPTable()->GetImageList(), m_sideImageCombo, wall->m_d.m_szSideImage);
+    if (dispid == IDC_NORMALMAP_COMBO || dispid == -1)
+       PropertyDialog::UpdateTextureComboBox(wall->GetPTable()->GetImageList(), m_normalMapCombo, wall->m_d.m_szNormalMap);
+    if (dispid == IDC_ORMMAP_COMBO || dispid == -1)
+       PropertyDialog::UpdateTextureComboBox(wall->GetPTable()->GetImageList(), m_ormMapCombo, wall->m_d.m_szORMMap);
+    if (dispid == IDC_EMISSIONMAP_COMBO || dispid == -1)
+       PropertyDialog::UpdateTextureComboBox(wall->GetPTable()->GetImageList(), m_emissionMapCombo, wall->m_d.m_szEmissionMap);
     if (dispid == IDC_MATERIAL_COMBO || dispid == -1)
         PropertyDialog::UpdateMaterialComboBox(wall->GetPTable()->GetMaterialList(), m_topMaterialCombo, wall->m_d.m_szTopMaterial);
     if (dispid == IDC_MATERIAL_COMBO2 || dispid == -1)
@@ -75,6 +84,9 @@ void WallVisualsProperty::UpdateProperties(const int dispid)
             case DISPID_Image2:
                 CHECK_UPDATE_COMBO_TEXT_STRING(wall->m_d.m_szSideImage, m_sideImageCombo, wall);
                 break;
+            case IDC_NORMALMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(wall->m_d.m_szNormalMap, m_normalMapCombo, wall); break;
+            case IDC_ORMMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(wall->m_d.m_szORMMap, m_ormMapCombo, wall); break;
+            case IDC_EMISSIONMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(wall->m_d.m_szEmissionMap, m_emissionMapCombo, wall); break;
             case IDC_MATERIAL_COMBO:
                 CHECK_UPDATE_COMBO_TEXT_STRING(wall->m_d.m_szTopMaterial, m_topMaterialCombo, wall);
                 break;
@@ -118,6 +130,9 @@ BOOL WallVisualsProperty::OnInitDialog()
 {
     m_topImageCombo.AttachItem(DISPID_Image);
     m_sideImageCombo.AttachItem(DISPID_Image2);
+    m_normalMapCombo.AttachItem(IDC_NORMALMAP_COMBO);
+    m_ormMapCombo.AttachItem(IDC_ORMMAP_COMBO);
+    m_emissionMapCombo.AttachItem(IDC_EMISSIONMAP_COMBO);
     m_topMaterialCombo.AttachItem(IDC_MATERIAL_COMBO);
     m_sideMaterialCombo.AttachItem(IDC_MATERIAL_COMBO2);
     m_slingshotMaterialCombo.AttachItem(IDC_MATERIAL_COMBO3);
@@ -146,6 +161,9 @@ BOOL WallVisualsProperty::OnInitDialog()
     m_resizer.AddChild(GetDlgItem(IDC_STATIC9), CResizer::topleft, 0);
     m_resizer.AddChild(m_topImageCombo, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_sideImageCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_normalMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_ormMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_emissionMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_topMaterialCombo, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_sideMaterialCombo, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_slingshotMaterialCombo, CResizer::topleft, RD_STRETCH_WIDTH);

@@ -45,4 +45,5 @@ private:
    ColorButton m_colorButton2;
    ColorButton m_colorButton3;
    ColorButton m_colorButton4;
+   ColorButton m_colorButton5;
 };

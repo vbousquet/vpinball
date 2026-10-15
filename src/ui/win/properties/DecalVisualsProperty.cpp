@@ -27,6 +27,9 @@ DecalVisualsProperty::DecalVisualsProperty(const vector<IWinUIPart *> *pvsel) : 
     m_imageCombo.SetDialog(this);
     m_sizingCombo.SetDialog(this);
     m_surfaceCombo.SetDialog(this);
+    m_normalMapCombo.SetDialog(this);
+    m_ormMapCombo.SetDialog(this);
+    m_emissionMapCombo.SetDialog(this);
 }
 
 DecalVisualsProperty::~DecalVisualsProperty()
@@ -83,6 +86,12 @@ void DecalVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
             PropertyDialog::SetFloatTextbox(m_rotationEdit, decal->m_d.m_rotation);
         if (dispid == IDC_SURFACE_COMBO || dispid == -1)
             PropertyDialog::UpdateSurfaceComboBox(decal->GetPTable(), m_surfaceCombo, decal->m_d.m_szSurface);
+        if (dispid == IDC_NORMALMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(decal->GetPTable()->GetImageList(), m_normalMapCombo, decal->m_d.m_szNormalMap);
+        if (dispid == IDC_ORMMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(decal->GetPTable()->GetImageList(), m_ormMapCombo, decal->m_d.m_szORMMap);
+        if (dispid == IDC_EMISSIONMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(decal->GetPTable()->GetImageList(), m_emissionMapCombo, decal->m_d.m_szEmissionMap);
 
         if (dispid == IDC_FONT_DIALOG_BUTTON || dispid == -1)
         {
@@ -202,6 +211,9 @@ void DecalVisualsProperty::UpdateProperties(const int dispid)
             case IDC_SURFACE_COMBO:
                 CHECK_UPDATE_COMBO_TEXT_STRING(decal->m_d.m_szSurface, m_surfaceCombo, decal);
                 break;
+            case IDC_NORMALMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(decal->m_d.m_szNormalMap, m_normalMapCombo, decal); break;
+            case IDC_ORMMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(decal->m_d.m_szORMMap, m_ormMapCombo, decal); break;
+            case IDC_EMISSIONMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(decal->m_d.m_szEmissionMap, m_emissionMapCombo, decal); break;
             default:
                 UpdateBaseProperties(decal, &decal->m_d, dispid);
                 break;
@@ -230,6 +242,9 @@ BOOL DecalVisualsProperty::OnInitDialog()
     m_heightEdit.AttachItem(4);
     m_rotationEdit.AttachItem(1);
     m_surfaceCombo.AttachItem(IDC_SURFACE_COMBO);
+    m_normalMapCombo.AttachItem(IDC_NORMALMAP_COMBO);
+    m_ormMapCombo.AttachItem(IDC_ORMMAP_COMBO);
+    m_emissionMapCombo.AttachItem(IDC_EMISSIONMAP_COMBO);
     UpdateVisuals();
 
     m_resizer.Initialize(GetHwnd(), CRect(0, 0, 0, 0));
@@ -261,6 +276,9 @@ BOOL DecalVisualsProperty::OnInitDialog()
     m_resizer.AddChild(m_heightEdit, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_rotationEdit, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_surfaceCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_normalMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_ormMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_emissionMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
 
     return TRUE;
 }

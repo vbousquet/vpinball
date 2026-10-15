@@ -22,6 +22,9 @@ private:
     ComboBox  m_materialCombo;
     ComboBox  m_rubberMaterialCombo;
     ComboBox  m_surfaceCombo;
+    ComboBox m_normalMapCombo;
+    ComboBox m_ormMapCombo;
+    ComboBox m_emissionMapCombo;
     EditBox   m_rubberThicknessEdit;
     EditBox   m_rubberOffsetHeightEdit;
     EditBox   m_rubberWidthEdit;

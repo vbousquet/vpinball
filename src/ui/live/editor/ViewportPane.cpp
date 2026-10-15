@@ -1066,6 +1066,9 @@ bool ViewportPane::SetupOverlay(LiveRenderContext* const ctx, ImDrawList* const 
    if (!GetViewProjLH(view, proj) || m_imageRect.Width() <= 0.f || m_imageRect.Height() <= 0.f)
       return false;
    ctx->SetPaneProjection(view * proj, ImVec2(m_imageRect.x0, m_imageRect.y0), ImVec2(1.f, 1.f), m_imageRect.Width() * 0.5f, m_imageRect.Height() * 0.5f);
+   // The camera view-plane axes, in the view's reference space, back view-aligned overlays (light range disc)
+   const Matrix3D invView = Matrix3D::MatrixInverse(view);
+   ctx->SetViewPlaneAxes(invView.GetOrthoNormalRight(), invView.GetOrthoNormalUp());
    // The UI colliders are kept in the playfield space (the UI quadtree is a single quadtree): re-express them in the view's space
    ctx->SetColliderSpaceTransform(Matrix3D::MatrixInverse(ViewSpaceTransform()));
    if (drawList != nullptr)
@@ -2435,6 +2438,7 @@ void ViewportPane::RenderUI(ImDrawList* const overlayDrawList)
    {
       LiveRenderContext ctx(m_editor.m_player, overlayDrawList, m_viewType, m_shadeMode, (m_editor.m_table->m_liveBaseTable != nullptr) && m_editor.m_player->IsPlaying());
       ctx.m_selectionDisplay = m_editor.m_navSelectionDisplay;
+      ctx.m_isOrtho = m_viewType == ViewMode::DesktopBackdrop || (m_viewType == ViewMode::EditorCam && !m_perspectiveCam);
       const bool clipToPane = SetupOverlay(&ctx, overlayDrawList);
 
       // Part 2D markers (timer & light sequencer icons, light centers, invisible kicker and textbox

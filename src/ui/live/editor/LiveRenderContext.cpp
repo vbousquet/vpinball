@@ -82,6 +82,15 @@ void LiveRenderContext::DrawCircle(const Vertex3Ds &center, const Vertex3Ds &x, 
    }
 }
 
+void LiveRenderContext::DrawViewPlaneCircle(const Vertex3Ds &center, const float radius, const ImU32 color) const
+{
+   // The view plane axes are kept in the view's reference space: re-express them in the center's
+   // space so DrawCircle's projection lands them back on the view plane (the disc always faces
+   // the camera whatever its orientation)
+   const Matrix3D viewToPartSpace = Matrix3D::MatrixInverse(m_spaceTransform);
+   DrawCircle(center, viewToPartSpace.MultiplyVectorNoTranslate(m_viewRight), viewToPartSpace.MultiplyVectorNoTranslate(m_viewUp), radius, color);
+}
+
 void LiveRenderContext::DrawHitObjects(IEditable *editable) const
 {
    if (m_drawlist)
