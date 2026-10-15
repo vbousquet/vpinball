@@ -619,6 +619,10 @@ void PropertiesPanel::RenderProbeProperties(PropertyPane &props, RenderProbe *pr
          probe, "Distance"s, //
          [](const RenderProbe *probe) { return probe->GetReflectionPlaneDistance(); }, //
          [](RenderProbe *probe, float v) { probe->SetReflectionPlaneDistance(v); }, PropertyPane::Unit::VPLength, 1);
+      props.InputFloat<RenderProbe>(
+         probe, "Influence Range"s, //
+         [](const RenderProbe *probe) { return probe->GetInfluenceRange(); }, //
+         [](RenderProbe *probe, float v) { probe->SetInfluenceRange(v); }, PropertyPane::Unit::VPLength, 1);
       props.EndSection();
    }
 
@@ -662,18 +666,21 @@ void PropertiesPanel::MaterialProperties(PropertyPane &props, Material *material
    if (props.BeginSection("Visuals"s))
    {
       props.Combo<Material>(
-         material, "Type"s, vector { "Default"s, "Metal"s }, //
+         material, "Type"s, vector { "Default"s, "Metal"s, "PBR"s }, //
          [](const Material *material) { return material->m_type; }, //
          [](Material *material, int v) { material->m_type = static_cast<Material::MaterialType>(v); });
       props.InputRGB<Material>(
          material, "Color", //
          [](const Material *material) { return convertColor(material->m_cBase); }, //
          [](Material *material, const vec3 &v) { material->m_cBase = convertColorRGB(v); });
-      props.InputFloat<Material>(
-         material, "Wrap Lighting"s, //
-         [](const Material *material) { return material->m_fWrapLighting; }, //
-         [](Material *material, float v) { material->m_fWrapLighting = v; }, PropertyPane::Unit::None, 2);
-      if (editedMaterial->m_type != Material::METAL)
+      // Wrap lighting is only used by the legacy (non PBR) shading path
+      if (editedMaterial->m_type != Material::PBR)
+         props.InputFloat<Material>(
+            material, "Wrap Lighting"s, //
+            [](const Material *material) { return material->m_fWrapLighting; }, //
+            [](Material *material, float v) { material->m_fWrapLighting = v; }, PropertyPane::Unit::None, 2);
+      // The glossy specular layer is only used by the legacy default material shading
+      if (editedMaterial->m_type == Material::BASIC)
       {
          props.InputRGB<Material>(
             material, "Glossy Color", //
@@ -685,17 +692,39 @@ void PropertiesPanel::MaterialProperties(PropertyPane &props, Material *material
             [](Material *material, float v) { material->m_fGlossyImageLerp = v; }, PropertyPane::Unit::None, 2);
       }
       props.InputFloat<Material>(
-         material, "Shininess"s, //
+         material, "Roughness"s, //
          [](const Material *material) { return material->m_fRoughness; }, //
          [](Material *material, float v) { material->m_fRoughness = v; }, PropertyPane::Unit::None, 2);
-      props.InputRGB<Material>(
-         material, "Clearcoat Color", //
-         [](const Material *material) { return convertColor(material->m_cClearcoat); }, //
-         [](Material *material, const vec3 &v) { material->m_cClearcoat = convertColorRGB(v); });
-      props.InputFloat<Material>(
-         material, "Edge Brightness"s, //
-         [](const Material *material) { return material->m_fEdge; }, //
-         [](Material *material, float v) { material->m_fEdge = v; }, PropertyPane::Unit::None, 2);
+      // The clearcoat layer is not used by the PBR shading path
+      if (editedMaterial->m_type != Material::PBR)
+         props.InputRGB<Material>(
+            material, "Clearcoat Color", //
+            [](const Material *material) { return convertColor(material->m_cClearcoat); }, //
+            [](Material *material, const vec3 &v) { material->m_cClearcoat = convertColorRGB(v); });
+      if (editedMaterial->m_type != Material::PBR)
+         props.InputFloat<Material>(
+            material, "Edge Brightness"s, //
+            [](const Material *material) { return material->m_fEdge; }, //
+            [](Material *material, float v) { material->m_fEdge = v; }, PropertyPane::Unit::None, 2);
+      if (editedMaterial->m_type == Material::PBR)
+      {
+         props.InputFloat<Material>(
+            material, "Metallic"s, //
+            [](const Material *material) { return material->m_fMetallic; }, //
+            [](Material *material, float v) { material->m_fMetallic = v; }, PropertyPane::Unit::None, 2);
+         props.InputFloat<Material>(
+            material, "Occlusion"s, //
+            [](const Material *material) { return material->m_fOcclusion; }, //
+            [](Material *material, float v) { material->m_fOcclusion = v; }, PropertyPane::Unit::None, 2);
+         props.InputRGB<Material>(
+            material, "Emission Color", //
+            [](const Material *material) { return convertColor(material->m_cEmission); }, //
+            [](Material *material, const vec3 &v) { material->m_cEmission = convertColorRGB(v); });
+         props.InputFloat<Material>(
+            material, "Emission Intensity"s, //
+            [](const Material *material) { return material->m_fEmissionIntensity; }, //
+            [](Material *material, float v) { material->m_fEmissionIntensity = v; }, PropertyPane::Unit::None, 2);
+      }
       props.EndSection();
    }
 
@@ -709,10 +738,12 @@ void PropertiesPanel::MaterialProperties(PropertyPane &props, Material *material
          material, "Opacity"s, //
          [](const Material *material) { return material->m_fOpacity; }, //
          [](Material *material, float v) { material->m_fOpacity = v; }, PropertyPane::Unit::None, 2);
-      props.InputFloat<Material>(
-         material, "Edge Opacity"s, //
-         [](const Material *material) { return material->m_fEdgeAlpha; }, //
-         [](Material *material, float v) { material->m_fEdgeAlpha = v; }, PropertyPane::Unit::None, 2);
+      // Edge opacity is not used by the PBR shading path
+      if (editedMaterial->m_type != Material::PBR)
+         props.InputFloat<Material>(
+            material, "Edge Opacity"s, //
+            [](const Material *material) { return material->m_fEdgeAlpha; }, //
+            [](Material *material, float v) { material->m_fEdgeAlpha = v; }, PropertyPane::Unit::None, 2);
       props.InputFloat<Material>(
          material, "Thickness"s, //
          [](const Material *material) { return material->m_fThickness; }, //

@@ -65,6 +65,18 @@ void RampUIPart::UpdatePropertyPane(PropertyPane& props)
          m_part, "Reflection Enabled"s, //
          [](const Ramp* ramp) { return ramp->m_d.m_reflectionEnabled; }, //
          [](Ramp* ramp, bool v) { ramp->m_d.m_reflectionEnabled = v; });
+      props.ImageCombo<Ramp>(
+         m_part, "Normal Map"s, //
+         [](const Ramp* ramp) { return ramp->m_d.m_szNormalMap; }, //
+         [](Ramp* ramp, const string& v) { ramp->m_d.m_szNormalMap = v; });
+      props.ImageCombo<Ramp>(
+         m_part, "ORM Map"s, //
+         [](const Ramp* ramp) { return ramp->m_d.m_szORMMap; }, //
+         [](Ramp* ramp, const string& v) { ramp->m_d.m_szORMMap = v; });
+      props.ImageCombo<Ramp>(
+         m_part, "Emission Map"s, //
+         [](const Ramp* ramp) { return ramp->m_d.m_szEmissionMap; }, //
+         [](Ramp* ramp, const string& v) { ramp->m_d.m_szEmissionMap = v; });
       props.EndSection();
    }
 

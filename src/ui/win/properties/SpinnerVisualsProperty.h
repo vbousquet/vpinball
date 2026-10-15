@@ -29,5 +29,8 @@ private:
     ComboBox  m_imageCombo;
     ComboBox  m_materialCombo;
     ComboBox  m_surfaceCombo;
+    ComboBox m_normalMapCombo;
+    ComboBox m_ormMapCombo;
+    ComboBox m_emissionMapCombo;
     HWND      m_hShowBracketCheck;
 };

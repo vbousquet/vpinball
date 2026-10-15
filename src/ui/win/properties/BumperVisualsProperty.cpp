@@ -22,6 +22,9 @@ BumperVisualsProperty::BumperVisualsProperty(const vector<IWinUIPart *> *pvsel) 
     m_skirtMaterialCombo.SetDialog(this);
     m_ringMaterialCombo.SetDialog(this);
     m_surfaceCombo.SetDialog(this);
+    m_normalMapCombo.SetDialog(this);
+    m_ormMapCombo.SetDialog(this);
+    m_emissionMapCombo.SetDialog(this);
 }
 
 void BumperVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
@@ -63,6 +66,12 @@ void BumperVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
             PropertyDialog::SetFloatTextbox(m_posYEdit, bumper->m_d.m_vCenter.y);
         if (dispid == IDC_SURFACE_COMBO || dispid == -1)
             PropertyDialog::UpdateSurfaceComboBox(bumper->GetPTable(), m_surfaceCombo, bumper->m_d.m_szSurface);
+        if (dispid == IDC_NORMALMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(bumper->GetPTable()->GetImageList(), m_normalMapCombo, bumper->m_d.m_szNormalMap);
+        if (dispid == IDC_ORMMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(bumper->GetPTable()->GetImageList(), m_ormMapCombo, bumper->m_d.m_szORMMap);
+        if (dispid == IDC_EMISSIONMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(bumper->GetPTable()->GetImageList(), m_emissionMapCombo, bumper->m_d.m_szEmissionMap);
         UpdateBaseVisuals(bumper, &bumper->m_d, dispid);
         //only show the first element on multi-select
         break;
@@ -126,6 +135,9 @@ void BumperVisualsProperty::UpdateProperties(const int dispid)
             case IDC_SURFACE_COMBO:
                 CHECK_UPDATE_COMBO_TEXT_STRING(bumper->m_d.m_szSurface, m_surfaceCombo, bumper);
                 break;
+            case IDC_NORMALMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(bumper->m_d.m_szNormalMap, m_normalMapCombo, bumper); break;
+            case IDC_ORMMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(bumper->m_d.m_szORMMap, m_ormMapCombo, bumper); break;
+            case IDC_EMISSIONMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(bumper->m_d.m_szEmissionMap, m_emissionMapCombo, bumper); break;
 
             default:
                 UpdateBaseProperties(bumper, &bumper->m_d, dispid);
@@ -155,6 +167,9 @@ BOOL BumperVisualsProperty::OnInitDialog()
     m_posXEdit.AttachItem(902);
     m_posYEdit.AttachItem(903);
     m_surfaceCombo.AttachItem(1502);
+    m_normalMapCombo.AttachItem(IDC_NORMALMAP_COMBO);
+    m_ormMapCombo.AttachItem(IDC_ORMMAP_COMBO);
+    m_emissionMapCombo.AttachItem(IDC_EMISSIONMAP_COMBO);
     UpdateVisuals();
 
     m_resizer.Initialize(GetHwnd(), CRect(0, 0, 0, 0));
@@ -188,6 +203,9 @@ BOOL BumperVisualsProperty::OnInitDialog()
     m_resizer.AddChild(m_posXEdit.GetHwnd(), CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_posYEdit.GetHwnd(), CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_surfaceCombo.GetHwnd(), CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_normalMapCombo.GetHwnd(), CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_ormMapCombo.GetHwnd(), CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_emissionMapCombo.GetHwnd(), CResizer::topleft, RD_STRETCH_WIDTH);
 
     return TRUE;
 }
