@@ -21,6 +21,9 @@ private:
     ComboBox  m_materialCombo;
     ComboBox  m_displayCombo;
     ComboBox  m_surfaceCombo;
+    ComboBox  m_normalMapCombo;
+    ComboBox  m_ormMapCombo;
+    ComboBox  m_emissionMapCombo;
     EditBox   m_radiusEdit;
     EditBox   m_orientationEdit;
     EditBox   m_posXEdit;

@@ -16,6 +16,9 @@ RubberVisualsProperty::RubberVisualsProperty(const vector<IWinUIPart *> *pvsel) 
     m_rotZEdit.SetDialog(this);
     m_imageCombo.SetDialog(this);
     m_materialCombo.SetDialog(this);
+    m_normalMapCombo.SetDialog(this);
+    m_ormMapCombo.SetDialog(this);
+    m_emissionMapCombo.SetDialog(this);
 }
 
 void RubberVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
@@ -40,6 +43,12 @@ void RubberVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
             PropertyDialog::SetFloatTextbox(m_rotYEdit, rubber->m_d.m_rotY);
         if (dispid == IDC_RUBBER_ROTZ_EDIT || dispid == -1)
             PropertyDialog::SetFloatTextbox(m_rotZEdit, rubber->m_d.m_rotZ);
+        if (dispid == IDC_NORMALMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(rubber->GetPTable()->GetImageList(), m_normalMapCombo, rubber->m_d.m_szNormalMap);
+        if (dispid == IDC_ORMMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(rubber->GetPTable()->GetImageList(), m_ormMapCombo, rubber->m_d.m_szORMMap);
+        if (dispid == IDC_EMISSIONMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(rubber->GetPTable()->GetImageList(), m_emissionMapCombo, rubber->m_d.m_szEmissionMap);
 
         UpdateBaseVisuals(rubber, &rubber->m_d, dispid);
         //only show the first element on multi-select
@@ -78,6 +87,9 @@ void RubberVisualsProperty::UpdateProperties(const int dispid)
             case IDC_RUBBER_ROTZ_EDIT:
                 CHECK_UPDATE_ITEM(rubber->m_d.m_rotZ, PropertyDialog::GetFloatTextbox(m_rotZEdit), rubber);
                 break;
+            case IDC_NORMALMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(rubber->m_d.m_szNormalMap, m_normalMapCombo, rubber); break;
+            case IDC_ORMMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(rubber->m_d.m_szORMMap, m_ormMapCombo, rubber); break;
+            case IDC_EMISSIONMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(rubber->m_d.m_szEmissionMap, m_emissionMapCombo, rubber); break;
             default:
                 UpdateBaseProperties(rubber, &rubber->m_d, dispid);
                 break;
@@ -93,6 +105,9 @@ BOOL RubberVisualsProperty::OnInitDialog()
     m_baseImageCombo = &m_imageCombo;
     m_materialCombo.AttachItem(IDC_MATERIAL_COMBO);
     m_baseMaterialCombo = &m_materialCombo;
+    m_normalMapCombo.AttachItem(IDC_NORMALMAP_COMBO);
+    m_ormMapCombo.AttachItem(IDC_ORMMAP_COMBO);
+    m_emissionMapCombo.AttachItem(IDC_EMISSIONMAP_COMBO);
     m_hStaticRenderingCheck = GetDlgItem(IDC_STATIC_RENDERING_CHECK);
     m_hVisibleCheck = GetDlgItem(IDC_VISIBLE_CHECK);
     m_hReflectionEnabledCheck = GetDlgItem(IDC_REFLECT_ENABLED_CHECK);
@@ -116,6 +131,9 @@ BOOL RubberVisualsProperty::OnInitDialog()
     m_resizer.AddChild(GetDlgItem(IDC_STATIC9), CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_imageCombo, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_materialCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_normalMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_ormMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_emissionMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_hStaticRenderingCheck, CResizer::topleft, 0);
     m_resizer.AddChild(m_hVisibleCheck, CResizer::topleft, 0);
     m_resizer.AddChild(m_hReflectionEnabledCheck, CResizer::topleft, 0);

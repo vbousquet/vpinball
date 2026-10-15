@@ -26,6 +26,9 @@ GateVisualsProperty::GateVisualsProperty(const vector<IWinUIPart *> *pvsel) : Ba
     m_typeCombo.SetDialog(this);
     m_materialCombo.SetDialog(this);
     m_surfaceCombo.SetDialog(this);
+    m_normalMapCombo.SetDialog(this);
+    m_ormMapCombo.SetDialog(this);
+    m_emissionMapCombo.SetDialog(this);
 }
 
 void GateVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
@@ -55,6 +58,12 @@ void GateVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
             PropertyDialog::SetFloatTextbox(m_closeAngleEdit, gate->GetCloseAngle());
         if (dispid == 15 || dispid == -1)
             PropertyDialog::SetCheckboxState(GetDlgItem(15), gate->m_d.m_showBracket);
+        if (dispid == IDC_NORMALMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(gate->GetPTable()->GetImageList(), m_normalMapCombo, gate->m_d.m_szNormalMap);
+        if (dispid == IDC_ORMMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(gate->GetPTable()->GetImageList(), m_ormMapCombo, gate->m_d.m_szORMMap);
+        if (dispid == IDC_EMISSIONMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(gate->GetPTable()->GetImageList(), m_emissionMapCombo, gate->m_d.m_szEmissionMap);
         UpdateBaseVisuals(gate, &gate->m_d, dispid);
         //only show the first element on multi-select
         break;
@@ -75,6 +84,9 @@ void GateVisualsProperty::UpdateProperties(const int dispid)
                 break;
             case IDC_SURFACE_COMBO:
                 CHECK_UPDATE_COMBO_TEXT_STRING(gate->m_d.m_szSurface, m_surfaceCombo, gate);
+            case IDC_NORMALMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(gate->m_d.m_szNormalMap, m_normalMapCombo, gate); break;
+            case IDC_ORMMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(gate->m_d.m_szORMMap, m_ormMapCombo, gate); break;
+            case IDC_EMISSIONMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(gate->m_d.m_szEmissionMap, m_emissionMapCombo, gate); break;
                 break;
             case 5:
                 CHECK_UPDATE_ITEM(gate->m_d.m_vCenter.x, PropertyDialog::GetFloatTextbox(m_xposEdit), gate);
@@ -113,6 +125,9 @@ BOOL GateVisualsProperty::OnInitDialog()
 {
     m_typeCombo.AttachItem(9);
     m_surfaceCombo.AttachItem(IDC_SURFACE_COMBO);
+    m_normalMapCombo.AttachItem(IDC_NORMALMAP_COMBO);
+    m_ormMapCombo.AttachItem(IDC_ORMMAP_COMBO);
+    m_emissionMapCombo.AttachItem(IDC_EMISSIONMAP_COMBO);
     m_xposEdit.AttachItem(5);
     m_yposEdit.AttachItem(6);
     m_materialCombo.AttachItem(IDC_MATERIAL_COMBO);

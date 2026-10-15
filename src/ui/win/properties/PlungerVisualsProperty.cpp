@@ -33,6 +33,9 @@ PlungerVisualsProperty::PlungerVisualsProperty(const vector<IWinUIPart *> *pvsel
     m_imageCombo.SetDialog(this);
     m_materialCombo.SetDialog(this);
     m_surfaceCombo.SetDialog(this);
+    m_normalMapCombo.SetDialog(this);
+    m_ormMapCombo.SetDialog(this);
+    m_emissionMapCombo.SetDialog(this);
 }
 
 void PlungerVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
@@ -74,6 +77,12 @@ void PlungerVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
             PropertyDialog::SetFloatTextbox(m_posYEdit, plunger->m_d.m_v.y);
         if (dispid == DISPID_SpringEndLoops || dispid == -1)
             PropertyDialog::SetFloatTextbox(m_endLoopsEdit, plunger->m_d.m_springEndLoops);
+        if (dispid == IDC_NORMALMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(plunger->GetPTable()->GetImageList(), m_normalMapCombo, plunger->m_d.m_szNormalMap);
+        if (dispid == IDC_ORMMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(plunger->GetPTable()->GetImageList(), m_ormMapCombo, plunger->m_d.m_szORMMap);
+        if (dispid == IDC_EMISSIONMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(plunger->GetPTable()->GetImageList(), m_emissionMapCombo, plunger->m_d.m_szEmissionMap);
         UpdateBaseVisuals(plunger, &plunger->m_d);
         //only show the first element on multi-select
         break;
@@ -140,6 +149,9 @@ void PlungerVisualsProperty::UpdateProperties(const int dispid)
             case 1502:
                 CHECK_UPDATE_COMBO_TEXT_STRING(plunger->m_d.m_szSurface, m_surfaceCombo, plunger);
                 break;
+            case IDC_NORMALMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(plunger->m_d.m_szNormalMap, m_normalMapCombo, plunger); break;
+            case IDC_ORMMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(plunger->m_d.m_szORMMap, m_ormMapCombo, plunger); break;
+            case IDC_EMISSIONMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(plunger->m_d.m_szEmissionMap, m_emissionMapCombo, plunger); break;
             default:
                 UpdateBaseProperties(plunger, &plunger->m_d, dispid);
                 break;
@@ -170,6 +182,9 @@ BOOL PlungerVisualsProperty::OnInitDialog()
     m_posXEdit.AttachItem(902);
     m_posYEdit.AttachItem(903);
     m_surfaceCombo.AttachItem(1502);
+    m_normalMapCombo.AttachItem(IDC_NORMALMAP_COMBO);
+    m_ormMapCombo.AttachItem(IDC_ORMMAP_COMBO);
+    m_emissionMapCombo.AttachItem(IDC_EMISSIONMAP_COMBO);
     m_hReflectionEnabledCheck = GetDlgItem(IDC_REFLECT_ENABLED_CHECK);
     UpdateVisuals();
 
@@ -212,6 +227,9 @@ BOOL PlungerVisualsProperty::OnInitDialog()
     m_resizer.AddChild(m_posXEdit, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_posYEdit, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_surfaceCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_normalMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_ormMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_emissionMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_hReflectionEnabledCheck, CResizer::topleft, 0);
 
     return TRUE;

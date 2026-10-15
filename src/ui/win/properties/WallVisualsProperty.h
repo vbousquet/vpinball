@@ -20,6 +20,9 @@ protected:
 private:
     ComboBox  m_topImageCombo;
     ComboBox  m_sideImageCombo;
+    ComboBox m_normalMapCombo;
+    ComboBox m_ormMapCombo;
+    ComboBox m_emissionMapCombo;
     ComboBox  m_topMaterialCombo;
     ComboBox  m_sideMaterialCombo;
     ComboBox  m_slingshotMaterialCombo;
