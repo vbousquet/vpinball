@@ -114,6 +114,9 @@ void Spinner::WriteRegDefaults()
 #define LinkProp(field, prop) field = fromMouseClick ? g_settingsService.GetAppSettings().GetDefaultPropsSpinner_##prop() : Settings::GetDefaultPropsSpinner_##prop##_Default()
 void Spinner::SetDefaults(const bool fromMouseClick)
 {
+   m_d.m_szNormalMap.clear();
+   m_d.m_szORMMap.clear();
+   m_d.m_szEmissionMap.clear();
    LinkProp(m_d.m_length, Length);
    LinkProp(m_d.m_rotation, Rotation);
    LinkProp(m_d.m_showBracket, ShowBracket);
@@ -438,6 +441,9 @@ void Spinner::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteBool(FID(SSUP), m_d.m_showBracket);
    writer.WriteString(FID(MATR), m_d.m_szMaterial);
    writer.WriteString(FID(IMGF), m_d.m_szImage);
+   writer.WriteString(FID(NRMA), m_d.m_szNormalMap);
+   writer.WriteString(FID(ORMA), m_d.m_szORMMap);
+   writer.WriteString(FID(EMIS), m_d.m_szEmissionMap);
    writer.WriteString(FID(SURF), m_d.m_szSurface);
    writer.WriteWideString(FID(NAME), MakeWString(m_name));
    writer.WriteBool(FID(REEN), m_d.m_reflectionEnabled);
@@ -459,6 +465,9 @@ void Spinner::Load(IObjectReader& reader)
          case FID(VCEN): m_d.m_vCenter = reader.AsVector2(); break;
          case FID(ROTA): m_d.m_rotation = reader.AsFloat(); break;
          case FID(MATR): m_d.m_szMaterial = reader.AsString(); break;
+         case FID(NRMA): m_d.m_szNormalMap = reader.AsString(); break;
+         case FID(ORMA): m_d.m_szORMMap = reader.AsString(); break;
+         case FID(EMIS): m_d.m_szEmissionMap = reader.AsString(); break;
          case FID(TMON): m_timerEnabled = reader.AsBool(); break;
          case FID(TMIN): m_timerInterval = reader.AsInt(); break;
          case FID(SSUP): m_d.m_showBracket = reader.AsBool(); break;

@@ -7,7 +7,8 @@
 #define VP_VERSION_MINOR    8  // Max 2 Digits
 #define VP_VERSION_REV      1  // Max 1 Digit
 
-#define CURRENT_FILE_FORMAT_VERSION  1090 // 1090: narrow text (names, texts, paths) is stored as UTF-8 (older files may contain legacy ANSI)
+#define CURRENT_FILE_FORMAT_VERSION                                                                                                                                                          \
+   1091 // 1091: PBR materials, per-part ORM/normal/emission texture slots, light render type enum (classic/halo/PBR), probe influence range (1090: narrow text stored as UTF-8)
 #define NO_ENCRYPTION_FORMAT_VERSION 1050
 #define NEW_SOUND_FORMAT_VERSION     1031 // introduced surround option
 

@@ -85,7 +85,6 @@ void Light::SetDefaults(const bool fromMouseClick)
    LinkProp(m_d.m_fadeSpeedDown, FadeSpeedDown);
    LinkProp(m_d.m_intensity, Intensity);
    LinkProp(m_d.m_transmissionScale, TransmissionScale);
-   LinkProp(m_d.m_BulbLight, Bulb);
    LinkProp(m_d.m_imageMode, ImageMode);
    LinkProp(m_d.m_showBulbMesh, ShowBulbMesh);
    LinkProp(m_d.m_staticBulbMesh, StaticBulbMesh);
@@ -96,6 +95,7 @@ void Light::SetDefaults(const bool fromMouseClick)
    LinkProp(m_d.m_reflectionEnabled, ReflectionEnabled);
    LinkProp(m_timerEnabled, TimerEnabled);
    LinkProp(m_timerInterval, TimerInterval);
+   m_d.m_type = (fromMouseClick ? g_settingsService.GetAppSettings().GetDefaultPropsLight_Bulb() : Settings::GetDefaultPropsLight_Bulb_Default()) ? LightType::Halo : LightType::Classic;
    m_duration = 0;
    m_finalLightState = 0.f;
    m_d.m_shape = ShapeCustom;
@@ -119,7 +119,7 @@ void Light::WriteRegDefaults()
    LinkProp(m_d.m_fadeSpeedDown, FadeSpeedDown);
    LinkProp(m_d.m_intensity, Intensity);
    LinkProp(m_d.m_transmissionScale, TransmissionScale);
-   LinkProp(m_d.m_BulbLight, Bulb);
+   g_settingsService.GetAppSettings().SetDefaultPropsLight_Bulb(m_d.m_type == LightType::Halo, false);
    LinkProp(m_d.m_imageMode, ImageMode);
    LinkProp(m_d.m_showBulbMesh, ShowBulbMesh);
    LinkProp(m_d.m_staticBulbMesh, StaticBulbMesh);
@@ -387,7 +387,7 @@ void Light::UpdateMeshBuffer()
    {
       m_lightmapMeshBufferDirty = false;
       float height = m_initSurfaceHeight;
-      if (m_d.m_BulbLight)
+      if ((m_d.m_type == LightType::Halo))
       {
          height += m_d.m_bulbHaloHeight;
          m_surfaceHeight = height;
@@ -496,7 +496,7 @@ void Light::Render(const unsigned int renderMask)
 
    if (isLightBuffer)
    {
-      if (!m_d.m_BulbLight || m_d.m_transmissionScale == 0.f || m_desktopBackdrop)
+      if (!(m_d.m_type == LightType::Halo) || m_d.m_transmissionScale == 0.f || m_desktopBackdrop)
          return;
       // Compute projected bounds
       const float radius = m_d.m_falloff;
@@ -604,13 +604,14 @@ void Light::Render(const unsigned int renderMask)
       && ((m_d.m_reflectionEnabled && !m_desktopBackdrop) || !isReflectionPass)
       && (m_lightmapMeshBuffer != nullptr)) // in case of degenerate light
    {
-      Texture * const offTexel = m_d.m_BulbLight ? nullptr : m_ptable->GetImage(m_d.m_szImage);
+      Texture *const offTexel = (m_d.m_type == LightType::Halo) ? nullptr : m_ptable->GetImage(m_d.m_szImage);
 
       // early out all lights with no contribution
       vec4 lightColor2_falloff_power = convertColor(m_d.m_color2, m_d.m_falloff_power);
       vec4 lightColor_intensity = convertColor(m_d.m_color, 1.f);
-      if (m_d.m_BulbLight ||
-         (!m_d.m_BulbLight && (m_surfaceTexture == offTexel) && (offTexel != nullptr) && !m_desktopBackdrop && !m_d.m_imageMode)) // assumes/requires that the light in this kind of state is basically -exactly- the same as the static/(un)lit playfield/surface and accompanying image
+      if ((m_d.m_type == LightType::Halo)
+         || (!(m_d.m_type == LightType::Halo) && (m_surfaceTexture == offTexel) && (offTexel != nullptr) && !m_desktopBackdrop
+            && !m_d.m_imageMode)) // assumes/requires that the light in this kind of state is basically -exactly- the same as the static/(un)lit playfield/surface and accompanying image
       {
          if (m_currentIntensity == 0.f)
             return;
@@ -674,14 +675,15 @@ void Light::Render(const unsigned int renderMask)
 
          lightColor_intensity.w = m_currentIntensity * 0.02f; //!! make configurable?
          //lightColor_intensity.w = m_currentIntensity * 0.5f;
-         if (m_d.m_BulbLight && m_renderer->IsRenderPass(Renderer::LIGHT_BUFFER))
+         if ((m_d.m_type == LightType::Halo) && m_renderer->IsRenderPass(Renderer::LIGHT_BUFFER))
             lightColor_intensity.w *= m_d.m_transmissionScale;
          m_renderer->m_renderDevice->m_lightShader->SetLightColorIntensity(lightColor_intensity);
          m_renderer->m_renderDevice->m_lightShader->SetFloat(ShaderUniform::blend_modulate_vs_add, 0.0001f); // additive, but avoid full 0, as it disables the blend
 
          const Vertex3Ds bulbPos(m_boundingSphereCenter.x, m_boundingSphereCenter.y, m_boundingSphereCenter.z + m_d.m_height);
          if (m_bulbLightMeshBuffer) // FIXME will be null if started without a bulb, then activated from the LiveUI. Prevent the crash. WOuld be nicer to actually build the buffer if needed
-            m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_lightShader, m_d.m_BulbLight || (m_surfaceMaterial && m_surfaceMaterial->m_bOpacityActive), bulbPos, m_d.m_depthBias, m_bulbLightMeshBuffer, RenderDevice::TRIANGLELIST, 0, bulbLightNumFaces);
+            m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_lightShader, (m_d.m_type == LightType::Halo) || (m_surfaceMaterial && m_surfaceMaterial->m_bOpacityActive),
+               bulbPos, m_d.m_depthBias, m_bulbLightMeshBuffer, RenderDevice::TRIANGLELIST, 0, bulbLightNumFaces);
 
          m_renderer->m_renderDevice->CopyRenderStates(false, tmp_state);
       }
@@ -692,7 +694,7 @@ void Light::Render(const unsigned int renderMask)
       // Lazily update the position of the vertex buffer (done here instead of setup since this halo height is a dynamic property of bulb lights)
       UpdateMeshBuffer();
 
-      Shader *const shader = m_d.m_BulbLight ? m_renderer->m_renderDevice->m_lightShader : m_renderer->m_renderDevice->m_basicShader;
+      Shader *const shader = (m_d.m_type == LightType::Halo) ? m_renderer->m_renderDevice->m_lightShader : m_renderer->m_renderDevice->m_basicShader;
       shader->SetLightData(center_range);
       shader->SetLightColor2FalloffPower(lightColor2_falloff_power);
       lightColor_intensity.w = m_currentIntensity;
@@ -700,7 +702,7 @@ void Light::Render(const unsigned int renderMask)
          lightColor_intensity.w *= m_d.m_transmissionScale;
       shader->SetLightColorIntensity(lightColor_intensity);
 
-      if (!m_d.m_BulbLight)
+      if (!(m_d.m_type == LightType::Halo))
       {
          shader->SetLightImageBackglassMode(m_d.m_imageMode, m_desktopBackdrop);
          shader->SetMaterial(m_surfaceMaterial);
@@ -735,13 +737,13 @@ void Light::Render(const unsigned int renderMask)
       if (m_desktopBackdrop)
       {
          m_renderer->UpdateDesktopBackdropShaderMatrix(shader == m_renderer->m_renderDevice->m_basicShader, shader == m_renderer->m_renderDevice->m_lightShader, false);
-         m_renderer->m_renderDevice->DrawMesh(shader, m_d.m_BulbLight || (m_surfaceMaterial && m_surfaceMaterial->m_bOpacityActive), m_desktopBackdrop ? pos0 : haloPos, m_desktopBackdrop ? 0.f : m_d.m_depthBias,
-            m_lightmapMeshBuffer, RenderDevice::TRIANGLELIST, 0, m_lightmapMeshBuffer->m_ib->m_count);
+         m_renderer->m_renderDevice->DrawMesh(shader, (m_d.m_type == LightType::Halo) || (m_surfaceMaterial && m_surfaceMaterial->m_bOpacityActive), m_desktopBackdrop ? pos0 : haloPos,
+            m_desktopBackdrop ? 0.f : m_d.m_depthBias, m_lightmapMeshBuffer, RenderDevice::TRIANGLELIST, 0, m_lightmapMeshBuffer->m_ib->m_count);
          m_renderer->UpdateBasicShaderMatrix();
       }
       else
       {
-         m_renderer->m_renderDevice->DrawMesh(shader, m_d.m_BulbLight || (m_surfaceMaterial && m_surfaceMaterial->m_bOpacityActive), m_desktopBackdrop ? pos0 : haloPos,
+         m_renderer->m_renderDevice->DrawMesh(shader, (m_d.m_type == LightType::Halo) || (m_surfaceMaterial && m_surfaceMaterial->m_bOpacityActive), m_desktopBackdrop ? pos0 : haloPos,
             m_desktopBackdrop ? 0.f : m_d.m_depthBias, m_lightmapMeshBuffer, RenderDevice::TRIANGLELIST, 0, m_lightmapMeshBuffer->m_ib->m_count);
       }
    }
@@ -772,7 +774,7 @@ void Light::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteFloat(FID(LIDB), m_d.m_depthBias);
    writer.WriteFloat(FID(FASP), m_d.m_fadeSpeedUp);
    writer.WriteFloat(FID(FASD), m_d.m_fadeSpeedDown);
-   writer.WriteBool(FID(BULT), m_d.m_BulbLight);
+   writer.WriteInt(FID(TYPE), (int)m_d.m_type);
    writer.WriteBool(FID(IMMO), m_d.m_imageMode);
    writer.WriteBool(FID(SHBM), m_d.m_showBulbMesh);
    writer.WriteBool(FID(STBM), m_d.m_staticBulbMesh);
@@ -854,7 +856,11 @@ void Light::Load(IObjectReader& reader)
          case FID(LIDB): m_d.m_depthBias = reader.AsFloat(); break;
          case FID(FASP): m_d.m_fadeSpeedUp = reader.AsFloat(); break;
          case FID(FASD): m_d.m_fadeSpeedDown = reader.AsFloat(); break;
-         case FID(BULT): m_d.m_BulbLight = reader.AsBool(); break;
+         case FID(BULT):
+            if (reader.AsBool())
+               m_d.m_type = LightType::Halo;
+            break;
+         case FID(TYPE): m_d.m_type = static_cast<LightType>(reader.AsInt()); break;
          case FID(IMMO): m_d.m_imageMode = reader.AsBool(); break;
          case FID(SHBM): m_d.m_showBulbMesh = reader.AsBool(); break;
          case FID(STBM): m_d.m_staticBulbMesh = reader.AsBool(); break;
@@ -864,6 +870,10 @@ void Light::Load(IObjectReader& reader)
          case FID(BHHI): m_d.m_bulbHaloHeight = reader.AsFloat(); break;
          case FID(SHDW): m_d.m_shadows = static_cast<ShadowMode>(reader.AsInt()); break;
          case FID(FADE): m_d.m_fader = static_cast<Fader>(reader.AsInt()); break;
+         case FID(PBRL):
+            if (reader.AsBool())
+               m_d.m_type = LightType::PBR;
+            break;
          case FID(VSBL): m_d.m_visible = reader.AsBool(); break;
          case FID(DPNT): m_curve.LoadPointToken(reader); break;
          default: LoadSharedEditableField(tag, reader); break;
@@ -1236,13 +1246,13 @@ STDMETHODIMP Light::put_FadeSpeedDown(float newVal)
 
 STDMETHODIMP Light::get_Bulb(VARIANT_BOOL *pVal)
 {
-   *pVal = FTOVB(m_d.m_BulbLight);
+   *pVal = FTOVB(m_d.m_type == LightType::Halo);
    return S_OK;
 }
 
 STDMETHODIMP Light::put_Bulb(VARIANT_BOOL newVal)
 {
-   m_d.m_BulbLight = VBTOb(newVal);
+   m_d.m_type = VBTOb(newVal) ? LightType::Halo : LightType::Classic;
    return S_OK;
 }
 
@@ -1353,7 +1363,7 @@ STDMETHODIMP Light::put_BulbHaloHeight(float newVal)
    if(m_d.m_bulbHaloHeight != newVal)
    {
       m_d.m_bulbHaloHeight = newVal;
-      m_lightmapMeshBufferDirty |= m_d.m_BulbLight && !m_desktopBackdrop;
+      m_lightmapMeshBufferDirty |= (m_d.m_type == LightType::Halo) && !m_desktopBackdrop;
    }
 
    return S_OK;

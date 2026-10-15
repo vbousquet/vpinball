@@ -126,6 +126,9 @@ HRESULT HitTarget::Init(const float x, const float y, const bool fromMouseClick,
 #define LinkProp(field, prop) field = fromMouseClick ? g_settingsService.GetAppSettings().GetDefaultPropsHitTarget_##prop() : Settings::GetDefaultPropsHitTarget_##prop##_Default()
 void HitTarget::SetDefaults(const bool fromMouseClick)
 {
+   m_d.m_szNormalMap.clear();
+   m_d.m_szORMMap.clear();
+   m_d.m_szEmissionMap.clear();
    LinkProp(m_d.m_legacy, LegacyMode);
    LinkProp(m_d.m_visible, Visible);
    LinkProp(m_d.m_isDropped, IsDropped);
@@ -677,6 +680,9 @@ void HitTarget::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteVector4(FID(VSIZ), vec4(m_d.m_vSize.x, m_d.m_vSize.y, m_d.m_vSize.z, 0.f));
    writer.WriteFloat(FID(ROTZ), m_d.m_rotZ);
    writer.WriteString(FID(IMAG), m_d.m_szImage);
+   writer.WriteString(FID(NRMA), m_d.m_szNormalMap);
+   writer.WriteString(FID(ORMA), m_d.m_szORMMap);
+   writer.WriteString(FID(EMIS), m_d.m_szEmissionMap);
    writer.WriteInt(FID(TRTY), m_d.m_targetType);
    writer.WriteWideString(FID(NAME), MakeWString(m_name));
    writer.WriteString(FID(MATR), m_d.m_szMaterial);
@@ -717,6 +723,9 @@ void HitTarget::Load(IObjectReader& reader)
          case FID(VSIZ): m_d.m_vSize = reader.AsVector4().xyz(); break;
          case FID(ROTZ): m_d.m_rotZ = reader.AsFloat(); break;
          case FID(IMAG): m_d.m_szImage = reader.AsString(); break;
+         case FID(NRMA): m_d.m_szNormalMap = reader.AsString(); break;
+         case FID(ORMA): m_d.m_szORMMap = reader.AsString(); break;
+         case FID(EMIS): m_d.m_szEmissionMap = reader.AsString(); break;
          case FID(TRTY): m_d.m_targetType = static_cast<TargetType>(reader.AsInt()); break;
          case FID(NAME): m_name = MakeString(reader.AsWideString()); break;
          case FID(MATR): m_d.m_szMaterial = reader.AsString(); break;
