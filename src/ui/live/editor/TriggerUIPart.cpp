@@ -65,6 +65,18 @@ void TriggerUIPart::UpdatePropertyPane(PropertyPane& props)
          m_part, "Material"s, //
          [](const Trigger* trigger) { return trigger->m_d.m_szMaterial; }, //
          [](Trigger* trigger, const string& v) { trigger->m_d.m_szMaterial = v; });
+      props.ImageCombo<Trigger>(
+         m_part, "Normal Map"s, //
+         [](const Trigger* trigger) { return trigger->m_d.m_szNormalMap; }, //
+         [](Trigger* trigger, const string& v) { trigger->m_d.m_szNormalMap = v; });
+      props.ImageCombo<Trigger>(
+         m_part, "ORM Map"s, //
+         [](const Trigger* trigger) { return trigger->m_d.m_szORMMap; }, //
+         [](Trigger* trigger, const string& v) { trigger->m_d.m_szORMMap = v; });
+      props.ImageCombo<Trigger>(
+         m_part, "Emission Map"s, //
+         [](const Trigger* trigger) { return trigger->m_d.m_szEmissionMap; }, //
+         [](Trigger* trigger, const string& v) { trigger->m_d.m_szEmissionMap = v; });
       props.EndSection();
    }
 

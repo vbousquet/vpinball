@@ -45,6 +45,18 @@ void KickerUIPart::UpdatePropertyPane(PropertyPane& props)
          m_part, "Material"s, //
          [](const Kicker* kicker) { return kicker->m_d.m_szMaterial; }, //
          [](Kicker* kicker, const string& v) { kicker->m_d.m_szMaterial = v; });
+      props.ImageCombo<Kicker>(
+         m_part, "Normal Map"s, //
+         [](const Kicker* kicker) { return kicker->m_d.m_szNormalMap; }, //
+         [](Kicker* kicker, const string& v) { kicker->m_d.m_szNormalMap = v; });
+      props.ImageCombo<Kicker>(
+         m_part, "ORM Map"s, //
+         [](const Kicker* kicker) { return kicker->m_d.m_szORMMap; }, //
+         [](Kicker* kicker, const string& v) { kicker->m_d.m_szORMMap = v; });
+      props.ImageCombo<Kicker>(
+         m_part, "Emission Map"s, //
+         [](const Kicker* kicker) { return kicker->m_d.m_szEmissionMap; }, //
+         [](Kicker* kicker, const string& v) { kicker->m_d.m_szEmissionMap = v; });
       props.Combo<Kicker>(
          m_part, "Shape"s, vector<string> { "Invisible"s, "Hole"s, "Cup"s, "Hole Simple"s, "Williams"s, "Gottlieb"s, "Cup 2"s }, //
          [this](const Kicker* kicker) { return kicker->m_d.m_kickertype; }, //

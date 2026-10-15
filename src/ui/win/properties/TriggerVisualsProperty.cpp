@@ -27,6 +27,9 @@ TriggerVisualsProperty::TriggerVisualsProperty(const vector<IWinUIPart *> *pvsel
     m_shapeCombo.SetDialog(this);
     m_materialCombo.SetDialog(this);
     m_surfaceCombo.SetDialog(this);
+    m_normalMapCombo.SetDialog(this);
+    m_ormMapCombo.SetDialog(this);
+    m_emissionMapCombo.SetDialog(this);
 }
 
 void TriggerVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
@@ -58,6 +61,12 @@ void TriggerVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
         if (dispid == IDC_SURFACE_COMBO || dispid == -1)
             PropertyDialog::UpdateSurfaceComboBox(trigger->GetPTable(), m_surfaceCombo, trigger->m_d.m_szSurface);
 
+        if (dispid == IDC_NORMALMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(trigger->GetPTable()->GetImageList(), m_normalMapCombo, trigger->m_d.m_szNormalMap);
+        if (dispid == IDC_ORMMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(trigger->GetPTable()->GetImageList(), m_ormMapCombo, trigger->m_d.m_szORMMap);
+        if (dispid == IDC_EMISSIONMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(trigger->GetPTable()->GetImageList(), m_emissionMapCombo, trigger->m_d.m_szEmissionMap);
         UpdateBaseVisuals(trigger, &trigger->m_d, dispid);
         PropertyDialog::UpdateStatusBarInfo(trigger);
         //only show the first element on multi-select
@@ -85,6 +94,9 @@ void TriggerVisualsProperty::UpdateProperties(const int dispid)
                 break;
             case IDC_SURFACE_COMBO:
                 CHECK_UPDATE_COMBO_TEXT_STRING(trigger->m_d.m_szSurface, m_surfaceCombo, trigger);
+            case IDC_NORMALMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(trigger->m_d.m_szNormalMap, m_normalMapCombo, trigger); break;
+            case IDC_ORMMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(trigger->m_d.m_szORMMap, m_ormMapCombo, trigger); break;
+            case IDC_EMISSIONMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(trigger->m_d.m_szEmissionMap, m_emissionMapCombo, trigger); break;
                 break;
             case IDC_STAR_THICKNESS_EDIT:
                 CHECK_UPDATE_ITEM(trigger->m_d.m_wireThickness, PropertyDialog::GetFloatTextbox(m_wireThicknessEdit), trigger);
@@ -110,6 +122,9 @@ void TriggerVisualsProperty::UpdateProperties(const int dispid)
 BOOL TriggerVisualsProperty::OnInitDialog()
 {
     m_materialCombo.AttachItem(IDC_MATERIAL_COMBO);
+    m_normalMapCombo.AttachItem(IDC_NORMALMAP_COMBO);
+    m_ormMapCombo.AttachItem(IDC_ORMMAP_COMBO);
+    m_emissionMapCombo.AttachItem(IDC_EMISSIONMAP_COMBO);
     m_baseMaterialCombo = &m_materialCombo;
     m_surfaceCombo.AttachItem(IDC_SURFACE_COMBO);
     m_shapeCombo.AttachItem(DISPID_Shape);
