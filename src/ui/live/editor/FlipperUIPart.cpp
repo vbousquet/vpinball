@@ -63,6 +63,18 @@ void FlipperUIPart::UpdatePropertyPane(PropertyPane& props)
          m_part, "Reflection Enabled"s, //
          [](const Flipper* flipper) { return flipper->m_d.m_reflectionEnabled; }, //
          [](Flipper* flipper, bool v) { flipper->m_d.m_reflectionEnabled = v; });
+      props.ImageCombo<Flipper>(
+         m_part, "Normal Map"s, //
+         [](const Flipper* flipper) { return flipper->m_d.m_szNormalMap; }, //
+         [](Flipper* flipper, const string& v) { flipper->m_d.m_szNormalMap = v; });
+      props.ImageCombo<Flipper>(
+         m_part, "ORM Map"s, //
+         [](const Flipper* flipper) { return flipper->m_d.m_szORMMap; }, //
+         [](Flipper* flipper, const string& v) { flipper->m_d.m_szORMMap = v; });
+      props.ImageCombo<Flipper>(
+         m_part, "Emission Map"s, //
+         [](const Flipper* flipper) { return flipper->m_d.m_szEmissionMap; }, //
+         [](Flipper* flipper, const string& v) { flipper->m_d.m_szEmissionMap = v; });
       props.EndSection();
    }
 

@@ -19,6 +19,12 @@ LightUIPart::TransformMask LightUIPart::GetTransform(Matrix3D& transform)
    if (m_part->m_desktopBackdrop)
       return GetCurveTransform(transform, 0.f);
    const float height = m_part->GetPTable()->GetSurfaceHeight(m_part->m_d.m_szSurface, m_part->m_d.m_vCenter.x, m_part->m_d.m_vCenter.y);
+   // PBR lights are point lights: the transform is placed at the bulb position and is translation only
+   if (m_part->m_d.m_type == LightType::PBR)
+   {
+      transform = Matrix3D::MatrixTranslate(m_part->m_d.m_vCenter.x, m_part->m_d.m_vCenter.y, height + m_part->m_d.m_height);
+      return TM_TransAny;
+   }
    return GetCurveTransform(transform, height + m_part->m_d.m_height);
 }
 
@@ -30,11 +36,39 @@ void LightUIPart::SetTransform(const vec3& pos, const vec3& scale, const vec3& r
       m_part->m_d.m_bulbHaloHeight = m_part->m_d.m_bulbHaloHeight + (pz - m_part->m_d.m_height);
       m_part->m_d.m_height = pz;
    }
+   // PBR lights have no outline curve: the transform only moves the bulb (the curve is kept in sync for consistency)
+   if (m_part->m_d.m_type == LightType::PBR)
+   {
+      m_part->Translate(Vertex2D(pos.x - m_part->m_d.m_vCenter.x, pos.y - m_part->m_d.m_vCenter.y));
+      return;
+   }
    SetCurveTransform(pos, scale, rot);
 }
 
 void LightUIPart::RenderOverlay(const EditorRenderContext& ctx)
 {
+   // PBR lights have no rendered geometry nor range: only a camera-facing light symbol is drawn at the light position
+   if (m_part->m_d.m_type == LightType::PBR)
+   {
+      // Light symbol at the light position: a small circle with rays around it
+      const ImU32 color = ctx.GetColor(ctx.IsSelected());
+      const Vertex2D& c = m_part->m_d.m_vCenter;
+      const float z = m_part->GetCurrentHeight();
+      const ImVec2 cp = ctx.Project(Vertex3Ds(c.x, c.y, z));
+      ImDrawList* const drawList = ctx.GetDrawList();
+      if (cp.x != FLT_MAX && drawList != nullptr)
+      {
+         constexpr float iconRadius = 10.f;
+         drawList->AddCircle(cp, iconRadius, color);
+         constexpr float kDiag = 0.70710678f; // 1/sqrt(2)
+         const ImVec2 dirs[8] = { { 1.f, 0.f }, { kDiag, kDiag }, { 0.f, 1.f }, { -kDiag, kDiag }, { -1.f, 0.f }, { -kDiag, -kDiag }, { 0.f, -1.f }, { kDiag, -kDiag } };
+         for (const ImVec2& dir : dirs)
+            drawList->AddLine(
+               ImVec2(cp.x + dir.x * (iconRadius + 3.f), cp.y + dir.y * (iconRadius + 3.f)), ImVec2(cp.x + dir.x * (iconRadius + 9.f), cp.y + dir.y * (iconRadius + 9.f)), color);
+      }
+      return;
+   }
+
    ctx.DrawWireframe(m_part);
 
    // Bulb center overlay, same as the win32 editor: falloff ellipse, center crosshair, bulb mesh circle
@@ -135,7 +169,7 @@ void LightUIPart::UpdatePropertyPane(PropertyPane& props)
                [](const Light* light) { return light->m_d.m_transmissionScale; }, //
                [](Light* light, float v) { light->m_d.m_transmissionScale = v; }, PropertyPane::Unit::Percent, 1);
          }
-         else
+         else if (light->m_d.m_type == LightType::Classic)
          {
             props.Checkbox<Light>(
                m_part, "PassThrough"s, //
@@ -173,12 +207,14 @@ void LightUIPart::UpdatePropertyPane(PropertyPane& props)
          m_part, "Show Reflection on Balls"s, //
          [](const Light* light) { return light->m_d.m_showReflectionOnBall; }, //
          [](Light* light, bool v) { light->m_d.m_showReflectionOnBall = v; });
-      props.Checkbox<Light>(
-         m_part, "Raytraced Ball Shadows"s, //
-         [](const Light* light) { return light->m_d.m_shadows == ShadowMode::RAYTRACED_BALL_SHADOWS; }, //
-         [](Light* light, bool v) { light->m_d.m_shadows = v ? ShadowMode::RAYTRACED_BALL_SHADOWS : ShadowMode::NONE; });
+      props.Combo<Light>(
+         m_part, "Shadow Mode"s, //
+         vector { "None"s, "Raytraced Ball"s, "PBR Static"s, "PBR Static + Ball"s, "PBR Static + Dynamic"s }, //
+         [](const Light* light) { return static_cast<int>(light->m_d.m_shadows); }, //
+         [](Light* light, int v) { light->m_d.m_shadows = static_cast<ShadowMode>(v); });
       props.EndSection();
    }
+
 
    if (props.BeginSection("Position"s))
    {

@@ -63,6 +63,18 @@ void GateUIPart::UpdatePropertyPane(PropertyPane& props)
          m_part, "Material"s, //
          [](const Gate* gate) { return gate->m_d.m_szMaterial; }, //
          [](Gate* gate, const string& v) { gate->m_d.m_szMaterial = v; });
+      props.ImageCombo<Gate>(
+         m_part, "Normal Map"s, //
+         [](const Gate* gate) { return gate->m_d.m_szNormalMap; }, //
+         [](Gate* gate, const string& v) { gate->m_d.m_szNormalMap = v; });
+      props.ImageCombo<Gate>(
+         m_part, "ORM Map"s, //
+         [](const Gate* gate) { return gate->m_d.m_szORMMap; }, //
+         [](Gate* gate, const string& v) { gate->m_d.m_szORMMap = v; });
+      props.ImageCombo<Gate>(
+         m_part, "Emission Map"s, //
+         [](const Gate* gate) { return gate->m_d.m_szEmissionMap; }, //
+         [](Gate* gate, const string& v) { gate->m_d.m_szEmissionMap = v; });
       props.EndSection();
    }
 

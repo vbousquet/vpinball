@@ -243,6 +243,14 @@ void PrimitiveUIPart::UpdatePropertyPane(PropertyPane& props)
       }
       else
          props.MaterialVisuals(m_part, "Material"s, &Data::m_szMaterial, "Image"s, &Data::m_szImage, &Data::m_displayTexture, &Data::m_szNormalMap, &Data::m_objectSpaceNormalMap);
+      props.ImageCombo<Primitive>(
+         m_part, "ORM Map"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_szORMMap; }, //
+         [](Primitive* primitive, const string& v) { primitive->m_d.m_szORMMap = v; });
+      props.ImageCombo<Primitive>(
+         m_part, "Emission Map"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_szEmissionMap; }, //
+         [](Primitive* primitive, const string& v) { primitive->m_d.m_szEmissionMap = v; });
       props.InputFloat<Primitive>(
          m_part, "Disable Spot Lights"s, //
          [](const Primitive* primitive) { return primitive->m_d.m_disableLightingTop; }, //
