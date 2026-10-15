@@ -48,6 +48,9 @@ HRESULT Ramp::Init(const float x, const float y, const bool fromMouseClick, cons
 #define LinkProp(field, prop) field = fromMouseClick ? g_settingsService.GetAppSettings().GetDefaultPropsRamp_##prop() : Settings::GetDefaultPropsRamp_##prop##_Default()
 void Ramp::SetDefaults(const bool fromMouseClick)
 {
+   m_d.m_szNormalMap.clear();
+   m_d.m_szORMMap.clear();
+   m_d.m_szEmissionMap.clear();
    LinkProp(m_d.m_heightbottom, HeightBottom);
    LinkProp(m_d.m_heighttop, HeightTop);
    LinkProp(m_d.m_widthbottom, WidthBottom);
@@ -1203,6 +1206,9 @@ void Ramp::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteInt(FID(TYPE), m_d.m_type);
    writer.WriteWideString(FID(NAME), MakeWString(m_name));
    writer.WriteString(FID(IMAG), m_d.m_szImage);
+   writer.WriteString(FID(NRMA), m_d.m_szNormalMap);
+   writer.WriteString(FID(ORMA), m_d.m_szORMMap);
+   writer.WriteString(FID(EMIS), m_d.m_szEmissionMap);
    writer.WriteInt(FID(ALGN), m_d.m_imagealignment);
    writer.WriteBool(FID(IMGW), m_d.m_imageWalls);
    writer.WriteFloat(FID(WLHL), m_d.m_leftwallheight);
@@ -1246,6 +1252,9 @@ void Ramp::Load(IObjectReader& reader)
          case FID(TMIN): m_timerInterval = reader.AsInt(); break;
          case FID(TYPE): m_d.m_type = static_cast<RampType>(reader.AsInt()); break;
          case FID(IMAG): m_d.m_szImage = reader.AsString(); break;
+         case FID(NRMA): m_d.m_szNormalMap = reader.AsString(); break;
+         case FID(ORMA): m_d.m_szORMMap = reader.AsString(); break;
+         case FID(EMIS): m_d.m_szEmissionMap = reader.AsString(); break;
          case FID(ALGN): m_d.m_imagealignment = static_cast<RampImageAlignment>(reader.AsInt()); break;
          case FID(IMGW): m_d.m_imageWalls = reader.AsBool(); break;
          case FID(NAME): m_name = MakeString(reader.AsWideString()); break;

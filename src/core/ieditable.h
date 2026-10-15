@@ -189,6 +189,9 @@ class BaseProperty
 {
 public:
    string m_szImage;
+   string m_szNormalMap; // Tangent-space normal map (PBR and legacy normal mapping)
+   string m_szORMMap; // Packed occlusion/roughness/metallic texture (PBR materials)
+   string m_szEmissionMap; // Emission texture (PBR materials)
    string m_szMaterial;
    string m_szPhysicsMaterial;
    float m_elasticity;

@@ -2177,8 +2177,8 @@ void PinTable::ApplyLoadedVersionFixups(const int loadfileversion)
             light->m_d.m_reflectionEnabled = false;
             // Before 10.8, lights did not have a z coordinate for the light emission point: classic lights where renderer at surface+0.1, bulb light at surface+halo height+0.1
             // This needs to be preserved to avoid changing the light falloff curve, so we set up with the same definition (the 0.1 offset on z axis being applied when rendering to avoid z fighting)
-            light->m_d.m_height = light->m_d.m_BulbLight ? light->m_d.m_bulbHaloHeight : 0.0f;
-            if (!light->m_d.m_BulbLight)
+            light->m_d.m_height = light->m_d.m_type == LightType::Halo ? light->m_d.m_bulbHaloHeight : 0.0f;
+            if (light->m_d.m_type != LightType::Halo)
             {
                // Before 10.8, classic light could not have a bulb mesh so force it off
                light->m_d.m_showBulbMesh = false;

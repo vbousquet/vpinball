@@ -27,6 +27,7 @@ void RenderProbe::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteRaw(FID(RPLA), (void*)&m_reflection_plane, sizeof(vec4));
    writer.WriteInt(FID(RMOD), (int)m_reflection_mode);
    writer.WriteBool(FID(RLMP), m_disableLightReflection);
+   writer.WriteFloat(FID(IRNG), m_influenceRange);
    writer.EndObject();
 }
 
@@ -43,6 +44,7 @@ void RenderProbe::Load(IObjectReader& reader)
          case FID(RPLA): reader.AsRaw(&m_reflection_plane, sizeof(vec4)); break;
          case FID(RMOD): m_reflection_mode = static_cast<ReflectionMode>(reader.AsInt()); break;
          case FID(RLMP): m_disableLightReflection = reader.AsBool(); break;
+         case FID(IRNG): m_influenceRange = reader.AsFloat(); break;
          }
          return true;
       },

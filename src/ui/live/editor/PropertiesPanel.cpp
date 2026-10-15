@@ -1504,7 +1504,7 @@ void PropertiesPanel::MaterialActions(PropertyPane &props)
                break;
             Material *const pmat = new Material(mat.bIsMetal ? Material::METAL : Material::BASIC, mat.fWrapLighting, mat.fRoughness, dequantizeUnsigned<8>(mat.fGlossyImageLerp),
                dequantizeUnsigned<8>(mat.fThickness), mat.fEdge, dequantizeUnsigned<7>(mat.bOpacityActive_fEdgeAlpha >> 1), mat.fOpacity, mat.cBase, mat.cGlossy, mat.cClearcoat,
-               !!(mat.bOpacityActive_fEdgeAlpha & 1), elasticity, elasticityFalloff, friction, scatterAngle, 0xFFFFFFFF);
+               !!(mat.bOpacityActive_fEdgeAlpha & 1), 0.f, 1.f, 0, 1.f, elasticity, elasticityFalloff, friction, scatterAngle, 0xFFFFFFFF);
             pmat->m_name = string_from_utf8_or_cp1252(mat.szName, strnlen(mat.szName, std::size(mat.szName))); // May not be null terminated in a corrupted file
             table->AddMaterial(pmat);
             sel.push_back(pmat);
