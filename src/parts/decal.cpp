@@ -71,6 +71,9 @@ HRESULT Decal::Init(const float x, const float y, const bool fromMouseClick, con
 
 void Decal::SetDefaults(const bool fromMouseClick)
 {
+   m_d.m_szNormalMap.clear();
+   m_d.m_szORMMap.clear();
+   m_d.m_szEmissionMap.clear();
 #define LinkProp(field, prop) field = fromMouseClick ? g_settingsService.GetAppSettings().GetDefaultPropsDecal_##prop() : Settings::GetDefaultPropsDecal_##prop##_Default()
    LinkProp(m_d.m_width, Width);
    LinkProp(m_d.m_height, Height);
@@ -250,6 +253,9 @@ void Decal::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteFloat(FID(HIGH), m_d.m_height);
    writer.WriteFloat(FID(ROTA), m_d.m_rotation);
    writer.WriteString(FID(IMAG), m_d.m_szImage);
+   writer.WriteString(FID(NRMA), m_d.m_szNormalMap);
+   writer.WriteString(FID(ORMA), m_d.m_szORMMap);
+   writer.WriteString(FID(EMIS), m_d.m_szEmissionMap);
    writer.WriteString(FID(SURF), m_d.m_szSurface);
    writer.WriteWideString(FID(NAME), MakeWString(m_name));
    writer.WriteString(FID(TEXT), m_d.m_text);
@@ -277,6 +283,9 @@ void Decal::Load(IObjectReader& reader)
          case FID(HIGH): m_d.m_height = reader.AsFloat(); break;
          case FID(ROTA): m_d.m_rotation = reader.AsFloat(); break;
          case FID(IMAG): m_d.m_szImage = reader.AsString(); break;
+         case FID(NRMA): m_d.m_szNormalMap = reader.AsString(); break;
+         case FID(ORMA): m_d.m_szORMMap = reader.AsString(); break;
+         case FID(EMIS): m_d.m_szEmissionMap = reader.AsString(); break;
          case FID(SURF): m_d.m_szSurface = reader.AsString(); break;
          case FID(NAME): m_name = MakeString(reader.AsWideString()); break;
          case FID(TEXT): m_d.m_text = reader.AsString(); break;

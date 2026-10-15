@@ -208,14 +208,15 @@ void LightUIPart::UpdatePropertyPane(PropertyPane& props)
    if (props.BeginSection("Render Mode"s))
    {
       props.Combo<Light>(
-         m_part, "Type"s, vector<string> { "Hidden"s, "Classic"s, "Halo"s }, //
-         [this](const Light* light) { return GetVisibility(light) ? light->m_d.m_BulbLight ? 2 : 1 : 0; },
+         m_part, "Type"s, vector<string> { "Hidden"s, "Classic"s, "Halo"s, "PBR"s }, //
+         [this](const Light* light) { return GetVisibility(light) ? 1 + static_cast<int>(light->m_d.m_type) : 0; },
          [this](Light* light, int v)
          {
             SetVisibility(light, v != 0);
-            light->m_d.m_BulbLight = v == 2;
+            if (v != 0)
+               light->m_d.m_type = static_cast<LightType>(v - 1);
          },
-         "Hidden lights the scene without being drawn; Classic draws the flat light shape; Halo renders a 3D bulb");
+         "Hidden lights the scene without being drawn; Classic draws the flat light shape; Halo renders a 3D bulb; PBR is a physically based light source");
       if (const Light* light = props.GetEditedPart<Light>(m_part); GetVisibility(light))
       {
          props.Checkbox<Light>(
@@ -226,7 +227,7 @@ void LightUIPart::UpdatePropertyPane(PropertyPane& props)
             m_part, "Depth Bias"s, //
             [](const Light* light) { return light->m_d.m_depthBias; }, //
             [](Light* light, float v) { light->m_d.m_depthBias = v; }, PropertyPane::Unit::None, 1, "Depth offset applied at render time to fix flickering between overlapping parts");
-         if (light->m_d.m_BulbLight)
+         if (light->m_d.m_type == LightType::Halo)
          {
             props.InputFloat<Light>(
                m_part, "Halo Height"s, //

@@ -43,10 +43,7 @@ void LightVisualsProperty::UpdateLightType(const int mode)
     GetDlgItem(IDC_REFLECT_ENABLED_CHECK).ShowWindow(SW_HIDE);
     GetDlgItem(IDC_DEPTHBIAS_LABEL).ShowWindow(SW_HIDE);
     GetDlgItem(IDC_DEPTH_BIAS).ShowWindow(SW_HIDE);
-    if (mode == 0)
-    {
-    }
-    else if (mode == 1)
+    if (mode == 1)
     {
        GetDlgItem(IDC_IMAGE_LABEL).ShowWindow(SW_SHOWNORMAL);
        m_imageCombo.ShowWindow(SW_SHOWNORMAL);
@@ -55,7 +52,7 @@ void LightVisualsProperty::UpdateLightType(const int mode)
        GetDlgItem(IDC_DEPTH_BIAS).ShowWindow(SW_SHOWNORMAL);
        GetDlgItem(IDC_REFLECT_ENABLED_CHECK).ShowWindow(SW_SHOWNORMAL);
     }
-    else
+    else if (mode == 2)
     {
        GetDlgItem(IDC_HALO_LABEL).ShowWindow(SW_SHOWNORMAL);
        GetDlgItem(IDC_HALO_EDIT).ShowWindow(SW_SHOWNORMAL);
@@ -97,21 +94,9 @@ void LightVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
 
         if (dispid == IDC_LIGHT_TYPE_COMBO || dispid == -1)
         {
-            if (!light->m_d.m_visible)
-            {
-               m_typeCombo.SetCurSel(0);
-               UpdateLightType(0);
-            }
-            else if (!light->m_d.m_BulbLight)
-            {
-               m_typeCombo.SetCurSel(1);
-               UpdateLightType(1);
-            }
-            else
-            {
-               m_typeCombo.SetCurSel(2);
-               UpdateLightType(2);
-            }
+           const int type = light->m_d.m_visible ? 1 + static_cast<int>(light->m_d.m_type) : 0;
+           m_typeCombo.SetCurSel(type);
+           UpdateLightType(type);
         }
         if (dispid == IDC_DEPTH_BIAS || dispid == -1)
             PropertyDialog::SetFloatTextbox(m_depthBiasEdit, light->m_d.m_depthBias);
@@ -202,23 +187,10 @@ void LightVisualsProperty::UpdateProperties(const int dispid)
 
             case IDC_LIGHT_TYPE_COMBO:
                 PropertyDialog::StartUndo(light);
-                if (m_typeCombo.GetCurSel() == 0)
-                {
-                   light->m_d.m_visible = false;
-                   UpdateLightType(0);
-                }
-                else if (m_typeCombo.GetCurSel() == 1)
-                {
-                   light->m_d.m_visible = true;
-                   light->m_d.m_BulbLight = false;
-                   UpdateLightType(1);
-                }
-                else
-                {
-                   light->m_d.m_visible = true;
-                   light->m_d.m_BulbLight = true;
-                   UpdateLightType(2);
-                }
+                light->m_d.m_visible = m_typeCombo.GetCurSel() != 0;
+                if (light->m_d.m_visible)
+                   light->m_d.m_type = static_cast<LightType>(m_typeCombo.GetCurSel() - 1);
+                UpdateLightType(m_typeCombo.GetCurSel());
                 PropertyDialog::EndUndo(light);
                 break;
             case IDC_DEPTH_BIAS:
@@ -392,6 +364,7 @@ BOOL LightVisualsProperty::OnInitDialog()
     m_typeCombo.AddString("Hidden");
     m_typeCombo.AddString("Classic");
     m_typeCombo.AddString("Halo");
+    m_typeCombo.AddString("PBR");
     m_resizer.AddChild(m_typeCombo, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(GetDlgItem(IDC_HALO_LABEL), CResizer::topleft, 0);
     m_haloHeightEdit.AttachItem(IDC_HALO_EDIT);
