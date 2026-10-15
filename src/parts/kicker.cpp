@@ -506,6 +506,9 @@ void Kicker::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteFloat(FID(RADI), m_d.m_radius);
    writer.WriteBool(FID(TMON), m_timerEnabled);
    writer.WriteInt(FID(TMIN), m_timerInterval);
+   writer.WriteString(FID(NRMA), m_d.m_szNormalMap);
+   writer.WriteString(FID(ORMA), m_d.m_szORMMap);
+   writer.WriteString(FID(EMIS), m_d.m_szEmissionMap);
    writer.WriteString(FID(MATR), m_d.m_szMaterial);
    writer.WriteString(FID(SURF), m_d.m_szSurface);
    writer.WriteBool(FID(EBLD), m_d.m_enabled);
@@ -542,6 +545,9 @@ void Kicker::Load(IObjectReader& reader)
          case FID(KHAC): m_d.m_hitAccuracy = reader.AsFloat(); break;
          case FID(KHHI): m_d.m_hit_height = reader.AsFloat(); break;
          case FID(KORI): m_d.m_orientation = reader.AsFloat(); break;
+         case FID(NRMA): m_d.m_szNormalMap = reader.AsString(); break;
+         case FID(ORMA): m_d.m_szORMMap = reader.AsString(); break;
+         case FID(EMIS): m_d.m_szEmissionMap = reader.AsString(); break;
          case FID(MATR): m_d.m_szMaterial = reader.AsString(); break;
          case FID(TMON): m_timerEnabled = reader.AsBool(); break;
          case FID(TMIN): m_timerInterval = reader.AsInt(); break;

@@ -544,6 +544,9 @@ void Trigger::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteBool(FID(TMON), m_timerEnabled);
    writer.WriteInt(FID(TMIN), m_timerInterval);
    writer.WriteString(FID(SURF), m_d.m_szSurface);
+   writer.WriteString(FID(NRMA), m_d.m_szNormalMap);
+   writer.WriteString(FID(ORMA), m_d.m_szORMMap);
+   writer.WriteString(FID(EMIS), m_d.m_szEmissionMap);
    writer.WriteString(FID(MATR), m_d.m_szMaterial);
    writer.WriteBool(FID(EBLD), m_d.m_enabled);
    writer.WriteString(FID(LINK), m_d.m_stateSrcLink);
@@ -575,6 +578,9 @@ void Trigger::Load(IObjectReader& reader)
          case FID(WITI): m_d.m_wireThickness = reader.AsFloat(); break;
          case FID(SCAX): m_d.m_scaleX = reader.AsFloat(); break;
          case FID(SCAY): m_d.m_scaleY = reader.AsFloat(); break;
+         case FID(NRMA): m_d.m_szNormalMap = reader.AsString(); break;
+         case FID(ORMA): m_d.m_szORMMap = reader.AsString(); break;
+         case FID(EMIS): m_d.m_szEmissionMap = reader.AsString(); break;
          case FID(MATR): m_d.m_szMaterial = reader.AsString(); break;
          case FID(TMON): m_timerEnabled = reader.AsBool(); break;
          case FID(TMIN): m_timerInterval = reader.AsInt(); break;

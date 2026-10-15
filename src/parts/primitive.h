@@ -34,7 +34,6 @@ public:
    Vertex3Ds m_vPosition { 0.f, 0.f, 0.f };
    Vertex3Ds m_vSize { 1.f, 1.f, 1.f };
    float m_aRotAndTra[9] { };
-   string m_szNormalMap;
    string m_meshFileName;
 
    COLORREF m_SideColor = RGB(150, 150, 150);

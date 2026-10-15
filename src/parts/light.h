@@ -17,7 +17,11 @@ class MeshBuffer;
 enum ShadowMode : int // has to be int for loading
 {
    NONE,
-   RAYTRACED_BALL_SHADOWS
+   RAYTRACED_BALL_SHADOWS,
+   // PBR shadow modes (only meaningful for LightType::PBR lights, see m_type)
+   PBR_STATIC_SHADOWS,
+   PBR_STATIC_N_BALL_SHADOWS,
+   PBR_STATIC_N_DYNAMIC_SHADOWS
 };
 
 enum Fader : int
@@ -25,6 +29,13 @@ enum Fader : int
    FADER_NONE,
    FADER_LINEAR,
    FADER_INCANDESCENT
+};
+
+enum class LightType : int // has to be int for loading
+{
+   Classic = 0, // Legacy textured light surface render mode
+   Halo, // Bulb halo render mode
+   PBR // Physically based light source, rendered through the PBR forward light list
 };
 
 class LightData final : public BaseProperty
@@ -38,6 +49,7 @@ public:
    float m_falloff_power;
    float m_intensity;
    float m_intensity_scale; // FIXME this is a transient state (not persisted, and as such, should not be part of the data block)
+   LightType m_type = LightType::Classic; // Light render mode (visibility is m_visible, hidden lights keep their type)
    float m_fadeSpeedUp;
    float m_fadeSpeedDown;
 
@@ -55,7 +67,6 @@ public:
 
    bool m_imageMode; // For default render mode: true = pass through/no lighting, false = use surface material
 
-   bool m_BulbLight; // Bulb halo render mode
    float m_bulbHaloHeight; // height of the halo (may be different from light z pos, for example a GI light rendered at playfield level)
    float m_transmissionScale;
    float m_modulate_vs_add;
