@@ -49,6 +49,18 @@ void SpinnerUIPart::UpdatePropertyPane(PropertyPane& props)
          m_part, "Reflection Enabled"s, //
          [](const Spinner* spinner) { return spinner->m_d.m_reflectionEnabled; }, //
          [](Spinner* spinner, bool v) { spinner->m_d.m_reflectionEnabled = v; });
+      props.ImageCombo<Spinner>(
+         m_part, "Normal Map"s, //
+         [](const Spinner* spinner) { return spinner->m_d.m_szNormalMap; }, //
+         [](Spinner* spinner, const string& v) { spinner->m_d.m_szNormalMap = v; });
+      props.ImageCombo<Spinner>(
+         m_part, "ORM Map"s, //
+         [](const Spinner* spinner) { return spinner->m_d.m_szORMMap; }, //
+         [](Spinner* spinner, const string& v) { spinner->m_d.m_szORMMap = v; });
+      props.ImageCombo<Spinner>(
+         m_part, "Emission Map"s, //
+         [](const Spinner* spinner) { return spinner->m_d.m_szEmissionMap; }, //
+         [](Spinner* spinner, const string& v) { spinner->m_d.m_szEmissionMap = v; });
       props.EndSection();
    }
 

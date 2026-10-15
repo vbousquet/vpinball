@@ -34,6 +34,9 @@ RampVisualsProperty::RampVisualsProperty(const vector<IWinUIPart *> *pvsel) : Ba
     m_materialCombo.SetDialog(this);
     m_imageCombo.SetDialog(this);
     m_modeCombo.SetDialog(this);
+    m_normalMapCombo.SetDialog(this);
+    m_ormMapCombo.SetDialog(this);
+    m_emissionMapCombo.SetDialog(this);
 }
 
 void RampVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
@@ -69,6 +72,12 @@ void RampVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
             PropertyDialog::SetFloatTextbox(m_distanceYEdit, ramp->m_d.m_wireDistanceY);
         if (dispid == 9 || dispid == -1)
             PropertyDialog::SetCheckboxState(GetDlgItem(9), ramp->m_d.m_imageWalls);
+        if (dispid == IDC_NORMALMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(ramp->GetPTable()->GetImageList(), m_normalMapCombo, ramp->m_d.m_szNormalMap);
+        if (dispid == IDC_ORMMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(ramp->GetPTable()->GetImageList(), m_ormMapCombo, ramp->m_d.m_szORMMap);
+        if (dispid == IDC_EMISSIONMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(ramp->GetPTable()->GetImageList(), m_emissionMapCombo, ramp->m_d.m_szEmissionMap);
 
         UpdateBaseVisuals(ramp, &ramp->m_d, dispid);
         //only show the first element on multi-select
@@ -130,6 +139,9 @@ void RampVisualsProperty::UpdateProperties(const int dispid)
             case IDC_WIRE_DISTY:
                 CHECK_UPDATE_ITEM(ramp->m_d.m_wireDistanceY, PropertyDialog::GetFloatTextbox(m_distanceYEdit), ramp);
                 break;
+            case IDC_NORMALMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(ramp->m_d.m_szNormalMap, m_normalMapCombo, ramp); break;
+            case IDC_ORMMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(ramp->m_d.m_szORMMap, m_ormMapCombo, ramp); break;
+            case IDC_EMISSIONMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(ramp->m_d.m_szEmissionMap, m_emissionMapCombo, ramp); break;
             default:
                 UpdateBaseProperties(ramp, &ramp->m_d, dispid);
                 break;
@@ -144,6 +156,9 @@ BOOL RampVisualsProperty::OnInitDialog()
     m_typeCombo.AttachItem(6);
     m_imageCombo.AttachItem(DISPID_Image);
     m_materialCombo.AttachItem(IDC_MATERIAL_COMBO);
+    m_normalMapCombo.AttachItem(IDC_NORMALMAP_COMBO);
+    m_ormMapCombo.AttachItem(IDC_ORMMAP_COMBO);
+    m_emissionMapCombo.AttachItem(IDC_EMISSIONMAP_COMBO);
     m_modeCombo.AttachItem(8);
     m_depthBiasEdit.AttachItem(IDC_DEPTH_BIAS);
     m_topHeightEdit.AttachItem(2);
@@ -191,6 +206,9 @@ BOOL RampVisualsProperty::OnInitDialog()
     m_resizer.AddChild(m_bottomHeightEdit, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_topWidthEdit, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_bottomWidthEdit, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_normalMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_ormMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_emissionMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_leftWallEdit, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_rightWallEdit, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_diameterEdit, CResizer::topleft, RD_STRETCH_WIDTH);

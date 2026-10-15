@@ -104,6 +104,18 @@ void DecalUIPart::UpdatePropertyPane(PropertyPane& props)
             decal->EnsureSize();
          },
          PropertyPane::Unit::VPLength, 1);
+      props.ImageCombo<Decal>(
+         m_part, "Normal Map"s, //
+         [](const Decal* decal) { return decal->m_d.m_szNormalMap; }, //
+         [](Decal* decal, const string& v) { decal->m_d.m_szNormalMap = v; });
+      props.ImageCombo<Decal>(
+         m_part, "ORM Map"s, //
+         [](const Decal* decal) { return decal->m_d.m_szORMMap; }, //
+         [](Decal* decal, const string& v) { decal->m_d.m_szORMMap = v; });
+      props.ImageCombo<Decal>(
+         m_part, "Emission Map"s, //
+         [](const Decal* decal) { return decal->m_d.m_szEmissionMap; }, //
+         [](Decal* decal, const string& v) { decal->m_d.m_szEmissionMap = v; });
       props.EndSection();
    }
 
