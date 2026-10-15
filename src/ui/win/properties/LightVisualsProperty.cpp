@@ -380,6 +380,7 @@ BOOL LightVisualsProperty::OnInitDialog()
     m_typeCombo.AddString("Hidden");
     m_typeCombo.AddString("Classic");
     m_typeCombo.AddString("Halo");
+    m_typeCombo.AddString("PBR");
     m_resizer.AddChild(m_typeCombo, CResizer::topleft, RD_STRETCH_WIDTH);
     m_typeCombo.AddString("PBR");
     m_resizer.AddChild(GetDlgItem(IDC_HALO_LABEL), CResizer::topleft, 0);
