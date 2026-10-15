@@ -39,6 +39,9 @@ HRESULT Plunger::Init(const float x, const float y, const bool fromMouseClick, c
 #define LinkProp(field, prop) field = fromMouseClick ? g_settingsService.GetAppSettings().GetDefaultPropsPlunger_##prop() : Settings::GetDefaultPropsPlunger_##prop##_Default()
 void Plunger::SetDefaults(const bool fromMouseClick)
 {
+   m_d.m_szNormalMap.clear();
+   m_d.m_szORMMap.clear();
+   m_d.m_szEmissionMap.clear();
    LinkProp(m_d.m_height, Height);
    LinkProp(m_d.m_width, Width);
    LinkProp(m_d.m_zAdjust, ZAdjust);
@@ -870,6 +873,9 @@ void Plunger::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteInt(FID(ANFR), m_d.m_animFrames);
    writer.WriteString(FID(MATR), m_d.m_szMaterial);
    writer.WriteString(FID(IMAG), m_d.m_szImage);
+   writer.WriteString(FID(NRMA), m_d.m_szNormalMap);
+   writer.WriteString(FID(ORMA), m_d.m_szORMMap);
+   writer.WriteString(FID(EMIS), m_d.m_szEmissionMap);
 
    writer.WriteFloat(FID(MEST), m_d.m_mechStrength);
    writer.WriteBool(FID(MECH), m_d.m_mechPlunger);
@@ -928,6 +934,9 @@ void Plunger::Load(IObjectReader& reader)
          case FID(ANFR): m_d.m_animFrames = reader.AsInt(); break;
          case FID(MATR): m_d.m_szMaterial = reader.AsString(); break;
          case FID(IMAG): m_d.m_szImage = reader.AsString(); break;
+         case FID(NRMA): m_d.m_szNormalMap = reader.AsString(); break;
+         case FID(ORMA): m_d.m_szORMMap = reader.AsString(); break;
+         case FID(EMIS): m_d.m_szEmissionMap = reader.AsString(); break;
          case FID(VSBL): m_d.m_visible = reader.AsBool(); break;
          case FID(REEN): m_d.m_reflectionEnabled = reader.AsBool(); break;
          case FID(SURF): m_d.m_szSurface = reader.AsString(); break;

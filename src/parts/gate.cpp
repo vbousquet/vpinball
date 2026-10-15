@@ -447,6 +447,9 @@ void Gate::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteFloat(FID(LGTH), m_d.m_length);
    writer.WriteFloat(FID(HGTH), m_d.m_height);
    writer.WriteFloat(FID(ROTA), m_d.m_rotation);
+   writer.WriteString(FID(NRMA), m_d.m_szNormalMap);
+   writer.WriteString(FID(ORMA), m_d.m_szORMMap);
+   writer.WriteString(FID(EMIS), m_d.m_szEmissionMap);
    writer.WriteString(FID(MATR), m_d.m_szMaterial);
    writer.WriteBool(FID(TMON), m_timerEnabled);
    writer.WriteBool(FID(GSUP), m_d.m_showBracket);
@@ -489,6 +492,9 @@ void Gate::Load(IObjectReader& reader)
          case FID(LGTH): m_d.m_length = reader.AsFloat(); break;
          case FID(HGTH): m_d.m_height = reader.AsFloat(); break;
          case FID(ROTA): m_d.m_rotation = reader.AsFloat(); break;
+         case FID(NRMA): m_d.m_szNormalMap = reader.AsString(); break;
+         case FID(ORMA): m_d.m_szORMMap = reader.AsString(); break;
+         case FID(EMIS): m_d.m_szEmissionMap = reader.AsString(); break;
          case FID(MATR): m_d.m_szMaterial = reader.AsString(); break;
          case FID(TMON): m_timerEnabled = reader.AsBool(); break;
          case FID(TMIN): m_timerInterval = reader.AsInt(); break;
