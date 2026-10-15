@@ -27,6 +27,9 @@ KickerVisualsProperty::KickerVisualsProperty(const vector<IWinUIPart *> *pvsel) 
     m_materialCombo.SetDialog(this);
     m_displayCombo.SetDialog(this);
     m_surfaceCombo.SetDialog(this);
+    m_normalMapCombo.SetDialog(this);
+    m_ormMapCombo.SetDialog(this);
+    m_emissionMapCombo.SetDialog(this);
 }
 
 void KickerVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
@@ -49,6 +52,12 @@ void KickerVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
             PropertyDialog::SetFloatTextbox(m_posYEdit, kicker->m_d.m_vCenter.y);
         if (dispid == IDC_SURFACE_COMBO || dispid == -1)
             PropertyDialog::UpdateSurfaceComboBox(kicker->GetPTable(), m_surfaceCombo, kicker->m_d.m_szSurface);
+        if (dispid == IDC_NORMALMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(kicker->GetPTable()->GetImageList(), m_normalMapCombo, kicker->m_d.m_szNormalMap);
+        if (dispid == IDC_ORMMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(kicker->GetPTable()->GetImageList(), m_ormMapCombo, kicker->m_d.m_szORMMap);
+        if (dispid == IDC_EMISSIONMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(kicker->GetPTable()->GetImageList(), m_emissionMapCombo, kicker->m_d.m_szEmissionMap);
         UpdateBaseVisuals(kicker, &kicker->m_d, dispid);
         //only show the first element on multi-select
         break;
@@ -84,6 +93,9 @@ void KickerVisualsProperty::UpdateProperties(const int dispid)
                 break;
             case IDC_SURFACE_COMBO:
                 CHECK_UPDATE_COMBO_TEXT_STRING(kicker->m_d.m_szSurface, m_surfaceCombo, kicker);
+            case IDC_NORMALMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(kicker->m_d.m_szNormalMap, m_normalMapCombo, kicker); break;
+            case IDC_ORMMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(kicker->m_d.m_szORMMap, m_ormMapCombo, kicker); break;
+            case IDC_EMISSIONMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(kicker->m_d.m_szEmissionMap, m_emissionMapCombo, kicker); break;
                 break;
             default:
                 UpdateBaseProperties(kicker, &kicker->m_d, dispid);
@@ -97,6 +109,9 @@ void KickerVisualsProperty::UpdateProperties(const int dispid)
 BOOL KickerVisualsProperty::OnInitDialog()
 {
     m_materialCombo.AttachItem(IDC_MATERIAL_COMBO);
+    m_normalMapCombo.AttachItem(IDC_NORMALMAP_COMBO);
+    m_ormMapCombo.AttachItem(IDC_ORMMAP_COMBO);
+    m_emissionMapCombo.AttachItem(IDC_EMISSIONMAP_COMBO);
     m_baseMaterialCombo = &m_materialCombo;
     m_displayCombo.AttachItem(IDC_KICKER_DISPLAY_COMBO);
     m_radiusEdit.AttachItem(IDC_KICKER_RADIUS_EDIT);

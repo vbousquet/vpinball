@@ -36,6 +36,9 @@ HitTargetVisualsProperty::HitTargetVisualsProperty(const vector<IWinUIPart *> *p
     m_imageCombo.SetDialog(this);
     m_materialCombo.SetDialog(this);
     m_typeCombo.SetDialog(this);
+    m_normalMapCombo.SetDialog(this);
+    m_ormMapCombo.SetDialog(this);
+    m_emissionMapCombo.SetDialog(this);
 }
 
 void HitTargetVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
@@ -71,6 +74,12 @@ void HitTargetVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
             PropertyDialog::SetFloatTextbox(m_scaleZEdit, target->m_d.m_vSize.z);
         if (dispid == DISPID_ROT_Z || dispid == -1)
             PropertyDialog::SetFloatTextbox(m_orientationEdit, target->m_d.m_rotZ);
+        if (dispid == IDC_NORMALMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(target->GetPTable()->GetImageList(), m_normalMapCombo, target->m_d.m_szNormalMap);
+        if (dispid == IDC_ORMMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(target->GetPTable()->GetImageList(), m_ormMapCombo, target->m_d.m_szORMMap);
+        if (dispid == IDC_EMISSIONMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(target->GetPTable()->GetImageList(), m_emissionMapCombo, target->m_d.m_szEmissionMap);
 
         UpdateBaseVisuals(target, &target->m_d, dispid);
         //only show the first element on multi-select
@@ -134,6 +143,9 @@ void HitTargetVisualsProperty::UpdateProperties(const int dispid)
                 CHECK_UPDATE_ITEM(target->m_d.m_rotZ, PropertyDialog::GetFloatTextbox(m_orientationEdit), target);
                 target->TransformVertices();
                 break;
+            case IDC_NORMALMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(target->m_d.m_szNormalMap, m_normalMapCombo, target); break;
+            case IDC_ORMMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(target->m_d.m_szORMMap, m_ormMapCombo, target); break;
+            case IDC_EMISSIONMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(target->m_d.m_szEmissionMap, m_emissionMapCombo, target); break;
             default:
                 UpdateBaseProperties(target, &target->m_d, dispid);
                 break;
@@ -164,6 +176,9 @@ BOOL HitTargetVisualsProperty::OnInitDialog()
     m_scaleYEdit.AttachItem(DISPID_SIZE_Y);
     m_scaleZEdit.AttachItem(DISPID_SIZE_Z);
     m_orientationEdit.AttachItem(DISPID_ROT_Z);
+    m_normalMapCombo.AttachItem(IDC_NORMALMAP_COMBO);
+    m_ormMapCombo.AttachItem(IDC_ORMMAP_COMBO);
+    m_emissionMapCombo.AttachItem(IDC_EMISSIONMAP_COMBO);
     UpdateVisuals();
 
     m_resizer.Initialize(GetHwnd(), CRect(0, 0, 0, 0));
@@ -201,6 +216,9 @@ BOOL HitTargetVisualsProperty::OnInitDialog()
     m_resizer.AddChild(m_scaleYEdit, CResizer::topright, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_scaleZEdit, CResizer::topright, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_orientationEdit, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_normalMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_ormMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_emissionMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
 
     return TRUE;
 }

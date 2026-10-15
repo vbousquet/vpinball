@@ -50,6 +50,18 @@ void RubberUIPart::UpdatePropertyPane(PropertyPane& props)
          m_part, "Thickness"s, //
          [](const Rubber* rubber) { return rubber->m_d.m_thickness; }, //
          [](Rubber* rubber, int v) { rubber->m_d.m_thickness = v; });
+      props.ImageCombo<Rubber>(
+         m_part, "Normal Map"s, //
+         [](const Rubber* rubber) { return rubber->m_d.m_szNormalMap; }, //
+         [](Rubber* rubber, const string& v) { rubber->m_d.m_szNormalMap = v; });
+      props.ImageCombo<Rubber>(
+         m_part, "ORM Map"s, //
+         [](const Rubber* rubber) { return rubber->m_d.m_szORMMap; }, //
+         [](Rubber* rubber, const string& v) { rubber->m_d.m_szORMMap = v; });
+      props.ImageCombo<Rubber>(
+         m_part, "Emission Map"s, //
+         [](const Rubber* rubber) { return rubber->m_d.m_szEmissionMap; }, //
+         [](Rubber* rubber, const string& v) { rubber->m_d.m_szEmissionMap = v; });
       props.EndSection();
    }
 

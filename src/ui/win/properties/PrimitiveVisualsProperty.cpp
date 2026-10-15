@@ -22,6 +22,8 @@ PrimitiveVisualsProperty::PrimitiveVisualsProperty(const vector<IWinUIPart *> *p
     m_depthBiasEdit.SetDialog(this);
     m_imageCombo.SetDialog(this);
     m_normalMapCombo.SetDialog(this);
+    m_ormMapCombo.SetDialog(this);
+    m_emissionMapCombo.SetDialog(this);
     m_lightmapCombo.SetDialog(this);
     m_stateLinkEdit.SetDialog(this);
     m_reflectionCombo.SetDialog(this);
@@ -45,6 +47,8 @@ void PrimitiveVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
             PropertyDialog::SetCheckboxState(m_hAdditiveBlendCheck, prim->m_d.m_addBlend);
             // Disable/Enable all ignored properties when using unshaded additive blending
             ::EnableWindow(m_normalMapCombo, !prim->m_d.m_addBlend);
+            ::EnableWindow(m_ormMapCombo, !prim->m_d.m_addBlend);
+            ::EnableWindow(m_emissionMapCombo, !prim->m_d.m_addBlend);
             ::EnableWindow(m_materialCombo, !prim->m_d.m_addBlend);
             ::EnableWindow(m_reflectionCombo, !prim->m_d.m_addBlend);
             ::EnableWindow(m_reflectionAmountEdit, !prim->m_d.m_addBlend);
@@ -91,6 +95,10 @@ void PrimitiveVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
             PropertyDialog::SetFloatTextbox(m_edgeFactorUIEdit, prim->m_d.m_edgeFactorUI);
         if (dispid == DISPID_Image2 || dispid == -1)
             PropertyDialog::UpdateTextureComboBox(prim->GetPTable()->GetImageList(), m_normalMapCombo, prim->m_d.m_szNormalMap);
+        if (dispid == IDC_ORMMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(prim->GetPTable()->GetImageList(), m_ormMapCombo, prim->m_d.m_szORMMap);
+        if (dispid == IDC_EMISSIONMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(prim->GetPTable()->GetImageList(), m_emissionMapCombo, prim->m_d.m_szEmissionMap);
         if (dispid == IDC_COLOR_BUTTON1 || dispid == -1)
             m_colorButton.SetColor(prim->m_d.m_color);
         if (dispid == DISPID_REFLECTION_PROBE || dispid == -1)
@@ -237,6 +245,8 @@ void PrimitiveVisualsProperty::UpdateProperties(const int dispid)
             case DISPID_Image2:
                 CHECK_UPDATE_COMBO_TEXT_STRING(prim->m_d.m_szNormalMap, m_normalMapCombo, prim);
                 break;
+            case IDC_ORMMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(prim->m_d.m_szORMMap, m_ormMapCombo, prim); break;
+            case IDC_EMISSIONMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(prim->m_d.m_szEmissionMap, m_emissionMapCombo, prim); break;
             case IDC_COLOR_BUTTON1:
             {
                CComObject<PinTable> *const ptable = GetTable();
@@ -315,6 +325,8 @@ BOOL PrimitiveVisualsProperty::OnInitDialog()
     m_imageCombo.AttachItem(DISPID_Image);
     m_baseImageCombo = &m_imageCombo;
     m_normalMapCombo.AttachItem(DISPID_Image2);
+    m_ormMapCombo.AttachItem(IDC_ORMMAP_COMBO);
+    m_emissionMapCombo.AttachItem(IDC_EMISSIONMAP_COMBO);
     m_materialCombo.AttachItem(IDC_MATERIAL_COMBO);
     m_baseMaterialCombo = &m_materialCombo;
     m_opacityAmountEdit.AttachItem(IDC_ALPHA_EDIT);
@@ -362,6 +374,8 @@ BOOL PrimitiveVisualsProperty::OnInitDialog()
     m_resizer.AddChild(m_hDisplayImageCheck, CResizer::topleft, 0);
     m_resizer.AddChild(GetDlgItem(IDC_STATIC9), CResizer::topleft, 0);
     m_resizer.AddChild(m_normalMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_ormMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_emissionMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_hObjectSpaceCheck, CResizer::topleft, 0);
     m_resizer.AddChild(GetDlgItem(IDC_STATIC10), CResizer::topleft, 0);
     m_resizer.AddChild(m_disableLightingEdit, CResizer::topleft, RD_STRETCH_WIDTH);

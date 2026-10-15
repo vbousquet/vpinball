@@ -76,6 +76,18 @@ void HitTargetUIPart::UpdatePropertyPane(PropertyPane& props)
          m_part, "Reflection Enabled"s, //
          [](const HitTarget* hitTarget) { return hitTarget->m_d.m_reflectionEnabled; }, //
          [](HitTarget* hitTarget, bool v) { hitTarget->m_d.m_reflectionEnabled = v; }, "Render this part in the table's reflections");
+      props.ImageCombo<HitTarget>(
+         m_part, "Normal Map"s, //
+         [](const HitTarget* hitTarget) { return hitTarget->m_d.m_szNormalMap; }, //
+         [](HitTarget* hitTarget, const string& v) { hitTarget->m_d.m_szNormalMap = v; });
+      props.ImageCombo<HitTarget>(
+         m_part, "ORM Map"s, //
+         [](const HitTarget* hitTarget) { return hitTarget->m_d.m_szORMMap; }, //
+         [](HitTarget* hitTarget, const string& v) { hitTarget->m_d.m_szORMMap = v; });
+      props.ImageCombo<HitTarget>(
+         m_part, "Emission Map"s, //
+         [](const HitTarget* hitTarget) { return hitTarget->m_d.m_szEmissionMap; }, //
+         [](HitTarget* hitTarget, const string& v) { hitTarget->m_d.m_szEmissionMap = v; });
       props.EndSection();
    }
 

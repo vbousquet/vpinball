@@ -26,6 +26,9 @@ FlipperVisualsProperty::FlipperVisualsProperty(const vector<IWinUIPart *> *pvsel
     m_materialCombo.SetDialog(this);
     m_rubberMaterialCombo.SetDialog(this);
     m_surfaceCombo.SetDialog(this);
+    m_normalMapCombo.SetDialog(this);
+    m_ormMapCombo.SetDialog(this);
+    m_emissionMapCombo.SetDialog(this);
 }
 
 void FlipperVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
@@ -65,6 +68,12 @@ void FlipperVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
             PropertyDialog::UpdateSurfaceComboBox(flipper->GetPTable(), m_surfaceCombo, flipper->m_d.m_szSurface);
         if (dispid == IDC_FLIPPER_ENABLED || dispid == -1)
             PropertyDialog::SetCheckboxState(GetDlgItem(IDC_FLIPPER_ENABLED), flipper->m_d.m_enabled);
+        if (dispid == IDC_NORMALMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(flipper->GetPTable()->GetImageList(), m_normalMapCombo, flipper->m_d.m_szNormalMap);
+        if (dispid == IDC_ORMMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(flipper->GetPTable()->GetImageList(), m_ormMapCombo, flipper->m_d.m_szORMMap);
+        if (dispid == IDC_EMISSIONMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(flipper->GetPTable()->GetImageList(), m_emissionMapCombo, flipper->m_d.m_szEmissionMap);
         UpdateBaseVisuals(flipper, &flipper->m_d,dispid);
         //only show the first element on multi-select
         break;
@@ -125,6 +134,9 @@ void FlipperVisualsProperty::UpdateProperties(const int dispid)
             case IDC_MATERIAL_COMBO2:
                 CHECK_UPDATE_COMBO_TEXT_STRING(flipper->m_d.m_szRubberMaterial, m_rubberMaterialCombo, flipper);
                 break;
+            case IDC_NORMALMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(flipper->m_d.m_szNormalMap, m_normalMapCombo, flipper); break;
+            case IDC_ORMMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(flipper->m_d.m_szORMMap, m_ormMapCombo, flipper); break;
+            case IDC_EMISSIONMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(flipper->m_d.m_szEmissionMap, m_emissionMapCombo, flipper); break;
 
             default:
                 UpdateBaseProperties(flipper, &flipper->m_d, dispid);
@@ -153,6 +165,9 @@ BOOL FlipperVisualsProperty::OnInitDialog()
     m_heightEdit.AttachItem(107);
     m_maxDifficultLengthEdit.AttachItem(111);
     m_surfaceCombo.AttachItem(1502);
+    m_normalMapCombo.AttachItem(IDC_NORMALMAP_COMBO);
+    m_ormMapCombo.AttachItem(IDC_ORMMAP_COMBO);
+    m_emissionMapCombo.AttachItem(IDC_EMISSIONMAP_COMBO);
 
     m_baseImageCombo = &m_imageCombo;
     m_baseMaterialCombo = &m_materialCombo;
@@ -193,6 +208,9 @@ BOOL FlipperVisualsProperty::OnInitDialog()
     m_resizer.AddChild(m_heightEdit, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_maxDifficultLengthEdit, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_surfaceCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_normalMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_ormMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_emissionMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_hVisibleCheck, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_hReflectionEnabledCheck, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(GetDlgItem(IDC_FLIPPER_ENABLED), CResizer::topleft, 0);

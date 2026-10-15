@@ -20,6 +20,9 @@ SpinnerVisualsProperty::SpinnerVisualsProperty(const vector<IWinUIPart *> *pvsel
     m_imageCombo.SetDialog(this);
     m_materialCombo.SetDialog(this);
     m_surfaceCombo.SetDialog(this);
+    m_normalMapCombo.SetDialog(this);
+    m_ormMapCombo.SetDialog(this);
+    m_emissionMapCombo.SetDialog(this);
 }
 
 void SpinnerVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
@@ -48,6 +51,12 @@ void SpinnerVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
             PropertyDialog::SetFloatTextbox(m_angleMaxEdit, spinner->GetAngleMax());
         if (dispid == 14 || dispid == -1)
             PropertyDialog::SetFloatTextbox(m_angleMinEdit, spinner->GetAngleMin());
+        if (dispid == IDC_NORMALMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(spinner->GetPTable()->GetImageList(), m_normalMapCombo, spinner->m_d.m_szNormalMap);
+        if (dispid == IDC_ORMMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(spinner->GetPTable()->GetImageList(), m_ormMapCombo, spinner->m_d.m_szORMMap);
+        if (dispid == IDC_EMISSIONMAP_COMBO || dispid == -1)
+           PropertyDialog::UpdateTextureComboBox(spinner->GetPTable()->GetImageList(), m_emissionMapCombo, spinner->m_d.m_szEmissionMap);
 
         UpdateBaseVisuals(spinner, &spinner->m_d, dispid);
         //only show the first element on multi-select
@@ -92,6 +101,9 @@ void SpinnerVisualsProperty::UpdateProperties(const int dispid)
             case 14:
                 CHECK_UPDATE_VALUE_SETTER(spinner->SetAngleMin, spinner->GetAngleMin, PropertyDialog::GetFloatTextbox, m_angleMinEdit, spinner);
                 break;
+            case IDC_NORMALMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(spinner->m_d.m_szNormalMap, m_normalMapCombo, spinner); break;
+            case IDC_ORMMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(spinner->m_d.m_szORMMap, m_ormMapCombo, spinner); break;
+            case IDC_EMISSIONMAP_COMBO: CHECK_UPDATE_COMBO_TEXT_STRING(spinner->m_d.m_szEmissionMap, m_emissionMapCombo, spinner); break;
             default:
                 UpdateBaseProperties(spinner, &spinner->m_d, dispid);
                 break;
@@ -111,6 +123,9 @@ BOOL SpinnerVisualsProperty::OnInitDialog()
     m_materialCombo.AttachItem(IDC_MATERIAL_COMBO);
     m_baseMaterialCombo = &m_materialCombo;
     m_surfaceCombo.AttachItem(IDC_SURFACE_COMBO);
+    m_normalMapCombo.AttachItem(IDC_NORMALMAP_COMBO);
+    m_ormMapCombo.AttachItem(IDC_ORMMAP_COMBO);
+    m_emissionMapCombo.AttachItem(IDC_EMISSIONMAP_COMBO);
     m_posXEdit.AttachItem(11);
     m_posYEdit.AttachItem(12);
     m_lengthEdit.AttachItem(DISPID_Spinner_Length);
@@ -138,6 +153,9 @@ BOOL SpinnerVisualsProperty::OnInitDialog()
     m_resizer.AddChild(m_imageCombo, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_materialCombo, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_surfaceCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_normalMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_ormMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(m_emissionMapCombo, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_posXEdit, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_posYEdit, CResizer::topleft, RD_STRETCH_WIDTH);
     m_resizer.AddChild(m_lengthEdit, CResizer::topleft, RD_STRETCH_WIDTH);

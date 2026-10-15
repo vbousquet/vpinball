@@ -23,6 +23,9 @@ private:
     ComboBox  m_skirtMaterialCombo;
     ComboBox  m_ringMaterialCombo;
     ComboBox  m_surfaceCombo;
+    ComboBox m_normalMapCombo;
+    ComboBox m_ormMapCombo;
+    ComboBox m_emissionMapCombo;
     EditBox   m_radiusEdit;
     EditBox   m_heightScaleEdit;
     EditBox   m_orientationEdit;
