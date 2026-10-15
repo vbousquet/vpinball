@@ -50,6 +50,10 @@ void MaterialDialog::EnableAllMaterialDialogItems(const BOOL e)
    GetDlgItem(IDC_CLONE_BUTTON).EnableWindow(e);
    GetDlgItem(IDC_RENAME).EnableWindow(e);
    GetDlgItem(IDC_IMPORT).EnableWindow(e);
+   GetDlgItem(IDC_MAT_METALLIC).EnableWindow(e);
+   GetDlgItem(IDC_MAT_OCCLUSION).EnableWindow(e);
+   GetDlgItem(IDC_MAT_EMISSION_INTENSITY).EnableWindow(e);
+   m_colorButton5.EnableWindow(e);
 }
 
 float MaterialDialog::getItemText(int id)
@@ -80,11 +84,13 @@ BOOL MaterialDialog::OnInitDialog()
    AttachItem(IDC_COLOR_BUTTON2, m_colorButton2);
    AttachItem(IDC_COLOR_BUTTON3, m_colorButton3);
    AttachItem(IDC_COLOR_BUTTON5, m_colorButton4);
+   AttachItem(IDC_MAT_EMISSION_COLOR, m_colorButton5);
 
    HWND hwnd = GetDlgItem(IDC_MATERIAL_TYPE).GetHwnd();
    ::SendMessage(hwnd, WM_SETREDRAW, FALSE, 0); // to speed up adding the entries :/
    ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Basic");
    ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Metal");
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "PBR");
    ::SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
 
    m_resizer.Initialize(GetHwnd(), CRect(0, 0, 780, 520));
@@ -131,6 +137,16 @@ BOOL MaterialDialog::OnInitDialog()
    m_resizer.AddChild(GetDlgItem(IDC_MAT_FRICTION).GetHwnd(), CResizer::topright, 0);
    m_resizer.AddChild(GetDlgItem(IDC_STATIC_PHY_SCATTER_ANGLE).GetHwnd(), CResizer::topright, 0);
    m_resizer.AddChild(GetDlgItem(IDC_MAT_SCATTER_ANGLE).GetHwnd(), CResizer::topright, 0);
+   m_resizer.AddChild(GetDlgItem(IDC_STATIC_PBR).GetHwnd(), CResizer::topright, 0);
+   m_resizer.AddChild(GetDlgItem(IDC_STATIC_MAT_METALLIC).GetHwnd(), CResizer::topright, 0);
+   m_resizer.AddChild(GetDlgItem(IDC_MAT_METALLIC).GetHwnd(), CResizer::topright, 0);
+   m_resizer.AddChild(GetDlgItem(IDC_STATIC_MAT_OCCLUSION).GetHwnd(), CResizer::topright, 0);
+   m_resizer.AddChild(GetDlgItem(IDC_MAT_OCCLUSION).GetHwnd(), CResizer::topright, 0);
+   m_resizer.AddChild(GetDlgItem(IDC_STATIC_MAT_EMISSION).GetHwnd(), CResizer::topright, 0);
+   m_resizer.AddChild(GetDlgItem(IDC_MAT_EMISSION_COLOR).GetHwnd(), CResizer::topright, 0);
+   m_resizer.AddChild(GetDlgItem(IDC_STATIC_MAT_EMISSION_INT).GetHwnd(), CResizer::topright, 0);
+   m_resizer.AddChild(GetDlgItem(IDC_MAT_EMISSION_INTENSITY).GetHwnd(), CResizer::topright, 0);
+   m_resizer.AddChild(GetDlgItem(IDC_STATIC_PBR_TEXT).GetHwnd(), CResizer::topright, 0);
    m_resizer.AddChild(GetDlgItem(IDC_ADD_BUTTON).GetHwnd(), CResizer::topright, 0);
    m_resizer.AddChild(GetDlgItem(IDC_CLONE_BUTTON).GetHwnd(), CResizer::topright, 0);
    m_resizer.AddChild(GetDlgItem(IDC_IMPORT).GetHwnd(), CResizer::topright, 0);
@@ -360,6 +376,49 @@ BOOL MaterialDialog::OnCommand(WPARAM wParam, LPARAM lParam)
                }
            }
            break;
+       }
+       case IDC_MAT_EMISSION_COLOR:
+       {
+          CHOOSECOLOR cc = m_colorDialog.GetParameters();
+          cc.Flags = CC_FULLOPEN | CC_RGBINIT;
+          m_colorDialog.SetParameters(cc);
+          m_colorDialog.SetCustomColors(pt->m_rgcolorcustom);
+          if (ListView_GetSelectedCount(m_hMaterialList)) // if some items are selected???
+          {
+             int sel = ListView_GetNextItem(m_hMaterialList, -1, LVNI_SELECTED);
+             if (sel == -1)
+                break;
+
+             LVITEM lvitem;
+             lvitem.mask = LVIF_PARAM;
+             lvitem.iItem = sel;
+             lvitem.iSubItem = 0;
+             ListView_GetItem(m_hMaterialList, &lvitem);
+             Material *pmat = (Material *)lvitem.lParam;
+             m_colorDialog.SetColor(pmat->m_cEmission);
+             if (m_colorDialog.DoModal(GetHwnd()) == IDOK)
+             {
+                memcpy(pt->m_rgcolorcustom, m_colorDialog.GetCustomColors(), sizeof(pt->m_rgcolorcustom));
+                pmat->m_cEmission = m_colorDialog.GetColor();
+                m_colorButton5.SetColor(pmat->m_cEmission);
+                while (sel != -1)
+                {
+                   sel = ListView_GetNextItem(m_hMaterialList, sel, LVNI_SELECTED);
+                   if (sel != -1)
+                   {
+                      lvitem.mask = LVIF_PARAM;
+                      lvitem.iItem = sel;
+                      lvitem.iSubItem = 0;
+                      ListView_GetItem(m_hMaterialList, &lvitem);
+                      pmat = (Material *)lvitem.lParam;
+                      pmat->m_cEmission = m_colorDialog.GetColor();
+                   }
+                }
+                pt->SetNonUndoableDirty(SaveDirtyState::Dirty);
+                m_tableEditor->UpdatePropertyMaterialList();
+             }
+          }
+          break;
        }
 
       case IDC_CLONE_BUTTON:
@@ -643,6 +702,17 @@ void MaterialDialog::SetEditedMaterial(const Material& mat)
    setItemText(IDC_THICKNESS_EDIT, mat.m_fThickness);
    m_colorButton4.SetColor(mat.m_cRefractionTint);
 
+   // PBR
+   const bool isPBR = mat.m_type == Material::PBR && count == 1;
+   GetDlgItem(IDC_MAT_METALLIC).EnableWindow(isPBR);
+   GetDlgItem(IDC_MAT_OCCLUSION).EnableWindow(isPBR);
+   GetDlgItem(IDC_MAT_EMISSION_INTENSITY).EnableWindow(isPBR);
+   m_colorButton5.EnableWindow(isPBR);
+   setItemText(IDC_MAT_METALLIC, mat.m_fMetallic);
+   setItemText(IDC_MAT_OCCLUSION, mat.m_fOcclusion);
+   setItemText(IDC_MAT_EMISSION_INTENSITY, mat.m_fEmissionIntensity);
+   m_colorButton5.SetColor(mat.m_cEmission);
+
    // Physics
    setItemText(IDC_MAT_ELASTICITY, mat.m_fElasticity);
    setItemText(IDC_MAT_ELASTICITY_FALLOFF, mat.m_fElasticityFalloff);
@@ -692,6 +762,19 @@ void MaterialDialog::SaveEditedMaterial(Material& mat)
    if (mat.m_fEdgeAlpha != fv)
       pt->SetNonUndoableDirty(SaveDirtyState::Dirty);
    mat.m_fEdgeAlpha = fv;
+
+   fv = saturate(getItemText(IDC_MAT_METALLIC));
+   if (mat.m_fMetallic != fv)
+      pt->SetNonUndoableDirty(SaveDirtyState::Dirty);
+   mat.m_fMetallic = fv;
+   fv = saturate(getItemText(IDC_MAT_OCCLUSION));
+   if (mat.m_fOcclusion != fv)
+      pt->SetNonUndoableDirty(SaveDirtyState::Dirty);
+   mat.m_fOcclusion = fv;
+   fv = getItemText(IDC_MAT_EMISSION_INTENSITY);
+   if (mat.m_fEmissionIntensity != fv)
+      pt->SetNonUndoableDirty(SaveDirtyState::Dirty);
+   mat.m_fEmissionIntensity = fv;
 
    fv = getItemText(IDC_MAT_ELASTICITY);
    if (mat.m_fElasticity != fv)

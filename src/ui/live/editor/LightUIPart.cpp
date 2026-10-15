@@ -135,7 +135,7 @@ void LightUIPart::UpdatePropertyPane(PropertyPane& props)
                [](const Light* light) { return light->m_d.m_transmissionScale; }, //
                [](Light* light, float v) { light->m_d.m_transmissionScale = v; }, PropertyPane::Unit::Percent, 1);
          }
-         else
+         else if (light->m_d.m_type == LightType::Classic)
          {
             props.Checkbox<Light>(
                m_part, "PassThrough"s, //
@@ -173,12 +173,14 @@ void LightUIPart::UpdatePropertyPane(PropertyPane& props)
          m_part, "Show Reflection on Balls"s, //
          [](const Light* light) { return light->m_d.m_showReflectionOnBall; }, //
          [](Light* light, bool v) { light->m_d.m_showReflectionOnBall = v; });
-      props.Checkbox<Light>(
-         m_part, "Raytraced Ball Shadows"s, //
-         [](const Light* light) { return light->m_d.m_shadows == ShadowMode::RAYTRACED_BALL_SHADOWS; }, //
-         [](Light* light, bool v) { light->m_d.m_shadows = v ? ShadowMode::RAYTRACED_BALL_SHADOWS : ShadowMode::NONE; });
+      props.Combo<Light>(
+         m_part, "Shadow Mode"s, //
+         vector { "None"s, "Raytraced Ball"s, "PBR Static"s, "PBR Static + Ball"s, "PBR Static + Dynamic"s }, //
+         [](const Light* light) { return static_cast<int>(light->m_d.m_shadows); }, //
+         [](Light* light, int v) { light->m_d.m_shadows = static_cast<ShadowMode>(v); });
       props.EndSection();
    }
+
 
    if (props.BeginSection("Position"s))
    {

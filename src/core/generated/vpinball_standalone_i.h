@@ -4930,6 +4930,24 @@ IWall : public IDispatch
     virtual HRESULT STDMETHODCALLTYPE put_OverwritePhysics(
         VARIANT_BOOL newVal) = 0;
 
+    virtual HRESULT STDMETHODCALLTYPE get_NormalMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_NormalMap(
+        BSTR newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_ORMMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_ORMMap(
+        BSTR newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_EmissionMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_EmissionMap(
+        BSTR newVal) = 0;
+
 };
 #ifdef __CRT_UUID_DECL
 __CRT_UUID_DECL(IWall, 0x882f3e68, 0x8503, 0x4300, 0x8a,0xc0, 0x91,0xe8,0xdf,0x3f,0x8d,0x6d)
@@ -5272,6 +5290,30 @@ typedef struct IWallVtbl {
         IWall *This,
         VARIANT_BOOL newVal);
 
+    HRESULT (STDMETHODCALLTYPE *get_NormalMap)(
+        IWall *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_NormalMap)(
+        IWall *This,
+        BSTR newVal);
+
+    HRESULT (STDMETHODCALLTYPE *get_ORMMap)(
+        IWall *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_ORMMap)(
+        IWall *This,
+        BSTR newVal);
+
+    HRESULT (STDMETHODCALLTYPE *get_EmissionMap)(
+        IWall *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_EmissionMap)(
+        IWall *This,
+        BSTR newVal);
+
     END_INTERFACE
 } IWallVtbl;
 
@@ -5363,7 +5405,13 @@ interface IWall {
 #define IWall_get_PhysicsMaterial(This,pVal) (This)->lpVtbl->get_PhysicsMaterial(This,pVal)
 #define IWall_put_PhysicsMaterial(This,newVal) (This)->lpVtbl->put_PhysicsMaterial(This,newVal)
 #define IWall_get_OverwritePhysics(This,pVal) (This)->lpVtbl->get_OverwritePhysics(This,pVal)
-#define IWall_put_OverwritePhysics(This,newVal) (This)->lpVtbl->put_OverwritePhysics(This,newVal)
+#define IWall_put_OverwritePhysics(This,newVal) (This)->lpVtbl->put_OverwritePhysics(This,newVal)#define IWall_get_NormalMap(This,pVal) (This)->lpVtbl->get_NormalMap(This,pVal)
+#define IWall_put_NormalMap(This,newVal) (This)->lpVtbl->put_NormalMap(This,newVal)
+#define IWall_get_ORMMap(This,pVal) (This)->lpVtbl->get_ORMMap(This,pVal)
+#define IWall_put_ORMMap(This,newVal) (This)->lpVtbl->put_ORMMap(This,newVal)
+#define IWall_get_EmissionMap(This,pVal) (This)->lpVtbl->get_EmissionMap(This,pVal)
+#define IWall_put_EmissionMap(This,newVal) (This)->lpVtbl->put_EmissionMap(This,newVal)
+
 #else
 /*** IUnknown methods ***/
 static inline HRESULT IWall_QueryInterface(IWall* This,REFIID riid,void **ppvObject) {
@@ -5607,6 +5655,24 @@ static inline HRESULT IWall_get_OverwritePhysics(IWall* This,VARIANT_BOOL *pVal)
 }
 static inline HRESULT IWall_put_OverwritePhysics(IWall* This,VARIANT_BOOL newVal) {
     return This->lpVtbl->put_OverwritePhysics(This,newVal);
+}
+static inline HRESULT IWall_get_NormalMap(IWall* This,BSTR *pVal) {
+    return This->lpVtbl->get_NormalMap(This,pVal);
+}
+static inline HRESULT IWall_put_NormalMap(IWall* This,BSTR newVal) {
+    return This->lpVtbl->put_NormalMap(This,newVal);
+}
+static inline HRESULT IWall_get_ORMMap(IWall* This,BSTR *pVal) {
+    return This->lpVtbl->get_ORMMap(This,pVal);
+}
+static inline HRESULT IWall_put_ORMMap(IWall* This,BSTR newVal) {
+    return This->lpVtbl->put_ORMMap(This,newVal);
+}
+static inline HRESULT IWall_get_EmissionMap(IWall* This,BSTR *pVal) {
+    return This->lpVtbl->get_EmissionMap(This,pVal);
+}
+static inline HRESULT IWall_put_EmissionMap(IWall* This,BSTR newVal) {
+    return This->lpVtbl->put_EmissionMap(This,newVal);
 }
 #endif
 #endif
@@ -5950,6 +6016,24 @@ IFlipper : public IDispatch
     virtual HRESULT STDMETHODCALLTYPE put_ReflectionEnabled(
         VARIANT_BOOL newVal) = 0;
 
+    virtual HRESULT STDMETHODCALLTYPE get_NormalMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_NormalMap(
+        BSTR newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_ORMMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_ORMMap(
+        BSTR newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_EmissionMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_EmissionMap(
+        BSTR newVal) = 0;
+
 };
 #ifdef __CRT_UUID_DECL
 __CRT_UUID_DECL(IFlipper, 0xb4957ea2, 0x33be, 0x45e6, 0x93,0xc2, 0xca,0x16,0xb8,0x75,0x5b,0xf3)
@@ -6283,6 +6367,30 @@ typedef struct IFlipperVtbl {
         IFlipper *This,
         VARIANT_BOOL newVal);
 
+    HRESULT (STDMETHODCALLTYPE *get_NormalMap)(
+        IFlipper *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_NormalMap)(
+        IFlipper *This,
+        BSTR newVal);
+
+    HRESULT (STDMETHODCALLTYPE *get_ORMMap)(
+        IFlipper *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_ORMMap)(
+        IFlipper *This,
+        BSTR newVal);
+
+    HRESULT (STDMETHODCALLTYPE *get_EmissionMap)(
+        IFlipper *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_EmissionMap)(
+        IFlipper *This,
+        BSTR newVal);
+
     END_INTERFACE
 } IFlipperVtbl;
 
@@ -6372,7 +6480,13 @@ interface IFlipper {
 #define IFlipper_get_Image(This,pVal) (This)->lpVtbl->get_Image(This,pVal)
 #define IFlipper_put_Image(This,newVal) (This)->lpVtbl->put_Image(This,newVal)
 #define IFlipper_get_ReflectionEnabled(This,pVal) (This)->lpVtbl->get_ReflectionEnabled(This,pVal)
-#define IFlipper_put_ReflectionEnabled(This,newVal) (This)->lpVtbl->put_ReflectionEnabled(This,newVal)
+#define IFlipper_put_ReflectionEnabled(This,newVal) (This)->lpVtbl->put_ReflectionEnabled(This,newVal)#define IFlipper_get_NormalMap(This,pVal) (This)->lpVtbl->get_NormalMap(This,pVal)
+#define IFlipper_put_NormalMap(This,newVal) (This)->lpVtbl->put_NormalMap(This,newVal)
+#define IFlipper_get_ORMMap(This,pVal) (This)->lpVtbl->get_ORMMap(This,pVal)
+#define IFlipper_put_ORMMap(This,newVal) (This)->lpVtbl->put_ORMMap(This,newVal)
+#define IFlipper_get_EmissionMap(This,pVal) (This)->lpVtbl->get_EmissionMap(This,pVal)
+#define IFlipper_put_EmissionMap(This,newVal) (This)->lpVtbl->put_EmissionMap(This,newVal)
+
 #else
 /*** IUnknown methods ***/
 static inline HRESULT IFlipper_QueryInterface(IFlipper* This,REFIID riid,void **ppvObject) {
@@ -6610,6 +6724,24 @@ static inline HRESULT IFlipper_get_ReflectionEnabled(IFlipper* This,VARIANT_BOOL
 }
 static inline HRESULT IFlipper_put_ReflectionEnabled(IFlipper* This,VARIANT_BOOL newVal) {
     return This->lpVtbl->put_ReflectionEnabled(This,newVal);
+}
+static inline HRESULT IFlipper_get_NormalMap(IFlipper* This,BSTR *pVal) {
+    return This->lpVtbl->get_NormalMap(This,pVal);
+}
+static inline HRESULT IFlipper_put_NormalMap(IFlipper* This,BSTR newVal) {
+    return This->lpVtbl->put_NormalMap(This,newVal);
+}
+static inline HRESULT IFlipper_get_ORMMap(IFlipper* This,BSTR *pVal) {
+    return This->lpVtbl->get_ORMMap(This,pVal);
+}
+static inline HRESULT IFlipper_put_ORMMap(IFlipper* This,BSTR newVal) {
+    return This->lpVtbl->put_ORMMap(This,newVal);
+}
+static inline HRESULT IFlipper_get_EmissionMap(IFlipper* This,BSTR *pVal) {
+    return This->lpVtbl->get_EmissionMap(This,pVal);
+}
+static inline HRESULT IFlipper_put_EmissionMap(IFlipper* This,BSTR newVal) {
+    return This->lpVtbl->put_EmissionMap(This,newVal);
 }
 #endif
 #endif
@@ -7268,6 +7400,24 @@ IPlunger : public IDispatch
     virtual HRESULT STDMETHODCALLTYPE put_ReflectionEnabled(
         VARIANT_BOOL newVal) = 0;
 
+    virtual HRESULT STDMETHODCALLTYPE get_NormalMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_NormalMap(
+        BSTR newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_ORMMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_ORMMap(
+        BSTR newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_EmissionMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_EmissionMap(
+        BSTR newVal) = 0;
+
 };
 #ifdef __CRT_UUID_DECL
 __CRT_UUID_DECL(IPlunger, 0x3b0bf779, 0xb5d2, 0x4445, 0xb8,0x04, 0xef,0x1e,0x98,0x90,0xfe,0x98)
@@ -7604,6 +7754,30 @@ typedef struct IPlungerVtbl {
         IPlunger *This,
         VARIANT_BOOL newVal);
 
+    HRESULT (STDMETHODCALLTYPE *get_NormalMap)(
+        IPlunger *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_NormalMap)(
+        IPlunger *This,
+        BSTR newVal);
+
+    HRESULT (STDMETHODCALLTYPE *get_ORMMap)(
+        IPlunger *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_ORMMap)(
+        IPlunger *This,
+        BSTR newVal);
+
+    HRESULT (STDMETHODCALLTYPE *get_EmissionMap)(
+        IPlunger *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_EmissionMap)(
+        IPlunger *This,
+        BSTR newVal);
+
     END_INTERFACE
 } IPlungerVtbl;
 
@@ -7694,7 +7868,13 @@ interface IPlunger {
 #define IPlunger_get_MomentumXfer(This,pVal) (This)->lpVtbl->get_MomentumXfer(This,pVal)
 #define IPlunger_put_MomentumXfer(This,newVal) (This)->lpVtbl->put_MomentumXfer(This,newVal)
 #define IPlunger_get_ReflectionEnabled(This,pVal) (This)->lpVtbl->get_ReflectionEnabled(This,pVal)
-#define IPlunger_put_ReflectionEnabled(This,newVal) (This)->lpVtbl->put_ReflectionEnabled(This,newVal)
+#define IPlunger_put_ReflectionEnabled(This,newVal) (This)->lpVtbl->put_ReflectionEnabled(This,newVal)#define IPlunger_get_NormalMap(This,pVal) (This)->lpVtbl->get_NormalMap(This,pVal)
+#define IPlunger_put_NormalMap(This,newVal) (This)->lpVtbl->put_NormalMap(This,newVal)
+#define IPlunger_get_ORMMap(This,pVal) (This)->lpVtbl->get_ORMMap(This,pVal)
+#define IPlunger_put_ORMMap(This,newVal) (This)->lpVtbl->put_ORMMap(This,newVal)
+#define IPlunger_get_EmissionMap(This,pVal) (This)->lpVtbl->get_EmissionMap(This,pVal)
+#define IPlunger_put_EmissionMap(This,newVal) (This)->lpVtbl->put_EmissionMap(This,newVal)
+
 #else
 /*** IUnknown methods ***/
 static inline HRESULT IPlunger_QueryInterface(IPlunger* This,REFIID riid,void **ppvObject) {
@@ -7935,6 +8115,24 @@ static inline HRESULT IPlunger_get_ReflectionEnabled(IPlunger* This,VARIANT_BOOL
 }
 static inline HRESULT IPlunger_put_ReflectionEnabled(IPlunger* This,VARIANT_BOOL newVal) {
     return This->lpVtbl->put_ReflectionEnabled(This,newVal);
+}
+static inline HRESULT IPlunger_get_NormalMap(IPlunger* This,BSTR *pVal) {
+    return This->lpVtbl->get_NormalMap(This,pVal);
+}
+static inline HRESULT IPlunger_put_NormalMap(IPlunger* This,BSTR newVal) {
+    return This->lpVtbl->put_NormalMap(This,newVal);
+}
+static inline HRESULT IPlunger_get_ORMMap(IPlunger* This,BSTR *pVal) {
+    return This->lpVtbl->get_ORMMap(This,pVal);
+}
+static inline HRESULT IPlunger_put_ORMMap(IPlunger* This,BSTR newVal) {
+    return This->lpVtbl->put_ORMMap(This,newVal);
+}
+static inline HRESULT IPlunger_get_EmissionMap(IPlunger* This,BSTR *pVal) {
+    return This->lpVtbl->get_EmissionMap(This,pVal);
+}
+static inline HRESULT IPlunger_put_EmissionMap(IPlunger* This,BSTR newVal) {
+    return This->lpVtbl->put_EmissionMap(This,newVal);
 }
 #endif
 #endif
@@ -8837,6 +9035,24 @@ IBumper : public IDispatch
     virtual HRESULT STDMETHODCALLTYPE PlayHit(
         ) = 0;
 
+    virtual HRESULT STDMETHODCALLTYPE get_NormalMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_NormalMap(
+        BSTR newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_ORMMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_ORMMap(
+        BSTR newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_EmissionMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_EmissionMap(
+        BSTR newVal) = 0;
+
 };
 #ifdef __CRT_UUID_DECL
 __CRT_UUID_DECL(IBumper, 0x4cb2fcca, 0x9336, 0x48ff, 0x90,0xbd, 0xf8,0xd0,0x1c,0x16,0xbe,0x8c)
@@ -9119,6 +9335,30 @@ typedef struct IBumperVtbl {
     HRESULT (STDMETHODCALLTYPE *PlayHit)(
         IBumper *This);
 
+    HRESULT (STDMETHODCALLTYPE *get_NormalMap)(
+        IBumper *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_NormalMap)(
+        IBumper *This,
+        BSTR newVal);
+
+    HRESULT (STDMETHODCALLTYPE *get_ORMMap)(
+        IBumper *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_ORMMap)(
+        IBumper *This,
+        BSTR newVal);
+
+    HRESULT (STDMETHODCALLTYPE *get_EmissionMap)(
+        IBumper *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_EmissionMap)(
+        IBumper *This,
+        BSTR newVal);
+
     END_INTERFACE
 } IBumperVtbl;
 
@@ -9195,7 +9435,13 @@ interface IBumper {
 #define IBumper_put_EnableSkirtAnimation(This,newVal) (This)->lpVtbl->put_EnableSkirtAnimation(This,newVal)
 #define IBumper_get_RotX(This,pVal) (This)->lpVtbl->get_RotX(This,pVal)
 #define IBumper_get_RotY(This,pVal) (This)->lpVtbl->get_RotY(This,pVal)
-#define IBumper_PlayHit(This) (This)->lpVtbl->PlayHit(This)
+#define IBumper_PlayHit(This) (This)->lpVtbl->PlayHit(This)#define IBumper_get_NormalMap(This,pVal) (This)->lpVtbl->get_NormalMap(This,pVal)
+#define IBumper_put_NormalMap(This,newVal) (This)->lpVtbl->put_NormalMap(This,newVal)
+#define IBumper_get_ORMMap(This,pVal) (This)->lpVtbl->get_ORMMap(This,pVal)
+#define IBumper_put_ORMMap(This,newVal) (This)->lpVtbl->put_ORMMap(This,newVal)
+#define IBumper_get_EmissionMap(This,pVal) (This)->lpVtbl->get_EmissionMap(This,pVal)
+#define IBumper_put_EmissionMap(This,newVal) (This)->lpVtbl->put_EmissionMap(This,newVal)
+
 #else
 /*** IUnknown methods ***/
 static inline HRESULT IBumper_QueryInterface(IBumper* This,REFIID riid,void **ppvObject) {
@@ -9394,6 +9640,24 @@ static inline HRESULT IBumper_get_RotY(IBumper* This,float *pVal) {
 }
 static inline HRESULT IBumper_PlayHit(IBumper* This) {
     return This->lpVtbl->PlayHit(This);
+}
+static inline HRESULT IBumper_get_NormalMap(IBumper* This,BSTR *pVal) {
+    return This->lpVtbl->get_NormalMap(This,pVal);
+}
+static inline HRESULT IBumper_put_NormalMap(IBumper* This,BSTR newVal) {
+    return This->lpVtbl->put_NormalMap(This,newVal);
+}
+static inline HRESULT IBumper_get_ORMMap(IBumper* This,BSTR *pVal) {
+    return This->lpVtbl->get_ORMMap(This,pVal);
+}
+static inline HRESULT IBumper_put_ORMMap(IBumper* This,BSTR newVal) {
+    return This->lpVtbl->put_ORMMap(This,newVal);
+}
+static inline HRESULT IBumper_get_EmissionMap(IBumper* This,BSTR *pVal) {
+    return This->lpVtbl->get_EmissionMap(This,pVal);
+}
+static inline HRESULT IBumper_put_EmissionMap(IBumper* This,BSTR newVal) {
+    return This->lpVtbl->put_EmissionMap(This,newVal);
 }
 #endif
 #endif
@@ -10364,6 +10628,12 @@ ILight : public IDispatch
     virtual HRESULT STDMETHODCALLTYPE get_FilamentTemperature(
         float *pVal) = 0;
 
+    virtual HRESULT STDMETHODCALLTYPE get_PBR(
+        VARIANT_BOOL *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_PBR(
+        VARIANT_BOOL newVal) = 0;
+
 };
 #ifdef __CRT_UUID_DECL
 __CRT_UUID_DECL(ILight, 0xd3013008, 0x52af, 0x410b, 0xad,0x03, 0x66,0xeb,0x37,0xd1,0xc8,0xac)
@@ -10693,6 +10963,14 @@ typedef struct ILightVtbl {
         ILight *This,
         float *pVal);
 
+    HRESULT (STDMETHODCALLTYPE *get_PBR)(
+        ILight *This,
+        VARIANT_BOOL *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_PBR)(
+        ILight *This,
+        VARIANT_BOOL newVal);
+
     END_INTERFACE
 } ILightVtbl;
 
@@ -10780,7 +11058,9 @@ interface ILight {
 #define ILight_put_Shadows(This,newVal) (This)->lpVtbl->put_Shadows(This,newVal)
 #define ILight_get_Fader(This,pVal) (This)->lpVtbl->get_Fader(This,pVal)
 #define ILight_put_Fader(This,newVal) (This)->lpVtbl->put_Fader(This,newVal)
-#define ILight_get_FilamentTemperature(This,pVal) (This)->lpVtbl->get_FilamentTemperature(This,pVal)
+#define ILight_get_FilamentTemperature(This,pVal) (This)->lpVtbl->get_FilamentTemperature(This,pVal)#define ILight_get_PBR(This,pVal) (This)->lpVtbl->get_PBR(This,pVal)
+#define ILight_put_PBR(This,newVal) (This)->lpVtbl->put_PBR(This,newVal)
+
 #else
 /*** IUnknown methods ***/
 static inline HRESULT ILight_QueryInterface(ILight* This,REFIID riid,void **ppvObject) {
@@ -11012,6 +11292,12 @@ static inline HRESULT ILight_put_Fader(ILight* This,LONG newVal) {
 }
 static inline HRESULT ILight_get_FilamentTemperature(ILight* This,float *pVal) {
     return This->lpVtbl->get_FilamentTemperature(This,pVal);
+}
+static inline HRESULT ILight_get_PBR(ILight* This,VARIANT_BOOL *pVal) {
+    return This->lpVtbl->get_PBR(This,pVal);
+}
+static inline HRESULT ILight_put_PBR(ILight* This,VARIANT_BOOL newVal) {
+    return This->lpVtbl->put_PBR(This,newVal);
 }
 #endif
 #endif
@@ -11949,6 +12235,24 @@ IDecal : public IDispatch
     virtual HRESULT STDMETHODCALLTYPE put_Surface(
         BSTR newVal) = 0;
 
+    virtual HRESULT STDMETHODCALLTYPE get_NormalMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_NormalMap(
+        BSTR newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_ORMMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_ORMMap(
+        BSTR newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_EmissionMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_EmissionMap(
+        BSTR newVal) = 0;
+
 };
 #ifdef __CRT_UUID_DECL
 __CRT_UUID_DECL(IDecal, 0x56ddb212, 0x2f4a, 0x41ef, 0x87,0x5c, 0xc1,0xa9,0xca,0x20,0x38,0xc9)
@@ -12112,6 +12416,30 @@ typedef struct IDecalVtbl {
         IDecal *This,
         BSTR newVal);
 
+    HRESULT (STDMETHODCALLTYPE *get_NormalMap)(
+        IDecal *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_NormalMap)(
+        IDecal *This,
+        BSTR newVal);
+
+    HRESULT (STDMETHODCALLTYPE *get_ORMMap)(
+        IDecal *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_ORMMap)(
+        IDecal *This,
+        BSTR newVal);
+
+    HRESULT (STDMETHODCALLTYPE *get_EmissionMap)(
+        IDecal *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_EmissionMap)(
+        IDecal *This,
+        BSTR newVal);
+
     END_INTERFACE
 } IDecalVtbl;
 
@@ -12158,7 +12486,13 @@ interface IDecal {
 #define IDecal_get_HasVerticalText(This,pVal) (This)->lpVtbl->get_HasVerticalText(This,pVal)
 #define IDecal_put_HasVerticalText(This,newVal) (This)->lpVtbl->put_HasVerticalText(This,newVal)
 #define IDecal_get_Surface(This,pVal) (This)->lpVtbl->get_Surface(This,pVal)
-#define IDecal_put_Surface(This,newVal) (This)->lpVtbl->put_Surface(This,newVal)
+#define IDecal_put_Surface(This,newVal) (This)->lpVtbl->put_Surface(This,newVal)#define IDecal_get_NormalMap(This,pVal) (This)->lpVtbl->get_NormalMap(This,pVal)
+#define IDecal_put_NormalMap(This,newVal) (This)->lpVtbl->put_NormalMap(This,newVal)
+#define IDecal_get_ORMMap(This,pVal) (This)->lpVtbl->get_ORMMap(This,pVal)
+#define IDecal_put_ORMMap(This,newVal) (This)->lpVtbl->put_ORMMap(This,newVal)
+#define IDecal_get_EmissionMap(This,pVal) (This)->lpVtbl->get_EmissionMap(This,pVal)
+#define IDecal_put_EmissionMap(This,newVal) (This)->lpVtbl->put_EmissionMap(This,newVal)
+
 #else
 /*** IUnknown methods ***/
 static inline HRESULT IDecal_QueryInterface(IDecal* This,REFIID riid,void **ppvObject) {
@@ -12267,6 +12601,24 @@ static inline HRESULT IDecal_get_Surface(IDecal* This,BSTR *pVal) {
 }
 static inline HRESULT IDecal_put_Surface(IDecal* This,BSTR newVal) {
     return This->lpVtbl->put_Surface(This,newVal);
+}
+static inline HRESULT IDecal_get_NormalMap(IDecal* This,BSTR *pVal) {
+    return This->lpVtbl->get_NormalMap(This,pVal);
+}
+static inline HRESULT IDecal_put_NormalMap(IDecal* This,BSTR newVal) {
+    return This->lpVtbl->put_NormalMap(This,newVal);
+}
+static inline HRESULT IDecal_get_ORMMap(IDecal* This,BSTR *pVal) {
+    return This->lpVtbl->get_ORMMap(This,pVal);
+}
+static inline HRESULT IDecal_put_ORMMap(IDecal* This,BSTR newVal) {
+    return This->lpVtbl->put_ORMMap(This,newVal);
+}
+static inline HRESULT IDecal_get_EmissionMap(IDecal* This,BSTR *pVal) {
+    return This->lpVtbl->get_EmissionMap(This,pVal);
+}
+static inline HRESULT IDecal_put_EmissionMap(IDecal* This,BSTR newVal) {
+    return This->lpVtbl->put_EmissionMap(This,newVal);
 }
 #endif
 #endif
@@ -12775,6 +13127,18 @@ IPrimitive : public IDispatch
 
     virtual HRESULT STDMETHODCALLTYPE put_ObjectSpaceNormalMap(
         VARIANT_BOOL newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_ORMMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_ORMMap(
+        BSTR newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_EmissionMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_EmissionMap(
+        BSTR newVal) = 0;
 
 };
 #ifdef __CRT_UUID_DECL
@@ -13331,6 +13695,22 @@ typedef struct IPrimitiveVtbl {
         IPrimitive *This,
         VARIANT_BOOL newVal);
 
+    HRESULT (STDMETHODCALLTYPE *get_ORMMap)(
+        IPrimitive *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_ORMMap)(
+        IPrimitive *This,
+        BSTR newVal);
+
+    HRESULT (STDMETHODCALLTYPE *get_EmissionMap)(
+        IPrimitive *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_EmissionMap)(
+        IPrimitive *This,
+        BSTR newVal);
+
     END_INTERFACE
 } IPrimitiveVtbl;
 
@@ -13475,7 +13855,11 @@ interface IPrimitive {
 #define IPrimitive_put_OverwritePhysics(This,newVal) (This)->lpVtbl->put_OverwritePhysics(This,newVal)
 #define IPrimitive_get_HitThreshold(This,pVal) (This)->lpVtbl->get_HitThreshold(This,pVal)
 #define IPrimitive_get_ObjectSpaceNormalMap(This,pVal) (This)->lpVtbl->get_ObjectSpaceNormalMap(This,pVal)
-#define IPrimitive_put_ObjectSpaceNormalMap(This,newVal) (This)->lpVtbl->put_ObjectSpaceNormalMap(This,newVal)
+#define IPrimitive_put_ObjectSpaceNormalMap(This,newVal) (This)->lpVtbl->put_ObjectSpaceNormalMap(This,newVal)#define IPrimitive_get_ORMMap(This,pVal) (This)->lpVtbl->get_ORMMap(This,pVal)
+#define IPrimitive_put_ORMMap(This,newVal) (This)->lpVtbl->put_ORMMap(This,newVal)
+#define IPrimitive_get_EmissionMap(This,pVal) (This)->lpVtbl->get_EmissionMap(This,pVal)
+#define IPrimitive_put_EmissionMap(This,newVal) (This)->lpVtbl->put_EmissionMap(This,newVal)
+
 #else
 /*** IUnknown methods ***/
 static inline HRESULT IPrimitive_QueryInterface(IPrimitive* This,REFIID riid,void **ppvObject) {
@@ -13879,6 +14263,18 @@ static inline HRESULT IPrimitive_get_ObjectSpaceNormalMap(IPrimitive* This,VARIA
 static inline HRESULT IPrimitive_put_ObjectSpaceNormalMap(IPrimitive* This,VARIANT_BOOL newVal) {
     return This->lpVtbl->put_ObjectSpaceNormalMap(This,newVal);
 }
+static inline HRESULT IPrimitive_get_ORMMap(IPrimitive* This,BSTR *pVal) {
+    return This->lpVtbl->get_ORMMap(This,pVal);
+}
+static inline HRESULT IPrimitive_put_ORMMap(IPrimitive* This,BSTR newVal) {
+    return This->lpVtbl->put_ORMMap(This,newVal);
+}
+static inline HRESULT IPrimitive_get_EmissionMap(IPrimitive* This,BSTR *pVal) {
+    return This->lpVtbl->get_EmissionMap(This,pVal);
+}
+static inline HRESULT IPrimitive_put_EmissionMap(IPrimitive* This,BSTR newVal) {
+    return This->lpVtbl->put_EmissionMap(This,newVal);
+}
 #endif
 #endif
 
@@ -14212,6 +14608,24 @@ IHitTarget : public IDispatch
     virtual HRESULT STDMETHODCALLTYPE get_HitThreshold(
         float *pVal) = 0;
 
+    virtual HRESULT STDMETHODCALLTYPE get_NormalMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_NormalMap(
+        BSTR newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_ORMMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_ORMMap(
+        BSTR newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_EmissionMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_EmissionMap(
+        BSTR newVal) = 0;
+
 };
 #ifdef __CRT_UUID_DECL
 __CRT_UUID_DECL(IHitTarget, 0xa67de998, 0x7d97, 0x4e03, 0xbe,0x91, 0x55,0xbf,0xd3,0xa4,0x8d,0xb6)
@@ -14535,6 +14949,30 @@ typedef struct IHitTargetVtbl {
         IHitTarget *This,
         float *pVal);
 
+    HRESULT (STDMETHODCALLTYPE *get_NormalMap)(
+        IHitTarget *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_NormalMap)(
+        IHitTarget *This,
+        BSTR newVal);
+
+    HRESULT (STDMETHODCALLTYPE *get_ORMMap)(
+        IHitTarget *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_ORMMap)(
+        IHitTarget *This,
+        BSTR newVal);
+
+    HRESULT (STDMETHODCALLTYPE *get_EmissionMap)(
+        IHitTarget *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_EmissionMap)(
+        IHitTarget *This,
+        BSTR newVal);
+
     END_INTERFACE
 } IHitTargetVtbl;
 
@@ -14621,7 +15059,13 @@ interface IHitTarget {
 #define IHitTarget_put_PhysicsMaterial(This,newVal) (This)->lpVtbl->put_PhysicsMaterial(This,newVal)
 #define IHitTarget_get_OverwritePhysics(This,pVal) (This)->lpVtbl->get_OverwritePhysics(This,pVal)
 #define IHitTarget_put_OverwritePhysics(This,newVal) (This)->lpVtbl->put_OverwritePhysics(This,newVal)
-#define IHitTarget_get_HitThreshold(This,pVal) (This)->lpVtbl->get_HitThreshold(This,pVal)
+#define IHitTarget_get_HitThreshold(This,pVal) (This)->lpVtbl->get_HitThreshold(This,pVal)#define IHitTarget_get_NormalMap(This,pVal) (This)->lpVtbl->get_NormalMap(This,pVal)
+#define IHitTarget_put_NormalMap(This,newVal) (This)->lpVtbl->put_NormalMap(This,newVal)
+#define IHitTarget_get_ORMMap(This,pVal) (This)->lpVtbl->get_ORMMap(This,pVal)
+#define IHitTarget_put_ORMMap(This,newVal) (This)->lpVtbl->put_ORMMap(This,newVal)
+#define IHitTarget_get_EmissionMap(This,pVal) (This)->lpVtbl->get_EmissionMap(This,pVal)
+#define IHitTarget_put_EmissionMap(This,newVal) (This)->lpVtbl->put_EmissionMap(This,newVal)
+
 #else
 /*** IUnknown methods ***/
 static inline HRESULT IHitTarget_QueryInterface(IHitTarget* This,REFIID riid,void **ppvObject) {
@@ -14850,6 +15294,24 @@ static inline HRESULT IHitTarget_put_OverwritePhysics(IHitTarget* This,VARIANT_B
 }
 static inline HRESULT IHitTarget_get_HitThreshold(IHitTarget* This,float *pVal) {
     return This->lpVtbl->get_HitThreshold(This,pVal);
+}
+static inline HRESULT IHitTarget_get_NormalMap(IHitTarget* This,BSTR *pVal) {
+    return This->lpVtbl->get_NormalMap(This,pVal);
+}
+static inline HRESULT IHitTarget_put_NormalMap(IHitTarget* This,BSTR newVal) {
+    return This->lpVtbl->put_NormalMap(This,newVal);
+}
+static inline HRESULT IHitTarget_get_ORMMap(IHitTarget* This,BSTR *pVal) {
+    return This->lpVtbl->get_ORMMap(This,pVal);
+}
+static inline HRESULT IHitTarget_put_ORMMap(IHitTarget* This,BSTR newVal) {
+    return This->lpVtbl->put_ORMMap(This,newVal);
+}
+static inline HRESULT IHitTarget_get_EmissionMap(IHitTarget* This,BSTR *pVal) {
+    return This->lpVtbl->get_EmissionMap(This,pVal);
+}
+static inline HRESULT IHitTarget_put_EmissionMap(IHitTarget* This,BSTR newVal) {
+    return This->lpVtbl->put_EmissionMap(This,newVal);
 }
 #endif
 #endif
@@ -15875,6 +16337,24 @@ ISpinner : public IDispatch
     virtual HRESULT STDMETHODCALLTYPE get_CurrentAngle(
         float *pVal) = 0;
 
+    virtual HRESULT STDMETHODCALLTYPE get_NormalMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_NormalMap(
+        BSTR newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_ORMMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_ORMMap(
+        BSTR newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_EmissionMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_EmissionMap(
+        BSTR newVal) = 0;
+
 };
 #ifdef __CRT_UUID_DECL
 __CRT_UUID_DECL(ISpinner, 0xed5ce186, 0xe654, 0x4aeb, 0x99,0x59, 0xe4,0xdc,0x93,0x12,0x89,0x58)
@@ -16082,6 +16562,30 @@ typedef struct ISpinnerVtbl {
         ISpinner *This,
         float *pVal);
 
+    HRESULT (STDMETHODCALLTYPE *get_NormalMap)(
+        ISpinner *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_NormalMap)(
+        ISpinner *This,
+        BSTR newVal);
+
+    HRESULT (STDMETHODCALLTYPE *get_ORMMap)(
+        ISpinner *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_ORMMap)(
+        ISpinner *This,
+        BSTR newVal);
+
+    HRESULT (STDMETHODCALLTYPE *get_EmissionMap)(
+        ISpinner *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_EmissionMap)(
+        ISpinner *This,
+        BSTR newVal);
+
     END_INTERFACE
 } ISpinnerVtbl;
 
@@ -16139,7 +16643,13 @@ interface ISpinner {
 #define ISpinner_put_Visible(This,newVal) (This)->lpVtbl->put_Visible(This,newVal)
 #define ISpinner_get_ReflectionEnabled(This,pVal) (This)->lpVtbl->get_ReflectionEnabled(This,pVal)
 #define ISpinner_put_ReflectionEnabled(This,newVal) (This)->lpVtbl->put_ReflectionEnabled(This,newVal)
-#define ISpinner_get_CurrentAngle(This,pVal) (This)->lpVtbl->get_CurrentAngle(This,pVal)
+#define ISpinner_get_CurrentAngle(This,pVal) (This)->lpVtbl->get_CurrentAngle(This,pVal)#define ISpinner_get_NormalMap(This,pVal) (This)->lpVtbl->get_NormalMap(This,pVal)
+#define ISpinner_put_NormalMap(This,newVal) (This)->lpVtbl->put_NormalMap(This,newVal)
+#define ISpinner_get_ORMMap(This,pVal) (This)->lpVtbl->get_ORMMap(This,pVal)
+#define ISpinner_put_ORMMap(This,newVal) (This)->lpVtbl->put_ORMMap(This,newVal)
+#define ISpinner_get_EmissionMap(This,pVal) (This)->lpVtbl->get_EmissionMap(This,pVal)
+#define ISpinner_put_EmissionMap(This,newVal) (This)->lpVtbl->put_EmissionMap(This,newVal)
+
 #else
 /*** IUnknown methods ***/
 static inline HRESULT ISpinner_QueryInterface(ISpinner* This,REFIID riid,void **ppvObject) {
@@ -16281,6 +16791,24 @@ static inline HRESULT ISpinner_put_ReflectionEnabled(ISpinner* This,VARIANT_BOOL
 }
 static inline HRESULT ISpinner_get_CurrentAngle(ISpinner* This,float *pVal) {
     return This->lpVtbl->get_CurrentAngle(This,pVal);
+}
+static inline HRESULT ISpinner_get_NormalMap(ISpinner* This,BSTR *pVal) {
+    return This->lpVtbl->get_NormalMap(This,pVal);
+}
+static inline HRESULT ISpinner_put_NormalMap(ISpinner* This,BSTR newVal) {
+    return This->lpVtbl->put_NormalMap(This,newVal);
+}
+static inline HRESULT ISpinner_get_ORMMap(ISpinner* This,BSTR *pVal) {
+    return This->lpVtbl->get_ORMMap(This,pVal);
+}
+static inline HRESULT ISpinner_put_ORMMap(ISpinner* This,BSTR newVal) {
+    return This->lpVtbl->put_ORMMap(This,newVal);
+}
+static inline HRESULT ISpinner_get_EmissionMap(ISpinner* This,BSTR *pVal) {
+    return This->lpVtbl->get_EmissionMap(This,pVal);
+}
+static inline HRESULT ISpinner_put_EmissionMap(ISpinner* This,BSTR newVal) {
+    return This->lpVtbl->put_EmissionMap(This,newVal);
 }
 #endif
 #endif
@@ -16597,6 +17125,24 @@ IRamp : public IDispatch
     virtual HRESULT STDMETHODCALLTYPE put_OverwritePhysics(
         VARIANT_BOOL newVal) = 0;
 
+    virtual HRESULT STDMETHODCALLTYPE get_NormalMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_NormalMap(
+        BSTR newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_ORMMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_ORMMap(
+        BSTR newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_EmissionMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_EmissionMap(
+        BSTR newVal) = 0;
+
 };
 #ifdef __CRT_UUID_DECL
 __CRT_UUID_DECL(IRamp, 0xa90308cf, 0x09d8, 0x4c38, 0x99,0xb6, 0x9e,0x37,0x1e,0xa4,0x1b,0x97)
@@ -16896,6 +17442,30 @@ typedef struct IRampVtbl {
         IRamp *This,
         VARIANT_BOOL newVal);
 
+    HRESULT (STDMETHODCALLTYPE *get_NormalMap)(
+        IRamp *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_NormalMap)(
+        IRamp *This,
+        BSTR newVal);
+
+    HRESULT (STDMETHODCALLTYPE *get_ORMMap)(
+        IRamp *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_ORMMap)(
+        IRamp *This,
+        BSTR newVal);
+
+    HRESULT (STDMETHODCALLTYPE *get_EmissionMap)(
+        IRamp *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_EmissionMap)(
+        IRamp *This,
+        BSTR newVal);
+
     END_INTERFACE
 } IRampVtbl;
 
@@ -16976,7 +17546,13 @@ interface IRamp {
 #define IRamp_get_PhysicsMaterial(This,pVal) (This)->lpVtbl->get_PhysicsMaterial(This,pVal)
 #define IRamp_put_PhysicsMaterial(This,newVal) (This)->lpVtbl->put_PhysicsMaterial(This,newVal)
 #define IRamp_get_OverwritePhysics(This,pVal) (This)->lpVtbl->get_OverwritePhysics(This,pVal)
-#define IRamp_put_OverwritePhysics(This,newVal) (This)->lpVtbl->put_OverwritePhysics(This,newVal)
+#define IRamp_put_OverwritePhysics(This,newVal) (This)->lpVtbl->put_OverwritePhysics(This,newVal)#define IRamp_get_NormalMap(This,pVal) (This)->lpVtbl->get_NormalMap(This,pVal)
+#define IRamp_put_NormalMap(This,newVal) (This)->lpVtbl->put_NormalMap(This,newVal)
+#define IRamp_get_ORMMap(This,pVal) (This)->lpVtbl->get_ORMMap(This,pVal)
+#define IRamp_put_ORMMap(This,newVal) (This)->lpVtbl->put_ORMMap(This,newVal)
+#define IRamp_get_EmissionMap(This,pVal) (This)->lpVtbl->get_EmissionMap(This,pVal)
+#define IRamp_put_EmissionMap(This,newVal) (This)->lpVtbl->put_EmissionMap(This,newVal)
+
 #else
 /*** IUnknown methods ***/
 static inline HRESULT IRamp_QueryInterface(IRamp* This,REFIID riid,void **ppvObject) {
@@ -17187,6 +17763,24 @@ static inline HRESULT IRamp_get_OverwritePhysics(IRamp* This,VARIANT_BOOL *pVal)
 }
 static inline HRESULT IRamp_put_OverwritePhysics(IRamp* This,VARIANT_BOOL newVal) {
     return This->lpVtbl->put_OverwritePhysics(This,newVal);
+}
+static inline HRESULT IRamp_get_NormalMap(IRamp* This,BSTR *pVal) {
+    return This->lpVtbl->get_NormalMap(This,pVal);
+}
+static inline HRESULT IRamp_put_NormalMap(IRamp* This,BSTR newVal) {
+    return This->lpVtbl->put_NormalMap(This,newVal);
+}
+static inline HRESULT IRamp_get_ORMMap(IRamp* This,BSTR *pVal) {
+    return This->lpVtbl->get_ORMMap(This,pVal);
+}
+static inline HRESULT IRamp_put_ORMMap(IRamp* This,BSTR newVal) {
+    return This->lpVtbl->put_ORMMap(This,newVal);
+}
+static inline HRESULT IRamp_get_EmissionMap(IRamp* This,BSTR *pVal) {
+    return This->lpVtbl->get_EmissionMap(This,pVal);
+}
+static inline HRESULT IRamp_put_EmissionMap(IRamp* This,BSTR newVal) {
+    return This->lpVtbl->put_EmissionMap(This,newVal);
 }
 #endif
 #endif
@@ -18070,6 +18664,24 @@ IRubber : public IDispatch
     virtual HRESULT STDMETHODCALLTYPE put_OverwritePhysics(
         VARIANT_BOOL newVal) = 0;
 
+    virtual HRESULT STDMETHODCALLTYPE get_NormalMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_NormalMap(
+        BSTR newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_ORMMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_ORMMap(
+        BSTR newVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE get_EmissionMap(
+        BSTR *pVal) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE put_EmissionMap(
+        BSTR newVal) = 0;
+
 };
 #ifdef __CRT_UUID_DECL
 __CRT_UUID_DECL(IRubber, 0x496cc241, 0x134d, 0x4543, 0x99,0x74, 0x5b,0x0d,0xf6,0xbc,0x5d,0x1d)
@@ -18313,6 +18925,30 @@ typedef struct IRubberVtbl {
         IRubber *This,
         VARIANT_BOOL newVal);
 
+    HRESULT (STDMETHODCALLTYPE *get_NormalMap)(
+        IRubber *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_NormalMap)(
+        IRubber *This,
+        BSTR newVal);
+
+    HRESULT (STDMETHODCALLTYPE *get_ORMMap)(
+        IRubber *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_ORMMap)(
+        IRubber *This,
+        BSTR newVal);
+
+    HRESULT (STDMETHODCALLTYPE *get_EmissionMap)(
+        IRubber *This,
+        BSTR *pVal);
+
+    HRESULT (STDMETHODCALLTYPE *put_EmissionMap)(
+        IRubber *This,
+        BSTR newVal);
+
     END_INTERFACE
 } IRubberVtbl;
 
@@ -18379,7 +19015,13 @@ interface IRubber {
 #define IRubber_get_PhysicsMaterial(This,pVal) (This)->lpVtbl->get_PhysicsMaterial(This,pVal)
 #define IRubber_put_PhysicsMaterial(This,newVal) (This)->lpVtbl->put_PhysicsMaterial(This,newVal)
 #define IRubber_get_OverwritePhysics(This,pVal) (This)->lpVtbl->get_OverwritePhysics(This,pVal)
-#define IRubber_put_OverwritePhysics(This,newVal) (This)->lpVtbl->put_OverwritePhysics(This,newVal)
+#define IRubber_put_OverwritePhysics(This,newVal) (This)->lpVtbl->put_OverwritePhysics(This,newVal)#define IRubber_get_NormalMap(This,pVal) (This)->lpVtbl->get_NormalMap(This,pVal)
+#define IRubber_put_NormalMap(This,newVal) (This)->lpVtbl->put_NormalMap(This,newVal)
+#define IRubber_get_ORMMap(This,pVal) (This)->lpVtbl->get_ORMMap(This,pVal)
+#define IRubber_put_ORMMap(This,newVal) (This)->lpVtbl->put_ORMMap(This,newVal)
+#define IRubber_get_EmissionMap(This,pVal) (This)->lpVtbl->get_EmissionMap(This,pVal)
+#define IRubber_put_EmissionMap(This,newVal) (This)->lpVtbl->put_EmissionMap(This,newVal)
+
 #else
 /*** IUnknown methods ***/
 static inline HRESULT IRubber_QueryInterface(IRubber* This,REFIID riid,void **ppvObject) {
@@ -18548,6 +19190,24 @@ static inline HRESULT IRubber_get_OverwritePhysics(IRubber* This,VARIANT_BOOL *p
 }
 static inline HRESULT IRubber_put_OverwritePhysics(IRubber* This,VARIANT_BOOL newVal) {
     return This->lpVtbl->put_OverwritePhysics(This,newVal);
+}
+static inline HRESULT IRubber_get_NormalMap(IRubber* This,BSTR *pVal) {
+    return This->lpVtbl->get_NormalMap(This,pVal);
+}
+static inline HRESULT IRubber_put_NormalMap(IRubber* This,BSTR newVal) {
+    return This->lpVtbl->put_NormalMap(This,newVal);
+}
+static inline HRESULT IRubber_get_ORMMap(IRubber* This,BSTR *pVal) {
+    return This->lpVtbl->get_ORMMap(This,pVal);
+}
+static inline HRESULT IRubber_put_ORMMap(IRubber* This,BSTR newVal) {
+    return This->lpVtbl->put_ORMMap(This,newVal);
+}
+static inline HRESULT IRubber_get_EmissionMap(IRubber* This,BSTR *pVal) {
+    return This->lpVtbl->get_EmissionMap(This,pVal);
+}
+static inline HRESULT IRubber_put_EmissionMap(IRubber* This,BSTR newVal) {
+    return This->lpVtbl->put_EmissionMap(This,newVal);
 }
 #endif
 #endif

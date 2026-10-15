@@ -94,6 +94,18 @@ void BumperUIPart::UpdatePropertyPane(PropertyPane& props)
          m_part, "Reflection Enabled"s, //
          [](const Bumper* bumper) { return bumper->m_d.m_reflectionEnabled; }, //
          [](Bumper* bumper, bool v) { bumper->m_d.m_reflectionEnabled = v; });
+      props.ImageCombo<Bumper>(
+         m_part, "Normal Map"s, //
+         [](const Bumper* bumper) { return bumper->m_d.m_szNormalMap; }, //
+         [](Bumper* bumper, const string& v) { bumper->m_d.m_szNormalMap = v; });
+      props.ImageCombo<Bumper>(
+         m_part, "ORM Map"s, //
+         [](const Bumper* bumper) { return bumper->m_d.m_szORMMap; }, //
+         [](Bumper* bumper, const string& v) { bumper->m_d.m_szORMMap = v; });
+      props.ImageCombo<Bumper>(
+         m_part, "Emission Map"s, //
+         [](const Bumper* bumper) { return bumper->m_d.m_szEmissionMap; }, //
+         [](Bumper* bumper, const string& v) { bumper->m_d.m_szEmissionMap = v; });
       props.EndSection();
    }
 

@@ -5297,6 +5297,7 @@ STDMETHODIMP Surface::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT c
 			{ L"DisplayTexture", 13 },
 			{ L"Elasticity", 110 },
 			{ L"ElasticityFalloff", 120 },
+			{ L"EmissionMap", DISPID_Image6 },
 			{ L"FlipbookAnimation", 113 },
 			{ L"Friction", 114 },
 			{ L"HasHitEvent", 34 },
@@ -5307,6 +5308,8 @@ STDMETHODIMP Surface::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT c
 			{ L"IsBottomSolid", 116 },
 			{ L"IsDropped", 12 },
 			{ L"Name", DISPID_Name },
+			{ L"NormalMap", DISPID_Image3 },
+			{ L"ORMMap", DISPID_Image5 },
 			{ L"OverwritePhysics", 432 },
 			{ L"PhysicsMaterial", 734 },
 			{ L"PlaySlingshotHit", 999 },
@@ -5384,7 +5387,10 @@ static const char *Surface_dispid_name(DISPID dispId) {
 		case 999: return "PlaySlingshotHit";
 		case 734: return "PhysicsMaterial";
 		case 432: return "OverwritePhysics";
-		default: return "?";
+				case DISPID_Image3: return "NormalMap";
+		case DISPID_Image5: return "ORMMap";
+		case DISPID_Image6: return "EmissionMap";
+default: return "?";
 	}
 }
 
@@ -6132,6 +6138,66 @@ STDMETHODIMP Surface::Invoke(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WO
 			}
 			break;
 		}
+		case DISPID_Image3: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 927: [propget, id(DISPID_Image3), helpstring("property NormalMap")] HRESULT NormalMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_NormalMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 928: [propput, id(DISPID_Image3), helpstring("property NormalMap")] HRESULT NormalMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_NormalMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image5: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 929: [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_ORMMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 930: [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_ORMMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image6: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 931: [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_EmissionMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 932: [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_EmissionMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
 		default:
 		break;
 	}
@@ -6202,6 +6268,7 @@ STDMETHODIMP Flipper::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT c
 			{ L"CurrentAngle", 12 },
 			{ L"Elasticity", 110 },
 			{ L"ElasticityFalloff", 28 },
+			{ L"EmissionMap", DISPID_Image6 },
 			{ L"Enabled", 394 },
 			{ L"EndAngle", 7 },
 			{ L"EndRadius", 2 },
@@ -6215,6 +6282,8 @@ STDMETHODIMP Flipper::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT c
 			{ L"Mass", DISPID_Flipper_Speed },
 			{ L"Material", 340 },
 			{ L"Name", DISPID_Name },
+			{ L"NormalMap", DISPID_Image2 },
+			{ L"ORMMap", DISPID_Image5 },
 			{ L"OverridePhysics", DISPID_Flipper_OverridePhysics },
 			{ L"RampUp", 27 },
 			{ L"ReflectionEnabled", 431 },
@@ -6294,7 +6363,10 @@ static const char *Flipper_dispid_name(DISPID dispId) {
 		case 111: return "FlipperRadiusMin";
 		case DISPID_Image: return "Image";
 		case 431: return "ReflectionEnabled";
-		default: return "?";
+				case DISPID_Image2: return "NormalMap";
+		case DISPID_Image5: return "ORMMap";
+		case DISPID_Image6: return "EmissionMap";
+default: return "?";
 	}
 }
 
@@ -7017,6 +7089,66 @@ STDMETHODIMP Flipper::Invoke(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WO
 			}
 			break;
 		}
+		case DISPID_Image2: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 1039: [propget, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_NormalMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 1040: [propput, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_NormalMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image5: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 1041: [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_ORMMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 1042: [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_ORMMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image6: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 1043: [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_EmissionMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 1044: [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_EmissionMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
 		default:
 		break;
 	}
@@ -7284,6 +7416,7 @@ STDMETHODIMP Plunger::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT c
 			{ L"AnimFrames", DISPID_PluFrames },
 			{ L"AutoPlunger", 116 },
 			{ L"CreateBall", 5 },
+			{ L"EmissionMap", DISPID_Image6 },
 			{ L"Fire", 2 },
 			{ L"FireSpeed", 4 },
 			{ L"Image", DISPID_Image },
@@ -7293,6 +7426,8 @@ STDMETHODIMP Plunger::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT c
 			{ L"MomentumXfer", 118 },
 			{ L"MotionDevice", 216 },
 			{ L"Name", DISPID_Name },
+			{ L"NormalMap", DISPID_Image2 },
+			{ L"ORMMap", DISPID_Image5 },
 			{ L"ParkPosition", 112 },
 			{ L"Position", 6 },
 			{ L"PullBack", 1 },
@@ -7381,7 +7516,10 @@ static const char *Plunger_dispid_name(DISPID dispId) {
 		case 114: return "ScatterVelocity";
 		case 118: return "MomentumXfer";
 		case 431: return "ReflectionEnabled";
-		default: return "?";
+				case DISPID_Image2: return "NormalMap";
+		case DISPID_Image5: return "ORMMap";
+		case DISPID_Image6: return "EmissionMap";
+default: return "?";
 	}
 }
 
@@ -8107,6 +8245,66 @@ STDMETHODIMP Plunger::Invoke(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WO
 			}
 			break;
 		}
+		case DISPID_Image2: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 1183: [propget, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_NormalMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 1184: [propput, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_NormalMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image5: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 1185: [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_ORMMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 1186: [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_ORMMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image6: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 1187: [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_EmissionMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 1188: [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_EmissionMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
 		default:
 		break;
 	}
@@ -8666,12 +8864,15 @@ STDMETHODIMP Bumper::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cN
 			{ L"CapVisible", 109 },
 			{ L"Collidable", 111 },
 			{ L"CurrentRingOffset", 28 },
+			{ L"EmissionMap", DISPID_Image6 },
 			{ L"EnableSkirtAnimation", 822 },
 			{ L"Force", 2 },
 			{ L"HasHitEvent", 34 },
 			{ L"HeightScale", 24 },
 			{ L"Name", DISPID_Name },
+			{ L"NormalMap", DISPID_Image2 },
 			{ L"Orientation", 25 },
+			{ L"ORMMap", DISPID_Image5 },
 			{ L"PlayHit", 999 },
 			{ L"Radius", 8 },
 			{ L"ReflectionEnabled", 431 },
@@ -8744,7 +8945,10 @@ static const char *Bumper_dispid_name(DISPID dispId) {
 		case 827: return "RotX";
 		case 828: return "RotY";
 		case 999: return "PlayHit";
-		default: return "?";
+				case DISPID_Image2: return "NormalMap";
+		case DISPID_Image5: return "ORMMap";
+		case DISPID_Image6: return "EmissionMap";
+default: return "?";
 	}
 }
 
@@ -9333,6 +9537,66 @@ STDMETHODIMP Bumper::Invoke(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WOR
 			if (wFlags & DISPATCH_METHOD) {
 				// line 1316: [id(999), helpstring("method PlayHit")] HRESULT PlayHit();
 				hres = PlayHit();
+			}
+			break;
+		}
+		case DISPID_Image2: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 1335: [propget, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_NormalMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 1336: [propput, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_NormalMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image5: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 1337: [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_ORMMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 1338: [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_ORMMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image6: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 1339: [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_EmissionMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 1340: [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_EmissionMap(V_BSTR(&var0));
+				VariantClear(&var0);
 			}
 			break;
 		}
@@ -9939,6 +10203,7 @@ STDMETHODIMP Light::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNa
 			{ L"Intensity", 12 },
 			{ L"IntensityScale", 434 },
 			{ L"Name", DISPID_Name },
+			{ L"PBR", 460 },
 			{ L"ScaleBulbMesh", 425 },
 			{ L"Shadows", 456 },
 			{ L"ShowBulbMesh", 394 },
@@ -10012,7 +10277,8 @@ static const char *Light_dispid_name(DISPID dispId) {
 		case 456: return "Shadows";
 		case 458: return "Fader";
 		case 459: return "FilamentTemperature";
-		default: return "?";
+				case 460: return "PBR";
+default: return "?";
 	}
 }
 
@@ -10725,6 +10991,26 @@ STDMETHODIMP Light::Invoke(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD
 				// line 1479: [propget, id(459), helpstring("property FilamentTemperature")] HRESULT FilamentTemperature([out, retval] float *pVal);
 				V_VT(&res) = VT_R4;
 				hres = get_FilamentTemperature(&V_R4(&res));
+			}
+			break;
+		}
+		case 460: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 1504: [propget, id(460), helpstring("property PBR")] HRESULT PBR([out, retval] VARIANT_BOOL *pVal);
+				V_VT(&res) = VT_BOOL;
+				hres = get_PBR(&V_BOOL(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 1505: [propput, id(460), helpstring("property PBR")] HRESULT PBR([in] VARIANT_BOOL newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BOOL);
+				hres = put_PBR(V_BOOL(&var0));
+				VariantClear(&var0);
 			}
 			break;
 		}
@@ -11454,12 +11740,15 @@ STDMETHODIMP Decal::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNa
 		DISPID dispId;
 	} namesIdsList[] = {
 			{ NULL },
+			{ L"EmissionMap", DISPID_Image6 },
 			{ L"Font", DISPID_Decal_Font },
 			{ L"FontColor", 11 },
 			{ L"HasVerticalText", 13 },
 			{ L"Height", 4 },
 			{ L"Image", DISPID_Image },
 			{ L"Material", 340 },
+			{ L"NormalMap", DISPID_Image2 },
+			{ L"ORMMap", DISPID_Image5 },
 			{ L"Rotation", 1 },
 			{ L"SizingType", DISPID_Decal_SizingType },
 			{ L"Surface", DISPID_Surface },
@@ -11504,7 +11793,10 @@ static const char *Decal_dispid_name(DISPID dispId) {
 		case DISPID_Decal_Font: return "Font";
 		case 13: return "HasVerticalText";
 		case DISPID_Surface: return "Surface";
-		default: return "?";
+				case DISPID_Image2: return "NormalMap";
+		case DISPID_Image5: return "ORMMap";
+		case DISPID_Image6: return "EmissionMap";
+default: return "?";
 	}
 }
 
@@ -11812,6 +12104,66 @@ STDMETHODIMP Decal::Invoke(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD
 			}
 			break;
 		}
+		case DISPID_Image2: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 1638: [propget, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_NormalMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 1639: [propput, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_NormalMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image5: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 1640: [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_ORMMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 1641: [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_ORMMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image6: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 1642: [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_EmissionMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 1643: [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_EmissionMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
 		default:
 		break;
 	}
@@ -11889,6 +12241,7 @@ STDMETHODIMP Primitive::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT
 			{ L"EdgeFactorUI", 454 },
 			{ L"Elasticity", 110 },
 			{ L"ElasticityFalloff", 112 },
+			{ L"EmissionMap", DISPID_Image6 },
 			{ L"EnableDepthMask", 558 },
 			{ L"EnableStaticRendering", 398 },
 			{ L"Friction", 114 },
@@ -11904,6 +12257,7 @@ STDMETHODIMP Primitive::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT
 			{ L"ObjRotY", DISPID_OBJROT_Y },
 			{ L"ObjRotZ", DISPID_OBJROT_Z },
 			{ L"Opacity", 377 },
+			{ L"ORMMap", DISPID_Image5 },
 			{ L"OverwritePhysics", 432 },
 			{ L"PhysicsMaterial", 734 },
 			{ L"PlayAnim", 1 },
@@ -12028,7 +12382,9 @@ static const char *Primitive_dispid_name(DISPID dispId) {
 		case 432: return "OverwritePhysics";
 		case 735: return "HitThreshold";
 		case 824: return "ObjectSpaceNormalMap";
-		default: return "?";
+				case DISPID_Image5: return "ORMMap";
+		case DISPID_Image6: return "EmissionMap";
+default: return "?";
 	}
 }
 
@@ -13328,6 +13684,46 @@ STDMETHODIMP Primitive::Invoke(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, 
 			}
 			break;
 		}
+		case DISPID_Image5: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 1818: [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_ORMMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 1819: [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_ORMMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image6: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 1820: [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_EmissionMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 1821: [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_EmissionMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
 		default:
 		break;
 	}
@@ -13402,6 +13798,7 @@ STDMETHODIMP HitTarget::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT
 			{ L"DropSpeed", 377 },
 			{ L"Elasticity", 110 },
 			{ L"ElasticityFalloff", 112 },
+			{ L"EmissionMap", DISPID_Image6 },
 			{ L"Friction", 114 },
 			{ L"HasHitEvent", 34 },
 			{ L"HitThreshold", 727 },
@@ -13410,7 +13807,9 @@ STDMETHODIMP HitTarget::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT
 			{ L"LegacyMode", 433 },
 			{ L"Material", 340 },
 			{ L"Name", DISPID_Name },
+			{ L"NormalMap", DISPID_Image2 },
 			{ L"Orientation", DISPID_ROT_Z },
+			{ L"ORMMap", DISPID_Image5 },
 			{ L"OverwritePhysics", 432 },
 			{ L"PhysicsMaterial", 734 },
 			{ L"RaiseDelay", 726 },
@@ -13484,7 +13883,10 @@ static const char *HitTarget_dispid_name(DISPID dispId) {
 		case 734: return "PhysicsMaterial";
 		case 432: return "OverwritePhysics";
 		case 727: return "HitThreshold";
-		default: return "?";
+				case DISPID_Image2: return "NormalMap";
+		case DISPID_Image5: return "ORMMap";
+		case DISPID_Image6: return "EmissionMap";
+default: return "?";
 	}
 }
 
@@ -14178,6 +14580,66 @@ STDMETHODIMP HitTarget::Invoke(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, 
 				// line 1888: [propget, id(727), helpstring("property HitThreshold")] HRESULT HitThreshold([out, retval] float *pVal);
 				V_VT(&res) = VT_R4;
 				hres = get_HitThreshold(&V_R4(&res));
+			}
+			break;
+		}
+		case DISPID_Image2: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 1927: [propget, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_NormalMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 1928: [propput, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_NormalMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image5: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 1929: [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_ORMMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 1930: [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_ORMMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image6: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 1931: [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_EmissionMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 1932: [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_EmissionMap(V_BSTR(&var0));
+				VariantClear(&var0);
 			}
 			break;
 		}
@@ -14930,11 +15392,14 @@ STDMETHODIMP Spinner::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT c
 			{ L"CurrentAngle", 18 },
 			{ L"Damping", 7 },
 			{ L"Elasticity", 110 },
+			{ L"EmissionMap", DISPID_Image6 },
 			{ L"Height", 5 },
 			{ L"Image", DISPID_Image },
 			{ L"Length", DISPID_Spinner_Length },
 			{ L"Material", 340 },
 			{ L"Name", DISPID_Name },
+			{ L"NormalMap", DISPID_Image2 },
+			{ L"ORMMap", DISPID_Image5 },
 			{ L"ReflectionEnabled", 431 },
 			{ L"Rotation", 4 },
 			{ L"ShowBracket", 108 },
@@ -14987,7 +15452,10 @@ static const char *Spinner_dispid_name(DISPID dispId) {
 		case 458: return "Visible";
 		case 431: return "ReflectionEnabled";
 		case 18: return "CurrentAngle";
-		default: return "?";
+				case DISPID_Image2: return "NormalMap";
+		case DISPID_Image5: return "ORMMap";
+		case DISPID_Image6: return "EmissionMap";
+default: return "?";
 	}
 }
 
@@ -15396,6 +15864,66 @@ STDMETHODIMP Spinner::Invoke(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WO
 			}
 			break;
 		}
+		case DISPID_Image2: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 2086: [propget, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_NormalMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 2087: [propput, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_NormalMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image5: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 2088: [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_ORMMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 2089: [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_ORMMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image6: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 2090: [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_EmissionMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 2091: [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_EmissionMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
 		default:
 		break;
 	}
@@ -15467,6 +15995,7 @@ STDMETHODIMP Ramp::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNam
 			{ L"Collidable", 111 },
 			{ L"DepthBias", 397 },
 			{ L"Elasticity", 110 },
+			{ L"EmissionMap", DISPID_Image6 },
 			{ L"Friction", 114 },
 			{ L"HasHitEvent", 34 },
 			{ L"HasWallImage", 9 },
@@ -15477,6 +16006,8 @@ STDMETHODIMP Ramp::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNam
 			{ L"LeftWallHeight", 10 },
 			{ L"Material", 340 },
 			{ L"Name", DISPID_Name },
+			{ L"NormalMap", DISPID_Image2 },
+			{ L"ORMMap", DISPID_Image5 },
 			{ L"OverwritePhysics", 432 },
 			{ L"PhysicsMaterial", 734 },
 			{ L"ReflectionEnabled", 431 },
@@ -15548,7 +16079,10 @@ static const char *Ramp_dispid_name(DISPID dispId) {
 		case 431: return "ReflectionEnabled";
 		case 734: return "PhysicsMaterial";
 		case 432: return "OverwritePhysics";
-		default: return "?";
+				case DISPID_Image2: return "NormalMap";
+		case DISPID_Image5: return "ORMMap";
+		case DISPID_Image6: return "EmissionMap";
+default: return "?";
 	}
 }
 
@@ -16185,6 +16719,66 @@ STDMETHODIMP Ramp::Invoke(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD 
 				V_VT(&var0) = VT_EMPTY;
 				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BOOL);
 				hres = put_OverwritePhysics(V_BOOL(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image2: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 2193: [propget, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_NormalMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 2194: [propput, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_NormalMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image5: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 2195: [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_ORMMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 2196: [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_ORMMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image6: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 2197: [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_EmissionMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 2198: [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_EmissionMap(V_BSTR(&var0));
 				VariantClear(&var0);
 			}
 			break;
@@ -16962,6 +17556,7 @@ STDMETHODIMP Rubber::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cN
 			{ L"Collidable", 111 },
 			{ L"Elasticity", 110 },
 			{ L"ElasticityFalloff", 120 },
+			{ L"EmissionMap", DISPID_Image6 },
 			{ L"EnableShowInEditor", 479 },
 			{ L"EnableStaticRendering", 398 },
 			{ L"Friction", 114 },
@@ -16971,6 +17566,8 @@ STDMETHODIMP Rubber::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cN
 			{ L"Image", DISPID_Image },
 			{ L"Material", 340 },
 			{ L"Name", DISPID_Name },
+			{ L"NormalMap", DISPID_Image2 },
+			{ L"ORMMap", DISPID_Image5 },
 			{ L"OverwritePhysics", 432 },
 			{ L"PhysicsMaterial", 734 },
 			{ L"ReflectionEnabled", 431 },
@@ -17029,7 +17626,10 @@ static const char *Rubber_dispid_name(DISPID dispId) {
 		case DISPID_UserValue: return "UserValue";
 		case 734: return "PhysicsMaterial";
 		case 432: return "OverwritePhysics";
-		default: return "?";
+				case DISPID_Image2: return "NormalMap";
+		case DISPID_Image5: return "ORMMap";
+		case DISPID_Image6: return "EmissionMap";
+default: return "?";
 	}
 }
 
@@ -17526,6 +18126,66 @@ STDMETHODIMP Rubber::Invoke(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WOR
 				V_VT(&var0) = VT_EMPTY;
 				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BOOL);
 				hres = put_OverwritePhysics(V_BOOL(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image2: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 2348: [propget, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_NormalMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 2349: [propput, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_NormalMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image5: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 2350: [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_ORMMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 2351: [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_ORMMap(V_BSTR(&var0));
+				VariantClear(&var0);
+			}
+			break;
+		}
+		case DISPID_Image6: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 2352: [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+				V_VT(&res) = VT_BSTR;
+				hres = get_EmissionMap(&V_BSTR(&res));
+			}
+			else if (wFlags & DISPATCH_PROPERTYPUT) {
+				// line 2353: [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
+				if (pDispParams->cArgs < 1) {
+					hres = DISP_E_BADPARAMCOUNT;
+					break;
+				}
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_BSTR);
+				hres = put_EmissionMap(V_BSTR(&var0));
 				VariantClear(&var0);
 			}
 			break;

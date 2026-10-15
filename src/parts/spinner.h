@@ -120,6 +120,12 @@ public:
    STDMETHOD(put_Material)(/*[in]*/ BSTR newVal);
    STDMETHOD(get_Image)(/*[out, retval]*/ BSTR *pVal);
    STDMETHOD(put_Image)(/*[in]*/ BSTR newVal);
+   STDMETHOD(get_NormalMap)(/*[out, retval]*/ BSTR *pVal);
+   STDMETHOD(put_NormalMap)(/*[in]*/ BSTR newVal);
+   STDMETHOD(get_ORMMap)(/*[out, retval]*/ BSTR *pVal);
+   STDMETHOD(put_ORMMap)(/*[in]*/ BSTR newVal);
+   STDMETHOD(get_EmissionMap)(/*[out, retval]*/ BSTR *pVal);
+   STDMETHOD(put_EmissionMap)(/*[in]*/ BSTR newVal);
    STDMETHOD(get_Damping)(/*[out, retval]*/ float *pVal);
    STDMETHOD(put_Damping)(/*[in]*/ float newVal);
    STDMETHOD(get_Height)(/*[out, retval]*/ float *pVal);

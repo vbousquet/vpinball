@@ -672,6 +672,50 @@ STDMETHODIMP Decal::put_Image(BSTR newVal)
    return S_OK;
 }
 
+STDMETHODIMP Decal::get_NormalMap(BSTR *pVal)
+{
+   *pVal = MakeWideBSTR(m_d.m_szNormalMap);
+   return S_OK;
+}
+
+STDMETHODIMP Decal::put_NormalMap(BSTR newVal)
+{
+   const string szImage = MakeString(newVal);
+   const Texture *const tex = m_ptable->GetImage(szImage);
+   if (tex && tex->IsHDR())
+   {
+      ShowError("Cannot use a HDR image (.exr/.hdr) here");
+      return E_FAIL;
+   }
+   m_d.m_szNormalMap = szImage;
+
+   return S_OK;
+}
+
+STDMETHODIMP Decal::get_ORMMap(BSTR *pVal)
+{
+   *pVal = MakeWideBSTR(m_d.m_szORMMap);
+   return S_OK;
+}
+
+STDMETHODIMP Decal::put_ORMMap(BSTR newVal)
+{
+   m_d.m_szORMMap = MakeString(newVal);
+   return S_OK;
+}
+
+STDMETHODIMP Decal::get_EmissionMap(BSTR *pVal)
+{
+   *pVal = MakeWideBSTR(m_d.m_szEmissionMap);
+   return S_OK;
+}
+
+STDMETHODIMP Decal::put_EmissionMap(BSTR newVal)
+{
+   m_d.m_szEmissionMap = MakeString(newVal);
+   return S_OK;
+}
+
 STDMETHODIMP Decal::get_Width(float *pVal)
 {
    *pVal = m_d.m_width;

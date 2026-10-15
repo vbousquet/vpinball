@@ -207,6 +207,12 @@ public:
    STDMETHOD(put_ImageAlignment)(/*[in]*/ RampImageAlignment newVal);
    STDMETHOD(get_Image)(/*[out, retval]*/ BSTR *pVal);
    STDMETHOD(put_Image)(/*[in]*/ BSTR newVal);
+   STDMETHOD(get_NormalMap)(/*[out, retval]*/ BSTR *pVal);
+   STDMETHOD(put_NormalMap)(/*[in]*/ BSTR newVal);
+   STDMETHOD(get_ORMMap)(/*[out, retval]*/ BSTR *pVal);
+   STDMETHOD(put_ORMMap)(/*[in]*/ BSTR newVal);
+   STDMETHOD(get_EmissionMap)(/*[out, retval]*/ BSTR *pVal);
+   STDMETHOD(put_EmissionMap)(/*[in]*/ BSTR newVal);
    STDMETHOD(get_Type)(/*[out, retval]*/ RampType *pVal);
    STDMETHOD(put_Type)(/*[in]*/ RampType newVal);
    STDMETHOD(get_Material)(/*[out, retval]*/ BSTR *pVal);

@@ -35,6 +35,8 @@ private:
     CButton m_exportMeshButton;
     ComboBox    m_imageCombo;
     ComboBox    m_normalMapCombo;
+    ComboBox m_ormMapCombo;
+    ComboBox m_emissionMapCombo;
     ComboBox    m_materialCombo;
     ComboBox m_lightmapCombo;
     EditBox m_stateLinkEdit;

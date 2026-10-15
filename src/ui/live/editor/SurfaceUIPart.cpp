@@ -109,6 +109,18 @@ void SurfaceUIPart::UpdatePropertyPane(PropertyPane& props)
          m_part, "Bottom Height"s, //
          [](const Surface* surf) { return surf->m_d.m_heightbottom; }, //
          [](Surface* surf, float v) { surf->m_d.m_heightbottom = v; }, PropertyPane::Unit::VPLength, 1);
+      props.ImageCombo<Surface>(
+         m_part, "Normal Map"s, //
+         [](const Surface* surf) { return surf->m_d.m_szNormalMap; }, //
+         [](Surface* surf, const string& v) { surf->m_d.m_szNormalMap = v; });
+      props.ImageCombo<Surface>(
+         m_part, "ORM Map"s, //
+         [](const Surface* surf) { return surf->m_d.m_szORMMap; }, //
+         [](Surface* surf, const string& v) { surf->m_d.m_szORMMap = v; });
+      props.ImageCombo<Surface>(
+         m_part, "Emission Map"s, //
+         [](const Surface* surf) { return surf->m_d.m_szEmissionMap; }, //
+         [](Surface* surf, const string& v) { surf->m_d.m_szEmissionMap = v; });
       props.EndSection();
    }
 

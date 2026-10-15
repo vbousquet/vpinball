@@ -869,6 +869,42 @@ STDMETHODIMP Bumper::put_RingMaterial(BSTR newVal)
    return S_OK;
 }
 
+STDMETHODIMP Bumper::get_NormalMap(BSTR *pVal)
+{
+   *pVal = MakeWideBSTR(m_d.m_szNormalMap);
+   return S_OK;
+}
+
+STDMETHODIMP Bumper::put_NormalMap(BSTR newVal)
+{
+   m_d.m_szNormalMap = MakeString(newVal);
+   return S_OK;
+}
+
+STDMETHODIMP Bumper::get_ORMMap(BSTR *pVal)
+{
+   *pVal = MakeWideBSTR(m_d.m_szORMMap);
+   return S_OK;
+}
+
+STDMETHODIMP Bumper::put_ORMMap(BSTR newVal)
+{
+   m_d.m_szORMMap = MakeString(newVal);
+   return S_OK;
+}
+
+STDMETHODIMP Bumper::get_EmissionMap(BSTR *pVal)
+{
+   *pVal = MakeWideBSTR(m_d.m_szEmissionMap);
+   return S_OK;
+}
+
+STDMETHODIMP Bumper::put_EmissionMap(BSTR newVal)
+{
+   m_d.m_szEmissionMap = MakeString(newVal);
+   return S_OK;
+}
+
 STDMETHODIMP Bumper::get_BaseMaterial(BSTR *pVal)
 {
    *pVal = MakeWideBSTR(m_d.m_szBaseMaterial);
