@@ -374,8 +374,10 @@ void Ball::Render(const unsigned int renderMask)
          pLightEm[pEm + 0] = color.x * c;
          pLightEm[pEm + 1] = color.y * c;
          pLightEm[pEm + 2] = color.z * c;
-         // Bulbs: the glass of the bulb mesh (radius 0.44 at scale 1); other lights (inserts,...) define no size: a small one
-         pLightRadius[pPos] = light->m_d.m_BulbLight ? 0.45f * light->m_d.m_meshRadius : 10.f;
+         // Halo bulbs: the glass of the bulb mesh (radius 0.44 at scale 1); PBR lights: the authored bulb radius;
+         // other lights (inserts,...) define no size: a small one
+         pLightRadius[pPos] = light->m_d.m_type == LightType::Halo ? 0.45f * light->m_d.m_meshRadius
+                            : light->m_d.m_type == LightType::PBR ? max(light->m_d.m_bulbRadius, 0.f) : 10.f;
       }
       else // Unused slot
       {

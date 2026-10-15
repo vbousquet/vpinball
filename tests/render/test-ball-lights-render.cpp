@@ -52,7 +52,7 @@ void AddLight(PinTable* const table, const string& name, const float x, const fl
    Light* const light = Light::COMCreate();
    light->Init(x, y, false);
    light->SetName(name);
-   light->m_d.m_BulbLight = bulb;
+   light->m_d.m_type = bulb ? LightType::Halo : LightType::Classic;
    light->m_d.m_showBulbMesh = false;
    light->m_d.m_showReflectionOnBall = true;
    light->m_d.m_height = height;

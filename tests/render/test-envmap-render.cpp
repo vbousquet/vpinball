@@ -208,10 +208,10 @@ SphereCapture CaptureSpheres(const string& screenshot, const bool hdr)
    for (int i = 0; i < numSpheres; i++)
    {
       const float roughness = (float)i / (float)(numSpheres - 1);
-      Material* const metal = new Material(Material::METAL, 0.f, roughness, 1.f, 0.05f, 1.f, 1.f, 1.f, RGB(255, 255, 255), RGB(0, 0, 0), RGB(0, 0, 0), false, 0.f, 0.f, 0.f, 0.f, RGB(255, 255, 255));
+      Material* const metal = new Material(Material::METAL, 0.f, roughness, 1.f, 0.05f, 1.f, 1.f, 1.f, RGB(255, 255, 255), RGB(0, 0, 0), RGB(0, 0, 0), false, 1.f, 1.f, RGB(0, 0, 0), 0.f, 0.f, 0.f, 0.f, 0.f, RGB(255, 255, 255));
       metal->m_name = "EnvMetal" + std::to_string(i);
       table->AddMaterial(metal);
-      Material* const plastic = new Material(Material::BASIC, 0.f, roughness, 1.f, 0.05f, 1.f, 1.f, 1.f, RGB(200, 200, 200), RGB(255, 255, 255), RGB(0, 0, 0), false, 0.f, 0.f, 0.f, 0.f, RGB(255, 255, 255));
+      Material* const plastic = new Material(Material::BASIC, 0.f, roughness, 1.f, 0.05f, 1.f, 1.f, 1.f, RGB(200, 200, 200), RGB(255, 255, 255), RGB(0, 0, 0), false, 0.f, 1.f, RGB(0, 0, 0), 0.f, 0.f, 0.f, 0.f, 0.f, RGB(255, 255, 255));
       plastic->m_name = "EnvPlastic" + std::to_string(i);
       table->AddMaterial(plastic);
       const Vertex2D metalPos = SpherePos(0, i), plasticPos = SpherePos(1, i);
@@ -220,7 +220,7 @@ SphereCapture CaptureSpheres(const string& screenshot, const bool hdr)
    }
    for (int i = 0; i < 2; i++)
    {
-      Material* const dielectric = new Material(Material::BASIC, 0.f, 1.f, 1.f, 0.05f, i == 0 ? 1.f : 0.f, 1.f, 1.f, RGB(20, 20, 20), RGB(30, 30, 30), RGB(0, 0, 0), false, 0.f, 0.f, 0.f, 0.f, RGB(255, 255, 255));
+      Material* const dielectric = new Material(Material::BASIC, 0.f, 1.f, 1.f, 0.05f, i == 0 ? 1.f : 0.f, 1.f, 1.f, RGB(20, 20, 20), RGB(30, 30, 30), RGB(0, 0, 0), false, 0.f, 1.f, RGB(0, 0, 0), 0.f, 0.f, 0.f, 0.f, 0.f, RGB(255, 255, 255));
       dielectric->m_name = "EnvEdge" + std::to_string(i);
       table->AddMaterial(dielectric);
       AddSphere(table, "EnvSphereEdge" + std::to_string(i), dielectric->m_name, edgeSphereX[i], edgeSphereY);
