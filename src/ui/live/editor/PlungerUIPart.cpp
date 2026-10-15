@@ -115,6 +115,18 @@ void PlungerUIPart::UpdatePropertyPane(PropertyPane& props)
             [](const Plunger* plunger) { return plunger->m_d.m_springEndLoops; }, //
             [](Plunger* plunger, float v) { plunger->m_d.m_springEndLoops = v; }, PropertyPane::Unit::VPLength, 1);
       }
+      props.ImageCombo<Plunger>(
+         m_part, "Normal Map"s, //
+         [](const Plunger* plunger) { return plunger->m_d.m_szNormalMap; }, //
+         [](Plunger* plunger, const string& v) { plunger->m_d.m_szNormalMap = v; });
+      props.ImageCombo<Plunger>(
+         m_part, "ORM Map"s, //
+         [](const Plunger* plunger) { return plunger->m_d.m_szORMMap; }, //
+         [](Plunger* plunger, const string& v) { plunger->m_d.m_szORMMap = v; });
+      props.ImageCombo<Plunger>(
+         m_part, "Emission Map"s, //
+         [](const Plunger* plunger) { return plunger->m_d.m_szEmissionMap; }, //
+         [](Plunger* plunger, const string& v) { plunger->m_d.m_szEmissionMap = v; });
 
       props.EndSection();
    }

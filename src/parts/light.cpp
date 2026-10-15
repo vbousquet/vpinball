@@ -1416,6 +1416,18 @@ STDMETHODIMP Light::get_FilamentTemperature(float *pVal)
    return S_OK;
 }
 
+STDMETHODIMP Light::get_PBR(VARIANT_BOOL *pVal)
+{
+   *pVal = FTOVB(m_d.m_type == LightType::PBR);
+   return S_OK;
+}
+
+STDMETHODIMP Light::put_PBR(VARIANT_BOOL newVal)
+{
+   m_d.m_type = VBTOb(newVal) ? LightType::PBR : LightType::Classic;
+   return S_OK;
+}
+
 STDMETHODIMP Light::get_Visible(VARIANT_BOOL *pVal)
 {
    *pVal = FTOVB(m_d.m_visible);

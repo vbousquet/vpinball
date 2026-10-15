@@ -599,6 +599,10 @@ void PropertiesPanel::RenderProbeProperties(PropertyPane &props, RenderProbe *pr
          probe, "Distance"s, //
          [](const RenderProbe *probe) { return probe->GetReflectionPlaneDistance(); }, //
          [](RenderProbe *probe, float v) { probe->SetReflectionPlaneDistance(v); }, PropertyPane::Unit::VPLength, 1);
+      props.InputFloat<RenderProbe>(
+         probe, "Influence Range"s, //
+         [](const RenderProbe *probe) { return probe->GetInfluenceRange(); }, //
+         [](RenderProbe *probe, float v) { probe->SetInfluenceRange(v); }, PropertyPane::Unit::VPLength, 1);
       props.EndSection();
    }
 
@@ -642,7 +646,7 @@ void PropertiesPanel::MaterialProperties(PropertyPane &props, Material *material
    if (props.BeginSection("Visuals"s))
    {
       props.Combo<Material>(
-         material, "Type"s, vector { "Default"s, "Metal"s }, //
+         material, "Type"s, vector { "Default"s, "Metal"s, "PBR"s }, //
          [](const Material *material) { return material->m_type; }, //
          [](Material *material, int v) { material->m_type = static_cast<Material::MaterialType>(v); });
       props.InputRGB<Material>(
@@ -676,6 +680,25 @@ void PropertiesPanel::MaterialProperties(PropertyPane &props, Material *material
          material, "Edge Brightness"s, //
          [](const Material *material) { return material->m_fEdge; }, //
          [](Material *material, float v) { material->m_fEdge = v; }, PropertyPane::Unit::None, 2);
+      if (editedMaterial->m_type == Material::PBR)
+      {
+         props.InputFloat<Material>(
+            material, "Metallic"s, //
+            [](const Material *material) { return material->m_fMetallic; }, //
+            [](Material *material, float v) { material->m_fMetallic = v; }, PropertyPane::Unit::None, 2);
+         props.InputFloat<Material>(
+            material, "Occlusion"s, //
+            [](const Material *material) { return material->m_fOcclusion; }, //
+            [](Material *material, float v) { material->m_fOcclusion = v; }, PropertyPane::Unit::None, 2);
+         props.InputRGB<Material>(
+            material, "Emission Color", //
+            [](const Material *material) { return convertColor(material->m_cEmission); }, //
+            [](Material *material, const vec3 &v) { material->m_cEmission = convertColorRGB(v); });
+         props.InputFloat<Material>(
+            material, "Emission Intensity"s, //
+            [](const Material *material) { return material->m_fEmissionIntensity; }, //
+            [](Material *material, float v) { material->m_fEmissionIntensity = v; }, PropertyPane::Unit::None, 2);
+      }
       props.EndSection();
    }
 

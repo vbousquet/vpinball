@@ -239,6 +239,14 @@ void PrimitiveUIPart::UpdatePropertyPane(PropertyPane& props)
          m_part, "Object Space NM"s, //
          [](const Primitive* primitive) { return primitive->m_d.m_objectSpaceNormalMap; }, //
          [](Primitive* primitive, bool v) { primitive->m_d.m_objectSpaceNormalMap = v; });
+      props.ImageCombo<Primitive>(
+         m_part, "ORM Map"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_szORMMap; }, //
+         [](Primitive* primitive, const string& v) { primitive->m_d.m_szORMMap = v; });
+      props.ImageCombo<Primitive>(
+         m_part, "Emission Map"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_szEmissionMap; }, //
+         [](Primitive* primitive, const string& v) { primitive->m_d.m_szEmissionMap = v; });
       props.InputFloat<Primitive>(
          m_part, "Disable Spot Lights"s, //
          [](const Primitive* primitive) { return primitive->m_d.m_disableLightingTop; }, //

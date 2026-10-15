@@ -108,6 +108,12 @@ public:
    STDMETHOD(put_CapMaterial)(/*[in]*/ BSTR newVal);
    STDMETHOD(get_RingMaterial)(/*[out, retval]*/ BSTR *pVal);
    STDMETHOD(put_RingMaterial)(/*[in]*/ BSTR newVal);
+   STDMETHOD(get_NormalMap)(/*[out, retval]*/ BSTR *pVal);
+   STDMETHOD(put_NormalMap)(/*[in]*/ BSTR newVal);
+   STDMETHOD(get_ORMMap)(/*[out, retval]*/ BSTR *pVal);
+   STDMETHOD(put_ORMMap)(/*[in]*/ BSTR newVal);
+   STDMETHOD(get_EmissionMap)(/*[out, retval]*/ BSTR *pVal);
+   STDMETHOD(put_EmissionMap)(/*[in]*/ BSTR newVal);
    STDMETHOD(get_Threshold)(/*[out, retval]*/ float *pVal);
    STDMETHOD(put_Threshold)(/*[in]*/ float newVal);
    STDMETHOD(get_Force)(/*[out, retval]*/ float *pVal);

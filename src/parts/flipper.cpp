@@ -1224,6 +1224,50 @@ STDMETHODIMP Flipper::put_Image(BSTR newVal)
    return S_OK;
 }
 
+STDMETHODIMP Flipper::get_NormalMap(BSTR *pVal)
+{
+   *pVal = MakeWideBSTR(m_d.m_szNormalMap);
+   return S_OK;
+}
+
+STDMETHODIMP Flipper::put_NormalMap(BSTR newVal)
+{
+   const string szImage = MakeString(newVal);
+   const Texture *const tex = m_ptable->GetImage(szImage);
+   if (tex && tex->IsHDR())
+   {
+      ShowError("Cannot use a HDR image (.exr/.hdr) here");
+      return E_FAIL;
+   }
+   m_d.m_szNormalMap = szImage;
+
+   return S_OK;
+}
+
+STDMETHODIMP Flipper::get_ORMMap(BSTR *pVal)
+{
+   *pVal = MakeWideBSTR(m_d.m_szORMMap);
+   return S_OK;
+}
+
+STDMETHODIMP Flipper::put_ORMMap(BSTR newVal)
+{
+   m_d.m_szORMMap = MakeString(newVal);
+   return S_OK;
+}
+
+STDMETHODIMP Flipper::get_EmissionMap(BSTR *pVal)
+{
+   *pVal = MakeWideBSTR(m_d.m_szEmissionMap);
+   return S_OK;
+}
+
+STDMETHODIMP Flipper::put_EmissionMap(BSTR newVal)
+{
+   m_d.m_szEmissionMap = MakeString(newVal);
+   return S_OK;
+}
+
 STDMETHODIMP Flipper::get_ReflectionEnabled(VARIANT_BOOL *pVal)
 {
    *pVal = FTOVB(m_d.m_reflectionEnabled);

@@ -924,6 +924,12 @@ typedef [uuid(D09B9F0E-C1AE-40dd-84D6-B1F74053AA8E)]
                 [propput, id(734), helpstring("property PhysicsMaterial")] HRESULT PhysicsMaterial([in] BSTR newVal);
                 [propget, id(432), helpstring("property OverwritePhysics")] HRESULT OverwritePhysics([out, retval] VARIANT_BOOL *pVal);
                 [propput, id(432), helpstring("property OverwritePhysics")] HRESULT OverwritePhysics([in] VARIANT_BOOL newVal);
+                [propget, id(DISPID_Image3), helpstring("property NormalMap")] HRESULT NormalMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image3), helpstring("property NormalMap")] HRESULT NormalMap([in] BSTR newVal);
+                [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+                [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
         };
 
         [
@@ -1030,6 +1036,12 @@ typedef [uuid(D09B9F0E-C1AE-40dd-84D6-B1F74053AA8E)]
                 [propput, id(DISPID_Image), helpstring("property Image")] HRESULT Image([in] BSTR newVal);
                 [propget, id(431), helpstring("property ReflectionEnabled")] HRESULT ReflectionEnabled([out, retval] VARIANT_BOOL *pVal);
                 [propput, id(431), helpstring("property ReflectionEnabled")] HRESULT ReflectionEnabled([in] VARIANT_BOOL newVal);
+                [propget, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([in] BSTR newVal);
+                [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+                [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
         };
 
         [
@@ -1168,6 +1180,12 @@ typedef [uuid(D09B9F0E-C1AE-40dd-84D6-B1F74053AA8E)]
                 [propput, id(118), helpstring("property MomentumXfer")] HRESULT MomentumXfer([in] float newVal);
                 [propget, id(431), helpstring("property ReflectionEnabled")] HRESULT ReflectionEnabled([out, retval] VARIANT_BOOL *pVal);
                 [propput, id(431), helpstring("property ReflectionEnabled")] HRESULT ReflectionEnabled([in] VARIANT_BOOL newVal);
+                [propget, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([in] BSTR newVal);
+                [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+                [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
         };
 
         [
@@ -1314,6 +1332,12 @@ typedef [uuid(D09B9F0E-C1AE-40dd-84D6-B1F74053AA8E)]
                 [propget, id(827), helpstring("property RotX")] HRESULT RotX([out, retval] float *pVal);
                 [propget, id(828), helpstring("property RotY")] HRESULT RotY([out, retval] float *pVal);
                 [id(999), helpstring("method PlayHit")] HRESULT PlayHit();
+                [propget, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([in] BSTR newVal);
+                [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+                [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
         };
 
         [
@@ -1477,6 +1501,8 @@ typedef [uuid(D09B9F0E-C1AE-40dd-84D6-B1F74053AA8E)]
                 [propget, id(458), helpstring("property Fader")] HRESULT Fader([out, retval] long *pVal);
                 [propput, id(458), helpstring("property Fader")] HRESULT Fader([in] long newVal);
                 [propget, id(459), helpstring("property FilamentTemperature")] HRESULT FilamentTemperature([out, retval] float *pVal);
+                [propget, id(460), helpstring("property PBR")] HRESULT PBR([out, retval] VARIANT_BOOL *pVal);
+                [propput, id(460), helpstring("property PBR")] HRESULT PBR([in] VARIANT_BOOL newVal);
         };
 
         [
@@ -1607,6 +1633,12 @@ typedef [uuid(D09B9F0E-C1AE-40dd-84D6-B1F74053AA8E)]
                 [propput, id(13), helpstring("property HasVerticalText")] HRESULT HasVerticalText([in] VARIANT_BOOL newVal);
                 [propget, id(DISPID_Surface), helpstring("property Surface")] HRESULT Surface([out, retval] BSTR *pVal);
                 [propput, id(DISPID_Surface), helpstring("property Surface")] HRESULT Surface([in] BSTR newVal);
+                [propget, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([in] BSTR newVal);
+                [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+                [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
         };
 
         [
@@ -1781,6 +1813,10 @@ typedef [uuid(D09B9F0E-C1AE-40dd-84D6-B1F74053AA8E)]
                 [propget, id(735), helpstring("property HitThreshold")] HRESULT HitThreshold([out, retval] float *pVal);
                 [propget, id(824), helpstring("property ObjectSpaceNormalMap")] HRESULT ObjectSpaceNormalMap([out, retval] VARIANT_BOOL *pVal);
                 [propput, id(824), helpstring("property ObjectSpaceNormalMap")] HRESULT ObjectSpaceNormalMap([in] VARIANT_BOOL newVal);
+                [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+                [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
         };
 
         [
@@ -1886,6 +1922,12 @@ typedef [uuid(D09B9F0E-C1AE-40dd-84D6-B1F74053AA8E)]
                 [propget, id(432), helpstring("property OverwritePhysics")] HRESULT OverwritePhysics([out, retval] VARIANT_BOOL *pVal);
                 [propput, id(432), helpstring("property OverwritePhysics")] HRESULT OverwritePhysics([in] VARIANT_BOOL newVal);
                 [propget, id(727), helpstring("property HitThreshold")] HRESULT HitThreshold([out, retval] float *pVal);
+                [propget, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([in] BSTR newVal);
+                [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+                [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
         };
 
         [
@@ -2039,6 +2081,12 @@ typedef [uuid(D09B9F0E-C1AE-40dd-84D6-B1F74053AA8E)]
                 [propget, id(431), helpstring("property ReflectionEnabled")] HRESULT ReflectionEnabled([out, retval] VARIANT_BOOL *pVal);
                 [propput, id(431), helpstring("property ReflectionEnabled")] HRESULT ReflectionEnabled([in] VARIANT_BOOL newVal);
                 [propget, id(18), nonbrowsable, helpstring("property CurrentAngle")] HRESULT CurrentAngle([out, retval] float *pVal);
+                [propget, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([in] BSTR newVal);
+                [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+                [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
         };
 
         [
@@ -2140,6 +2188,12 @@ typedef [uuid(D09B9F0E-C1AE-40dd-84D6-B1F74053AA8E)]
                 [propput, id(734), helpstring("property PhysicsMaterial")] HRESULT PhysicsMaterial([in] BSTR newVal);
                 [propget, id(432), helpstring("property OverwritePhysics")] HRESULT OverwritePhysics([out, retval] VARIANT_BOOL *pVal);
                 [propput, id(432), helpstring("property OverwritePhysics")] HRESULT OverwritePhysics([in] VARIANT_BOOL newVal);
+                [propget, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([in] BSTR newVal);
+                [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+                [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
         };
 
         /////////////////////////////////////////////
@@ -2289,6 +2343,12 @@ typedef [uuid(D09B9F0E-C1AE-40dd-84D6-B1F74053AA8E)]
                 [propput, id(734), helpstring("property PhysicsMaterial")] HRESULT PhysicsMaterial([in] BSTR newVal);
                 [propget, id(432), helpstring("property OverwritePhysics")] HRESULT OverwritePhysics([out, retval] VARIANT_BOOL *pVal);
                 [propput, id(432), helpstring("property OverwritePhysics")] HRESULT OverwritePhysics([in] VARIANT_BOOL newVal);
+                [propget, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image2), helpstring("property NormalMap")] HRESULT NormalMap([in] BSTR newVal);
+                [propget, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image5), helpstring("property ORMMap")] HRESULT ORMMap([in] BSTR newVal);
+                [propget, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([out, retval] BSTR *pVal);
+                [propput, id(DISPID_Image6), helpstring("property EmissionMap")] HRESULT EmissionMap([in] BSTR newVal);
         };
 
 

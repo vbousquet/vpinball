@@ -202,6 +202,8 @@ void RenderProbeDialog::LoadProbeToUI(RenderProbe *const pb)
    GetDlgItem(IDC_REFLECTION_PLANE_NZ).EnableWindow(type == RenderProbe::PLANE_REFLECTION && !isPfReflections);
    GetDlgItem(IDC_REFLECTION_PLANE_DIST).EnableWindow(type == RenderProbe::PLANE_REFLECTION && !isPfReflections);
    GetDlgItem(IDC_REFLECTION_MAX_LEVEL).EnableWindow(type == RenderProbe::PLANE_REFLECTION);
+   GetDlgItem(IDC_PROBE_INFLUENCE_RANGE).EnableWindow(type == RenderProbe::PLANE_REFLECTION);
+   GetDlgItem(IDC_PROBE_INFLUENCE_RANGE).SetWindowText(f2sz(pb->GetInfluenceRange()).c_str());
    GetDlgItem(IDC_REFLECTION_NO_LIGHTMAPS).EnableWindow(type == RenderProbe::PLANE_REFLECTION && !isPfReflections);
    CheckDlgButton(IDC_REFLECTION_NO_LIGHTMAPS, pb->GetReflectionNoLightmaps() ? 1 : 0);
    const HWND hwnd = GetDlgItem(IDC_ROUGHNESS).GetHwnd();
@@ -228,9 +230,11 @@ void RenderProbeDialog::SaveProbeFromUI(RenderProbe *const pb)
    if (reflectionMode == LB_ERR)
       reflectionMode = RenderProbe::REFL_STATIC;
    const int roughness = (int)SendDlgItemMessage(IDC_ROUGHNESS, TBM_GETPOS, 0, 0);
+   const float influenceRange = max(sz2f(GetDlgItemText(IDC_PROBE_INFLUENCE_RANGE).GetString()), 0.f);
    pb->SetReflectionNoLightmaps(IsDlgButtonChecked(IDC_REFLECTION_NO_LIGHTMAPS) == BST_CHECKED);
 
-   if (pb->GetType() != type || pb->GetReflectionMode() != reflectionMode || plane.x != vx || plane.y != vy || plane.z != vz || plane.w != vw || roughness != pb->GetRoughness())
+   if (pb->GetType() != type || pb->GetReflectionMode() != reflectionMode || plane.x != vx || plane.y != vy || plane.z != vz || plane.w != vw || roughness != pb->GetRoughness()
+      || influenceRange != pb->GetInfluenceRange())
    {
       plane.x = vx;
       plane.y = vy;
@@ -239,6 +243,7 @@ void RenderProbeDialog::SaveProbeFromUI(RenderProbe *const pb)
       pb->SetType(type);
       pb->SetRoughness(roughness);
       pb->SetReflectionPlane(plane);
+      pb->SetInfluenceRange(influenceRange);
       pb->SetReflectionMode((RenderProbe::ReflectionMode)reflectionMode);
       CCO(PinTable) *const pt = m_tableEditor->m_table;
       pt->SetNonUndoableDirty(SaveDirtyState::Dirty);
