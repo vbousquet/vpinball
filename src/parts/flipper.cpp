@@ -115,6 +115,9 @@ HRESULT Flipper::Init(const float x, const float y, const bool fromMouseClick, c
 #define LinkProp(field, prop) field = fromMouseClick ? g_settingsService.GetAppSettings().GetDefaultPropsFlipper_##prop() : Settings::GetDefaultPropsFlipper_##prop##_Default()
 void Flipper::SetDefaults(const bool fromMouseClick)
 {
+   m_d.m_szNormalMap.clear();
+   m_d.m_szORMMap.clear();
+   m_d.m_szEmissionMap.clear();
    LinkProp(m_d.m_StartAngle, StartAngle);
    LinkProp(m_d.m_EndAngle, EndAngle);
    LinkProp(m_d.m_BaseRadius, BaseRadius);
@@ -690,6 +693,9 @@ void Flipper::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteFloat(FID(FRMN), m_d.m_FlipperRadiusMin);
    writer.WriteFloat(FID(FHGT), m_d.m_height);
    writer.WriteString(FID(IMAG), m_d.m_szImage);
+   writer.WriteString(FID(NRMA), m_d.m_szNormalMap);
+   writer.WriteString(FID(ORMA), m_d.m_szORMMap);
+   writer.WriteString(FID(EMIS), m_d.m_szEmissionMap);
    writer.WriteBool(FID(REEN), m_d.m_reflectionEnabled);
    SaveSharedEditableFields(writer);
    writer.EndObject();
@@ -768,6 +774,9 @@ void Flipper::Load(IObjectReader& reader)
          case FID(ENBL): m_d.m_enabled = reader.AsBool(); break;
          case FID(REEN): m_d.m_reflectionEnabled = reader.AsBool(); break;
          case FID(IMAG): m_d.m_szImage = reader.AsString(); break;
+         case FID(NRMA): m_d.m_szNormalMap = reader.AsString(); break;
+         case FID(ORMA): m_d.m_szORMMap = reader.AsString(); break;
+         case FID(EMIS): m_d.m_szEmissionMap = reader.AsString(); break;
          default: LoadSharedEditableField(tag, reader); break;
          }
          return true;

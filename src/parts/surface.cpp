@@ -100,6 +100,9 @@ HRESULT Surface::InitTarget(const float x, const float y, const bool fromMouseCl
 
 void Surface::SetDefaults(const bool fromMouseClick)
 {
+   m_d.m_szNormalMap.clear();
+   m_d.m_szORMMap.clear();
+   m_d.m_szEmissionMap.clear();
    LinkProp(m_d.m_hitEvent, HitEvent);
    LinkProp(m_d.m_threshold, HitThreshold);
    LinkProp(m_d.m_slingshot_threshold, SlingshotThreshold);
@@ -987,6 +990,9 @@ void Surface::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteInt(FID(TMIN), m_timerInterval);
    writer.WriteFloat(FID(THRS), m_d.m_threshold);
    writer.WriteString(FID(IMAG), m_d.m_szImage);
+   writer.WriteString(FID(NRMA), m_d.m_szNormalMap);
+   writer.WriteString(FID(ORMA), m_d.m_szORMMap);
+   writer.WriteString(FID(EMIS), m_d.m_szEmissionMap);
    writer.WriteString(FID(SIMG), m_d.m_szSideImage);
    writer.WriteString(FID(SIMA), m_d.m_szSideMaterial);
    writer.WriteString(FID(TOMA), m_d.m_szTopMaterial);
@@ -1038,6 +1044,9 @@ void Surface::Load(IObjectReader& reader)
          case FID(TMIN): m_timerInterval = reader.AsInt(); break;
          case FID(THRS): m_d.m_threshold = reader.AsFloat(); break;
          case FID(IMAG): m_d.m_szImage = reader.AsString(); break;
+         case FID(NRMA): m_d.m_szNormalMap = reader.AsString(); break;
+         case FID(ORMA): m_d.m_szORMMap = reader.AsString(); break;
+         case FID(EMIS): m_d.m_szEmissionMap = reader.AsString(); break;
          case FID(SIMG): m_d.m_szSideImage = reader.AsString(); break;
          case FID(SIMA): m_d.m_szSideMaterial = reader.AsString(); break;
          case FID(TOMA): m_d.m_szTopMaterial = reader.AsString(); break;

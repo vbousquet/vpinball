@@ -39,78 +39,90 @@ struct SavePhysicsMaterial
 class Material final
 {
 public:
-
    enum MaterialType
    {
       BASIC,
       METAL,
+      PBR,
    };
 
-   inline Material() :
-         m_name("dummyMaterial"s)
-       , m_type(MaterialType::BASIC)
-       , m_fWrapLighting(0.0f)
-       , m_fRoughness(0.0f)
-       , m_fGlossyImageLerp(1.0f)
-       , m_fThickness(0.05f)
-       , m_fEdge(1.0f)
-       , m_fEdgeAlpha(1.0f)
-       , m_fOpacity(1.0f)
-       , m_cBase(0xB469FF)
-       , m_cGlossy(0)
-       , m_cClearcoat(0)
-       , m_bOpacityActive(false)
-       , m_fElasticity(0.0f)
-       , m_fElasticityFalloff(0.0f)
-       , m_fFriction(0.0f)
-       , m_fScatterAngle(0.0f)
-       , m_cRefractionTint(0xFFFFFF)
+   inline Material()
+      : m_name("dummyMaterial"s)
+      , m_type(MaterialType::BASIC)
+      , m_fWrapLighting(0.0f)
+      , m_fRoughness(0.0f)
+      , m_fGlossyImageLerp(1.0f)
+      , m_fThickness(0.05f)
+      , m_fEdge(1.0f)
+      , m_fEdgeAlpha(1.0f)
+      , m_fOpacity(1.0f)
+      , m_cBase(0xB469FF)
+      , m_cGlossy(0)
+      , m_cClearcoat(0)
+      , m_bOpacityActive(false)
+      , m_fMetallic(0.0f)
+      , m_fOcclusion(1.0f)
+      , m_cEmission(0)
+      , m_fEmissionIntensity(1.0f)
+      , m_fElasticity(0.0f)
+      , m_fElasticityFalloff(0.0f)
+      , m_fFriction(0.0f)
+      , m_fScatterAngle(0.0f)
+      , m_cRefractionTint(0xFFFFFF)
    {
    }
 
-   inline Material(MaterialType type, float wrapLighting, float roughness, float glossyImageLerp, float thickness, float edge, float edgeAlpha, float opacity,
-       COLORREF base, COLORREF glossy, COLORREF clearcoat, bool opacityActive,
-       float elasticity, float elasticityFalloff, float friction, float scatterAngle, COLORREF refractionTint) :
-         m_name("dummyMaterial"s)
-       , m_type(type)
-       , m_fWrapLighting(wrapLighting)
-       , m_fRoughness(roughness)
-       , m_fGlossyImageLerp(glossyImageLerp)
-       , m_fThickness(thickness)
-       , m_fEdge(edge)
-       , m_fEdgeAlpha(edgeAlpha)
-       , m_fOpacity(opacity)
-       , m_cBase(base)
-       , m_cGlossy(glossy)
-       , m_cClearcoat(clearcoat)
-       , m_bOpacityActive(opacityActive)
-       , m_fElasticity(elasticity)
-       , m_fElasticityFalloff(elasticityFalloff)
-       , m_fFriction(max(friction, 0.f)) // Friction can not be negative
-       , m_fScatterAngle(scatterAngle)
-       , m_cRefractionTint(refractionTint)
+   inline Material(MaterialType type, float wrapLighting, float roughness, float glossyImageLerp, float thickness, float edge, float edgeAlpha, float opacity, COLORREF base, COLORREF glossy,
+      COLORREF clearcoat, bool opacityActive, float metallic, float occlusion, COLORREF emission, float emissionIntensity, float elasticity, float elasticityFalloff, float friction,
+      float scatterAngle, COLORREF refractionTint)
+      : m_name("dummyMaterial"s)
+      , m_type(type)
+      , m_fWrapLighting(wrapLighting)
+      , m_fRoughness(roughness)
+      , m_fGlossyImageLerp(glossyImageLerp)
+      , m_fThickness(thickness)
+      , m_fEdge(edge)
+      , m_fEdgeAlpha(edgeAlpha)
+      , m_fOpacity(opacity)
+      , m_cBase(base)
+      , m_cGlossy(glossy)
+      , m_cClearcoat(clearcoat)
+      , m_bOpacityActive(opacityActive)
+      , m_fMetallic(metallic)
+      , m_fOcclusion(occlusion)
+      , m_cEmission(emission)
+      , m_fEmissionIntensity(emissionIntensity)
+      , m_fElasticity(elasticity)
+      , m_fElasticityFalloff(elasticityFalloff)
+      , m_fFriction(max(friction, 0.f)) // Friction can not be negative
+      , m_fScatterAngle(scatterAngle)
+      , m_cRefractionTint(refractionTint)
    {
    }
 
-   inline Material(const Material * const pmat) :
-         m_name(pmat->m_name)
-       , m_type(pmat->m_type)
-       , m_fWrapLighting(pmat->m_fWrapLighting)
-       , m_fRoughness(pmat->m_fRoughness)
-       , m_fGlossyImageLerp(pmat->m_fGlossyImageLerp)
-       , m_fThickness(pmat->m_fThickness)
-       , m_fEdge(pmat->m_fEdge)
-       , m_fEdgeAlpha(pmat->m_fEdgeAlpha)
-       , m_fOpacity(pmat->m_fOpacity)
-       , m_cBase(pmat->m_cBase)
-       , m_cGlossy(pmat->m_cGlossy)
-       , m_cClearcoat(pmat->m_cClearcoat)
-       , m_bOpacityActive(pmat->m_bOpacityActive)
-       , m_fElasticity(pmat->m_fElasticity)
-       , m_fElasticityFalloff(pmat->m_fElasticityFalloff)
-       , m_fFriction(pmat->m_fFriction)
-       , m_fScatterAngle(pmat->m_fScatterAngle)
-       , m_cRefractionTint(pmat->m_cRefractionTint)
+   inline Material(const Material* const pmat)
+      : m_name(pmat->m_name)
+      , m_type(pmat->m_type)
+      , m_fWrapLighting(pmat->m_fWrapLighting)
+      , m_fRoughness(pmat->m_fRoughness)
+      , m_fGlossyImageLerp(pmat->m_fGlossyImageLerp)
+      , m_fThickness(pmat->m_fThickness)
+      , m_fEdge(pmat->m_fEdge)
+      , m_fEdgeAlpha(pmat->m_fEdgeAlpha)
+      , m_fOpacity(pmat->m_fOpacity)
+      , m_cBase(pmat->m_cBase)
+      , m_cGlossy(pmat->m_cGlossy)
+      , m_cClearcoat(pmat->m_cClearcoat)
+      , m_bOpacityActive(pmat->m_bOpacityActive)
+      , m_fMetallic(pmat->m_fMetallic)
+      , m_fOcclusion(pmat->m_fOcclusion)
+      , m_cEmission(pmat->m_cEmission)
+      , m_fEmissionIntensity(pmat->m_fEmissionIntensity)
+      , m_fElasticity(pmat->m_fElasticity)
+      , m_fElasticityFalloff(pmat->m_fElasticityFalloff)
+      , m_fFriction(pmat->m_fFriction)
+      , m_fScatterAngle(pmat->m_fScatterAngle)
+      , m_cRefractionTint(pmat->m_cRefractionTint)
    {
    }
 
@@ -127,8 +139,10 @@ public:
       h.uc[2] = (unsigned char)(saturate(m_fRoughness)*255.0f);
       h.uc[3] = (((unsigned char)(saturate(m_fEdge)*255.0f)) >> 4) | (m_bOpacityActive ? ((((unsigned char)(clamp(m_fEdgeAlpha, 0.f, 1.f)*255.0f)) >> 4) << 4) : 0);
       h.uc[4] = ((m_cBase & 255) >> 5) | ((((m_cBase >> 8) & 255) >> 5) << 3) | ((((m_cBase >> 16) & 255) >> 6) << 6);
-      h.uc[5] = m_type == MaterialType::BASIC ? ((m_cGlossy & 255) >> 5) | ((((m_cGlossy >> 8) & 255) >> 5) << 3) | ((((m_cGlossy >> 16) & 255) >> 6) << 6) : 0;
-      h.uc[6] = ((m_cClearcoat & 255) >> 5) | ((((m_cClearcoat >> 8) & 255) >> 5) << 3) | ((((m_cClearcoat >> 16) & 255) >> 6) << 6);
+      h.uc[5] = m_type == MaterialType::BASIC ? ((m_cGlossy & 255) >> 5) | ((((m_cGlossy >> 8) & 255) >> 5) << 3) | ((((m_cGlossy >> 16) & 255) >> 6) << 6)
+                                              : (m_type == MaterialType::PBR ? (unsigned char)(saturate(m_fMetallic) * 255.0f) : 0);
+      h.uc[6] = m_type == MaterialType::PBR ? (unsigned char)(saturate(m_fOcclusion) * 255.0f)
+                                            : ((m_cClearcoat & 255) >> 5) | ((((m_cClearcoat >> 8) & 255) >> 5) << 3) | ((((m_cClearcoat >> 16) & 255) >> 6) << 6);
       h.uc[7] = m_bOpacityActive ? (unsigned char)(saturate(m_fOpacity)*255.0f) : 0;
       return h.ull;
 
@@ -166,6 +180,12 @@ public:
    COLORREF m_cClearcoat;
    bool m_bOpacityActive;
 
+   // PBR shading properties (used only when m_type == PBR, multiplied with the ORM texture channels when one is bound)
+   float m_fMetallic;
+   float m_fOcclusion;
+   COLORREF m_cEmission;
+   float m_fEmissionIntensity;
+
    // physic properties
    float m_fElasticity;
    float m_fElasticityFalloff;
@@ -192,6 +212,10 @@ public:
       writer.WriteInt(FID(RTNT), m_cRefractionTint);
       writer.WriteBool(FID(EOPA), m_bOpacityActive);
       writer.WriteFloat(FID(ELAS), m_fElasticity);
+      writer.WriteFloat(FID(METL), m_fMetallic);
+      writer.WriteFloat(FID(OCLU), m_fOcclusion);
+      writer.WriteInt(FID(EMIC), m_cEmission);
+      writer.WriteFloat(FID(EMII), m_fEmissionIntensity);
       writer.WriteFloat(FID(ELFO), m_fElasticityFalloff);
       writer.WriteFloat(FID(FRIC), m_fFriction);
       writer.WriteFloat(FID(SCAT), m_fScatterAngle);
@@ -219,6 +243,10 @@ public:
             case FID(COAT): m_cClearcoat = reader.AsInt(); break;
             case FID(RTNT): m_cRefractionTint = reader.AsInt(); break;
             case FID(EOPA): m_bOpacityActive = reader.AsBool(); break;
+            case FID(METL): m_fMetallic = reader.AsFloat(); break;
+            case FID(OCLU): m_fOcclusion = reader.AsFloat(); break;
+            case FID(EMIC): m_cEmission = reader.AsInt(); break;
+            case FID(EMII): m_fEmissionIntensity = reader.AsFloat(); break;
             case FID(ELAS): m_fElasticity = reader.AsFloat(); break;
             case FID(ELFO): m_fElasticityFalloff = reader.AsFloat(); break;
             case FID(FRIC): m_fFriction = reader.AsFloat(); break;

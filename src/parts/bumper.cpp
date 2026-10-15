@@ -41,6 +41,9 @@ HRESULT Bumper::Init(const float x, const float y, const bool fromMouseClick, co
 #define LinkProp(field, prop) field = fromMouseClick ? g_settingsService.GetAppSettings().GetDefaultPropsBumper_##prop() : Settings::GetDefaultPropsBumper_##prop##_Default()
 void Bumper::SetDefaults(const bool fromMouseClick)
 {
+   m_d.m_szNormalMap.clear();
+   m_d.m_szORMMap.clear();
+   m_d.m_szEmissionMap.clear();
    LinkProp(m_d.m_radius, Radius);
    LinkProp(m_d.m_heightScale, HeightScale);
    LinkProp(m_d.m_ringSpeed, RingSpeed);
@@ -656,6 +659,9 @@ void Bumper::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteString(FID(BAMA), m_d.m_szBaseMaterial);
    writer.WriteString(FID(SKMA), m_d.m_szSkirtMaterial);
    writer.WriteString(FID(RIMA), m_d.m_szRingMaterial);
+   writer.WriteString(FID(NRMA), m_d.m_szNormalMap);
+   writer.WriteString(FID(ORMA), m_d.m_szORMMap);
+   writer.WriteString(FID(EMIS), m_d.m_szEmissionMap);
    writer.WriteString(FID(SURF), m_d.m_szSurface);
    writer.WriteWideString(FID(NAME), MakeWString(m_name));
 
@@ -686,6 +692,9 @@ void Bumper::Load(IObjectReader& reader)
          case FID(RADI): m_d.m_radius = reader.AsFloat(); break;
          case FID(MATR): m_d.m_szCapMaterial = reader.AsString(); break;
          case FID(RIMA): m_d.m_szRingMaterial = reader.AsString(); break;
+         case FID(NRMA): m_d.m_szNormalMap = reader.AsString(); break;
+         case FID(ORMA): m_d.m_szORMMap = reader.AsString(); break;
+         case FID(EMIS): m_d.m_szEmissionMap = reader.AsString(); break;
          case FID(BAMA): m_d.m_szBaseMaterial = reader.AsString(); break;
          case FID(SKMA): m_d.m_szSkirtMaterial = reader.AsString(); break;
          case FID(TMON): m_timerEnabled = reader.AsBool(); break;

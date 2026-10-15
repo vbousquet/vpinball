@@ -48,6 +48,8 @@ public:
    void SetReflectionPlaneDistance(float distance);
    ReflectionMode GetReflectionMode() const { return m_reflection_mode; }
    void SetReflectionMode(ReflectionMode mode);
+   float GetInfluenceRange() const { return m_influenceRange; }
+   void SetInfluenceRange(const float range) { m_influenceRange = range; }
    bool GetReflectionNoLightmaps() const { return m_disableLightReflection; }
    void SetReflectionNoLightmaps(const bool disableLightmaps) { m_disableLightReflection = disableLightmaps; }
    void ExtendAreaOfInterest(const float xMin, const float xMax, const float yMin, const float yMax);
@@ -88,6 +90,7 @@ private:
    vec4 m_reflection_clip_bounds;
    ReflectionMode m_reflection_mode = REFL_DYNAMIC;
    bool m_disableLightReflection = false; // Disable rendering of lightmaps in reflection render probes, needed to avoid having reflections of playfield lightmaps onto the playfield itself
+   float m_influenceRange = 100.f; // Height above the reflection plane over which the probe is trusted for PBR specular (VPX units)
 
    // Properties used for rendering (not saved)
    Renderer* m_renderer = nullptr;

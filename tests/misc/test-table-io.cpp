@@ -3,6 +3,7 @@
 #include "core/stdafx.h"
 #include "../vpx-test.h"
 
+#include "core/editablereg.h"
 #include "core/VPApp.h"
 #include "math/Mesh.h"
 #include "math/MeshUtils.h"
@@ -11,6 +12,7 @@
 #include "parts/PartGroup.h"
 #include "parts/pintable.h"
 #include "parts/Sound.h"
+#include "parts/spinner.h"
 #include "parts/surface.h"
 #include "renderer/RenderProbe.h"
 #include "utils/fileio.h"
@@ -666,6 +668,20 @@ TEST_CASE("VPZ pack save/load round-trip")
    // Add a render probe and a sound so that the pack layout holds them (default tables have none)
    RenderProbe *const probe = table->NewRenderProbe();
    probe->SetName("test_probe");
+   probe->SetInfluenceRange(250.f); // Non default (100) so the serialized value is meaningful
+   // A surface and a spinner with normal/ORM/emission maps (PBR fields must survive the pack format)
+   Surface *const surfPart = static_cast<Surface *>(EditableRegistry::CreateAndInit(eItemSurface, table, 100.f, 100.f));
+   surfPart->SetName("test_surface");
+   surfPart->m_d.m_szNormalMap = "normal.png";
+   surfPart->m_d.m_szORMMap = "orm.png";
+   surfPart->m_d.m_szEmissionMap = "emis.png";
+   Spinner *const spinPart = static_cast<Spinner *>(EditableRegistry::CreateAndInit(eItemSpinner, table, 200.f, 200.f));
+   spinPart->SetName("test_spinner");
+   spinPart->m_d.m_szNormalMap = "normal.png";
+   spinPart->m_d.m_szORMMap = "orm.png";
+   spinPart->m_d.m_szEmissionMap = "emis.png";
+   table->AddPart(surfPart);
+   table->AddPart(spinPart);
    vector<uint8_t> soundData = { 'I', 'D', '3', 0 };
    VPX::Sound *const sound = new VPX::Sound("test_sound", "imported.mp3"s, soundData);
    sound->SetFrontRearFade(-75); // -100 is full rear, +100 is full front
@@ -722,6 +738,15 @@ TEST_CASE("VPZ pack save/load round-trip")
       CHECK(!probeDoc.contains("name"));
       CHECK(probeDoc["$type"].get<string>() == "renderprobe");
       CHECK(probeDoc.begin().key() == "$type");
+      CHECK(probeDoc["influence_range"].get<float>() == doctest::Approx(250.f));
+      // PBR texture maps on surface/spinner parts must be written to the pack
+      for (const char *partName : { "test_surface", "test_spinner" })
+      {
+         const nlohmann::ordered_json partDoc = nlohmann::ordered_json::parse(std::ifstream(packPath / "parts" / (partName + ".json"s)));
+         CHECK(partDoc["normal_map"].get<string>() == "normal.png"s);
+         CHECK(partDoc["orm_map"].get<string>() == "orm.png"s);
+         CHECK(partDoc["emission_map"].get<string>() == "emis.png"s);
+      }
       // Sounds: offsets follow the same naming order as left_right (-1 rear, +1 front)
       const nlohmann::ordered_json soundDoc = nlohmann::ordered_json::parse(std::ifstream(packPath / "sounds" / "test_sound.json"));
       CHECK(soundDoc.begin().key() == "$type");
@@ -762,6 +787,24 @@ TEST_CASE("VPZ pack save/load round-trip")
       REQUIRE(SUCCEEDED(reloaded->LoadGameFromFilename(packPath, loadFeedback)));
       CHECK(loadFeedback.m_isMonotonic);
       CheckSameTableContent(table, reloaded);
+      const auto loadedProbe = std::ranges::find_if(reloaded->m_vrenderprobe, [](const RenderProbe *p) { return p->GetName() == "test_probe"s; });
+      REQUIRE(loadedProbe != reloaded->m_vrenderprobe.end());
+      CHECK((*loadedProbe)->GetInfluenceRange() == doctest::Approx(250.f));
+      for (IEditable *part : reloaded->GetParts())
+      {
+         if (part->GetItemType() == eItemSurface && part->GetName() == "test_surface"s)
+         {
+            CHECK(static_cast<Surface *>(part)->m_d.m_szNormalMap == "normal.png"s);
+            CHECK(static_cast<Surface *>(part)->m_d.m_szORMMap == "orm.png"s);
+            CHECK(static_cast<Surface *>(part)->m_d.m_szEmissionMap == "emis.png"s);
+         }
+         if (part->GetItemType() == eItemSpinner && part->GetName() == "test_spinner"s)
+         {
+            CHECK(static_cast<Spinner *>(part)->m_d.m_szNormalMap == "normal.png"s);
+            CHECK(static_cast<Spinner *>(part)->m_d.m_szORMMap == "orm.png"s);
+            CHECK(static_cast<Spinner *>(part)->m_d.m_szEmissionMap == "emis.png"s);
+         }
+      }
       reloaded->Release();
       std::filesystem::remove_all(packPath, ec);
    }
@@ -1081,7 +1124,13 @@ TEST_CASE("VPZ partial pack export and import")
    SUBCASE("exported materials keep their properties")
    {
       for (Material *const mat : table->m_materials)
+      {
          mat->m_fRoughness = 0.375f;
+         mat->m_fMetallic = 0.625f;
+         mat->m_fOcclusion = 0.5f;
+         mat->m_cEmission = RGB(10, 20, 30);
+         mat->m_fEmissionIntensity = 1.75f;
+      }
       const std::filesystem::path packPath = GetTmpDir() / "material-export.vpz";
       std::filesystem::remove_all(packPath, ec);
       TestFileFeedback saveFeedback;
@@ -1098,9 +1147,36 @@ TEST_CASE("VPZ partial pack export and import")
          CAPTURE(mat->m_name);
          CHECK(std::ranges::any_of(table->m_materials, [mat](const Material *m) { return m->m_name == mat->m_name; }));
          CHECK(mat->m_fRoughness == 0.375f);
+         CHECK(mat->m_fMetallic == doctest::Approx(0.625f));
+         CHECK(mat->m_fOcclusion == doctest::Approx(0.5f));
+         CHECK(mat->m_cEmission == RGB(10, 20, 30));
+         CHECK(mat->m_fEmissionIntensity == doctest::Approx(1.75f));
       }
       reloaded->Release();
       std::filesystem::remove(packPath, ec);
+
+      // Same properties must round-trip through the BIFF .vpx writer
+      const std::filesystem::path vpxPath = GetTmpDir() / "material-export.vpx";
+      std::filesystem::remove(vpxPath, ec);
+      table->m_filename = vpxPath;
+      REQUIRE(SUCCEEDED(table->Save(saveFeedback)));
+
+      CComObject<PinTable> *reloadedVpx;
+      CComObject<PinTable>::CreateInstance(&reloadedVpx);
+      reloadedVpx->AddRef();
+      REQUIRE(SUCCEEDED(reloadedVpx->LoadGameFromFilename(vpxPath, loadFeedback)));
+      CHECK(!reloadedVpx->m_materials.empty());
+      for (const Material *const mat : reloadedVpx->m_materials)
+      {
+         CAPTURE(mat->m_name);
+         CHECK(mat->m_fRoughness == doctest::Approx(0.375f));
+         CHECK(mat->m_fMetallic == doctest::Approx(0.625f));
+         CHECK(mat->m_fOcclusion == doctest::Approx(0.5f));
+         CHECK(mat->m_cEmission == RGB(10, 20, 30));
+         CHECK(mat->m_fEmissionIntensity == doctest::Approx(1.75f));
+      }
+      reloadedVpx->Release();
+      std::filesystem::remove(vpxPath, ec);
    }
 
    SUBCASE("exporting into a folder pack merges into it")
