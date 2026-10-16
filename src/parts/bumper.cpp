@@ -255,7 +255,9 @@ void Bumper::Render(const unsigned int renderMask)
 
       VisualMaterial material;
       const Material *const mat = isUIPass ? nullptr : m_ptable->GetMaterial(m_d.m_szBaseMaterial);
-      if (isUIPass || (!mat->m_bOpacityActive && !isDynamicOnly) || (mat->m_bOpacityActive && !isStaticOnly))
+      // PBR materials are always dynamic: their shading state can not be frozen in the static accumulation
+      const bool isPBR = mat != nullptr && m_renderer->m_renderDevice->m_pbrActive && mat->m_type == Material::MaterialType::PBR;
+      if (isUIPass || (isPBR ? !isStaticOnly : ((!mat->m_bOpacityActive && !isDynamicOnly) || (mat->m_bOpacityActive && !isStaticOnly))))
       {
          if (!isUIPass)
          {
@@ -265,6 +267,7 @@ void Bumper::Render(const unsigned int renderMask)
             material.material = mat;
             material.image = m_baseTexture.get();
             material.hasTextureAlpha = material.image != nullptr && !material.image->IsOpaque();
+            material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
          }
          m_renderer->RenderMesh(renderMask, base, material);
       }
@@ -284,7 +287,8 @@ void Bumper::Render(const unsigned int renderMask)
 
       VisualMaterial material;
       const Material *const mat = isUIPass ? nullptr : m_ptable->GetMaterial(m_d.m_szCapMaterial);
-      if (isUIPass || (!mat->m_bOpacityActive && !isDynamicOnly) || (mat->m_bOpacityActive && !isStaticOnly))
+      const bool isPBR = mat != nullptr && m_renderer->m_renderDevice->m_pbrActive && mat->m_type == Material::MaterialType::PBR;
+      if (isUIPass || (isPBR ? !isStaticOnly : ((!mat->m_bOpacityActive && !isDynamicOnly) || (mat->m_bOpacityActive && !isStaticOnly))))
       {
          if (!isUIPass)
          {
@@ -294,6 +298,7 @@ void Bumper::Render(const unsigned int renderMask)
             material.material = mat;
             material.image = m_capTexture.get();
             material.hasTextureAlpha = material.image != nullptr && !material.image->IsOpaque();
+            material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
          }
          m_renderer->RenderMesh(renderMask, cap, material);
       }
@@ -334,6 +339,7 @@ void Bumper::Render(const unsigned int renderMask)
          material.material = &ringMaterial;
          material.image = m_ringTexture.get();
          material.hasTextureAlpha = material.image != nullptr && !material.image->IsOpaque();
+         material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, ringMaterial.m_bOpacityActive);
       }
       m_renderer->RenderMesh(renderMask, ring, material);
       m_prevRingMatTrafo = ringMatrix;
@@ -367,6 +373,7 @@ void Bumper::Render(const unsigned int renderMask)
          material.material = mat;
          material.image = m_skirtTexture.get();
          material.hasTextureAlpha = material.image != nullptr && !material.image->IsOpaque();
+         material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
       }
       m_renderer->RenderMesh(renderMask, socket, material);
       m_prevSocketMatTrafo = socketMatrix;
