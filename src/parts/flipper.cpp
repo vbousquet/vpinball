@@ -644,7 +644,8 @@ void Flipper::Render(const unsigned int renderMask)
       Texture *const pin = m_ptable->GetImage(m_d.m_szImage);
       const Material *const mat = m_ptable->GetMaterial(m_d.m_szMaterial);
       const bool isPBR = m_renderer->m_renderDevice->m_pbrActive && mat->m_type == Material::MaterialType::PBR;
-      const Shader::PBRTextureSet pbrMaps = isPBR ? m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive) : Shader::PBRTextureSet();
+      const Shader::PBRTextureSet pbrMaps
+         = isPBR ? m_renderer->GetPBRTextureSet(m_d, m_boundingSphereCenter, m_d.m_FlipperRadius, isReflectionPass, mat->m_bOpacityActive, renderMask) : Shader::PBRTextureSet();
       m_renderer->m_renderDevice->m_basicShader->SetBasic(mat, pin, isPBR ? &pbrMaps : nullptr);
       m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, flipperBaseNumIndices);
 
@@ -652,7 +653,8 @@ void Flipper::Render(const unsigned int renderMask)
       {
          const Material *const rmat = m_ptable->GetMaterial(m_d.m_szRubberMaterial);
          const bool isRubberPBR = m_renderer->m_renderDevice->m_pbrActive && rmat->m_type == Material::MaterialType::PBR;
-         const Shader::PBRTextureSet rubberPbrMaps = isRubberPBR ? m_renderer->GetPBRTextureSet(m_d, isReflectionPass, rmat->m_bOpacityActive) : Shader::PBRTextureSet();
+         const Shader::PBRTextureSet rubberPbrMaps
+            = isRubberPBR ? m_renderer->GetPBRTextureSet(m_d, m_boundingSphereCenter, m_d.m_FlipperRadius, isReflectionPass, rmat->m_bOpacityActive, renderMask) : Shader::PBRTextureSet();
          m_renderer->m_renderDevice->m_basicShader->SetBasic(rmat, pin, isRubberPBR ? &rubberPbrMaps : nullptr);
          m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, flipperBaseNumIndices, flipperBaseNumIndices);
       }

@@ -1040,7 +1040,9 @@ void Primitive::Render(const unsigned int renderMask)
       m_renderer->m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, depthMask ? RenderState::RS_TRUE : RenderState::RS_FALSE);
       const vec4 color = convertColor(m_d.m_color, alpha * (float)(1.0 / 100.0));
       m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::staticColor_Alpha, &color);
-      const Shader::PBRTextureSet pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
+      const Shader::PBRTextureSet pbrMaps = isPBR
+         ? m_renderer->GetPBRTextureSet(m_d, m_d.m_vPosition, -1.f, isReflectionPass, mat->m_bOpacityActive, renderMask, mat->m_bOpacityActive ? refractions : nullptr)
+         : Shader::PBRTextureSet();
       m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(img ? ShaderTechnique::basic_with_texture : ShaderTechnique::basic_without_texture, *mat,
          img ? pinAlphaTest >= 0.f && !img->IsOpaque() : false, nMap, reflections, refractions, isPBR ? &pbrMaps : nullptr);
       bool is_reflection_only_pass = false;

@@ -620,7 +620,7 @@ void Rubber::Render(const unsigned int renderMask)
    else
    {
       m_renderer->m_renderDevice->ResetRenderState();
-      const Shader::PBRTextureSet pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
+      const Shader::PBRTextureSet pbrMaps = m_renderer->GetPBRTextureSet(m_d, m_boundingSphereCenter, -1.f, isReflectionPass, mat->m_bOpacityActive, renderMask);
       m_renderer->m_renderDevice->m_basicShader->SetBasic(mat, m_ptable->GetImage(m_d.m_szImage), isPBR ? &pbrMaps : nullptr);
       m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
    }

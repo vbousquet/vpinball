@@ -4,6 +4,8 @@
 // - base variant only performs alpha testing/discards, as color writes are masked out
 // - OUT_NORMAL variant outputs the view space shaded normal xy (normal mapping applied), with the
 //   z component reconstructed by consumers (normal is flipped to always face the viewer)
+// - PBR variant additionally outputs the material perceptual roughness in z and the opaque
+//   PBR flag in w (the PBR specular march is gated by these; non PBR pixels write 0)
 
 // Inputs must exactly match the vertex shader outputs (vs_depth & vs_ball)
 $input v_worldPos, v_normal, v_texcoord0
@@ -19,12 +21,19 @@ $input v_worldPos, v_normal, v_texcoord0
 #if defined(OUT_NORMAL) && defined(TEX)
 SAMPLER2D      (tex_base_normalmap, 4); // normal map
 #endif
+#if defined(OUT_NORMAL) && defined(PBR)
+SAMPLER2D      (tex_pbr_orm, 8); // packed occlusion/roughness/metallic map
+uniform vec4 pbrFactors;
+#define pbrRoughnessFactor (pbrFactors.z)
+uniform vec4 pbrMapFlags; // x: ORM map bound, y: emission map bound
+#define hasORMMap      (pbrMapFlags.x != 0.0)
+#endif
 #ifdef AT
 SAMPLER2D      (tex_base_color, 0); // base color
 uniform vec4 alphaTestValue; // FIXME Actually float but extended to vec4 for BGFX (and we could use the builtin)
 #endif
 
-#if defined(AT) || (defined(OUT_NORMAL) && defined(TEX))
+#if defined(AT) || (defined(OUT_NORMAL) && (defined(TEX) || defined(PBR)))
 uniform vec4 u_basic_shade_mode;
 #define noMipMaps           (u_basic_shade_mode.w != 0.0)
 #endif
@@ -110,7 +119,20 @@ void main() {
       // Flip the normal to always face the viewer so that z can be reconstructed from xy
       if (N.z < 0.0)
          N = -N;
-      gl_FragColor = vec4(N.xy, 0.0, 1.0);
+      #ifdef PBR
+         // Same perceptual roughness as the PBR shading path, flagging the pixel as opaque PBR
+         float roughness = pbrRoughnessFactor;
+         BRANCH if (hasORMMap)
+         {
+            if (noMipMaps)
+               roughness *= texNoLod(tex_pbr_orm, v_texcoord0).y;
+            else
+               roughness *= texture2D(tex_pbr_orm, v_texcoord0).y;
+         }
+         gl_FragColor = vec4(N.xy, clamp(roughness, 0.045, 1.0), 1.0);
+      #else
+         gl_FragColor = vec4(N.xy, 0.0, 0.0);
+      #endif
    #else
       gl_FragColor = vec4_splat(0.0);
    #endif

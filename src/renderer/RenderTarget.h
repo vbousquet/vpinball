@@ -53,8 +53,9 @@ public:
    static void OnFrameFlushed() { current_render_target = nullptr; current_render_layer = 0; }
 
    // Optional PBR specular sideband: 2 RGBA16F textures attached as color attachments 1 & 2 of this render target's
-   // framebuffers. Attachment 1 carries probe radiance + coverage, attachment 2 specular weight + the PBR mask flag.
-   // The returned target wraps a framebuffer referencing only the 2 sideband textures, for the dedicated clear pass.
+   // framebuffers. Attachment 1 carries probe radiance + coverage, attachment 2 specular weight + the PBR mask flag
+   // (the march's roughness & opaque PBR flag come from the depth prepass color attachment).
+   // The returned target wraps a framebuffer referencing only the sideband textures, for the dedicated clear pass.
    void CreatePBRSideband();
    RenderTarget* GetPBRSidebandTarget() const { return m_pbrSidebandTarget; }
    std::shared_ptr<Sampler> GetPBRSidebandSampler(int idx) const { return m_pbrSidebandSampler[idx]; }
