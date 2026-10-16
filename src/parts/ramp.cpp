@@ -721,12 +721,13 @@ void Ramp::Render(const unsigned int renderMask)
    TRACE_FUNCTION();
 
    const Material *const mat = m_ptable->GetMaterial(m_d.m_szMaterial);
-   if (!m_d.m_visible
-    || (!isUIPass && mat == nullptr)
-    || (isReflectionPass && !m_d.m_reflectionEnabled)
-    || (isStaticOnly && mat->m_bOpacityActive)
-    || (isDynamicOnly && !mat->m_bOpacityActive))
+   // PBR materials are always dynamic: their shading state can not be frozen in the static accumulation
+   const bool isPBR = m_renderer->m_renderDevice->m_pbrActive && mat != nullptr && mat->m_type == Material::MaterialType::PBR;
+   if (!m_d.m_visible || (!isUIPass && mat == nullptr) || (isReflectionPass && !m_d.m_reflectionEnabled) || (isStaticOnly && (mat->m_bOpacityActive || isPBR))
+      || (isDynamicOnly && !mat->m_bOpacityActive && !isPBR))
       return;
+
+   const Shader::PBRTextureSet pbrMaps = isPBR ? m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive) : Shader::PBRTextureSet();
 
    if (m_d.m_widthbottom == 0.0f && m_d.m_widthtop == 0.0f)
    {
@@ -768,6 +769,7 @@ void Ramp::Render(const unsigned int renderMask)
          material.filter = SamplerFilter::SF_TRILINEAR;
          material.clampU = material.clampV = sam;
          material.hasTextureAlpha = pin != nullptr && !pin->IsOpaque();
+         material.pbrMaps = pbrMaps;
          body.transparent = mat->m_bOpacityActive;
       }
       m_renderer->RenderMesh(renderMask, body, material);
@@ -821,6 +823,7 @@ void Ramp::Render(const unsigned int renderMask)
          material.filter = SamplerFilter::SF_TRILINEAR;
          material.clampU = material.clampV = sam;
          material.hasTextureAlpha = pin != nullptr && !pin->IsOpaque();
+         material.pbrMaps = pbrMaps;
          wallsMaterial = material;
          if (pin != nullptr && !m_d.m_imageWalls)
             wallsMaterial.technique = ShaderTechnique::basic_without_texture;

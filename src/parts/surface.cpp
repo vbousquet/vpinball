@@ -786,10 +786,15 @@ void Surface::Render(const unsigned int renderMask)
 
    RenderSlingshots();
 
-   if (isStaticOnly && !StaticRendering())
+   // PBR materials are always dynamic: their shading state can not be frozen in the static accumulation
+   const bool isPBR = m_renderer->m_renderDevice->m_pbrActive
+      && ((m_d.m_sideVisible && m_ptable->GetMaterial(m_d.m_szSideMaterial)->m_type == Material::MaterialType::PBR)
+         || (m_d.m_topBottomVisible && m_ptable->GetMaterial(m_d.m_szTopMaterial)->m_type == Material::MaterialType::PBR));
+
+   if (isStaticOnly && (!StaticRendering() || isPBR))
       return;
 
-   if (isDynamicOnly && StaticRendering())
+   if (isDynamicOnly && StaticRendering() && !isPBR)
       return;
 
    if (isUIPass)
@@ -905,6 +910,8 @@ void Surface::RenderWallsAtHeight(const bool drop, const unsigned int renderMask
       material.material = mat;
       material.image = pin;
       material.hasTextureAlpha = pin != nullptr && !pin->IsOpaque();
+      material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
+
       // combine drawcalls into one (hopefully faster)
       m_renderer->RenderMesh(renderMask, side, material);
    }
@@ -927,6 +934,7 @@ void Surface::RenderWallsAtHeight(const bool drop, const unsigned int renderMask
       material.material = mat;
       material.image = pin;
       material.hasTextureAlpha = pin != nullptr && !pin->IsOpaque();
+      material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
 
       // Top
       m_renderer->RenderMesh(renderMask, topBottom, material);

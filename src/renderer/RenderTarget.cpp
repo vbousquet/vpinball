@@ -564,6 +564,11 @@ RenderTarget::~RenderTarget()
    if (bgfx::isValid(m_msaaResolveDepthTex))
       bgfx::destroy(m_msaaResolveDepthTex);
 
+   delete m_pbrSidebandTarget;
+   for (int i = 0; i < 2; i++)
+      if (bgfx::isValid(m_pbrSidebandTex[i]))
+         bgfx::destroy(m_pbrSidebandTex[i]);
+
 #elif defined(ENABLE_OPENGL)
    glDeleteTextures(1, &m_color_tex);
    if (m_depth_tex && !m_shared_depth)
@@ -622,6 +627,71 @@ RenderTarget* RenderTarget::Duplicate(const string& name, const bool shareDepthS
    assert(!m_is_back_buffer);
    return new RenderTarget(m_rd, m_type, name, m_width, m_height, m_format, m_has_depth, m_nMSAASamples, "Failed to duplicate render target", shareDepthSurface ? this : nullptr);
 }
+
+#if defined(ENABLE_BGFX)
+void RenderTarget::CreatePBRSideband()
+{
+   assert(!m_is_back_buffer);
+   assert(m_pbrSidebandTarget == nullptr);
+   assert(m_has_depth && !m_shared_depth); // The sideband attachments are added on top of the existing color + depth attachments
+
+   uint64_t texFlags;
+   switch (m_nMSAASamples)
+   {
+   case 2: texFlags = BGFX_TEXTURE_RT_MSAA_X2; break;
+   case 4: texFlags = BGFX_TEXTURE_RT_MSAA_X4; break;
+   case 8: texFlags = BGFX_TEXTURE_RT_MSAA_X8; break;
+   case 16: texFlags = BGFX_TEXTURE_RT_MSAA_X16; break;
+   default: texFlags = BGFX_TEXTURE_RT | BGFX_TEXTURE_BLIT_DST; break;
+   }
+   for (int i = 0; i < 2; i++)
+   {
+      m_pbrSidebandTex[i] = bgfx::createTexture2D(m_width, m_height, false, m_nLayers, bgfx::TextureFormat::RGBA16F, texFlags);
+      bgfx::setName(m_pbrSidebandTex[i], (m_name + ".PBRSideband" + std::to_string(i)).c_str());
+      m_pbrSidebandSampler[i]
+         = std::make_shared<Sampler>(m_rd, m_name + ".PBRSideband" + std::to_string(i), m_type, m_pbrSidebandTex[i], bgfx::TextureFormat::RGBA16F, m_width, m_height, false);
+   }
+
+   // Rebuild the framebuffer(s) to add the 2 sideband textures as color attachments 1 & 2
+   {
+      std::array<bgfx::Attachment, 4> attachments;
+      attachments[0].init(m_color_tex, bgfx::Access::Write, 0, m_nLayers, 0, BGFX_ATTACHMENT_NONE);
+      attachments[1].init(m_pbrSidebandTex[0], bgfx::Access::Write, 0, m_nLayers, 0, BGFX_ATTACHMENT_NONE);
+      attachments[2].init(m_pbrSidebandTex[1], bgfx::Access::Write, 0, m_nLayers, 0, BGFX_ATTACHMENT_NONE);
+      attachments[3].init(IsMSAA() ? m_msaaResolveDepthTex : m_depth_tex, bgfx::Access::Write, 0, m_nLayers, 0, BGFX_ATTACHMENT_NONE);
+      bgfx::destroy(m_framebuffer);
+      m_framebuffer = bgfx::createFrameBuffer(4, attachments.data());
+      assert(bgfx::isValid(m_framebuffer));
+      bgfx::setName(m_framebuffer, m_name.c_str());
+   }
+   for (uint16_t i = 0; i < static_cast<uint16_t>(m_nLayers); i++)
+   {
+      if (!bgfx::isValid(m_framebuffer_layers[i]))
+         continue;
+      std::array<bgfx::Attachment, 4> attachments;
+      attachments[0].init(m_color_tex, bgfx::Access::Write, i, 1, 0, BGFX_ATTACHMENT_NONE);
+      attachments[1].init(m_pbrSidebandTex[0], bgfx::Access::Write, i, 1, 0, BGFX_ATTACHMENT_NONE);
+      attachments[2].init(m_pbrSidebandTex[1], bgfx::Access::Write, i, 1, 0, BGFX_ATTACHMENT_NONE);
+      attachments[3].init(IsMSAA() ? m_msaaResolveDepthTex : m_depth_tex, bgfx::Access::Write, i, 1, 0, BGFX_ATTACHMENT_NONE);
+      bgfx::destroy(m_framebuffer_layers[i]);
+      m_framebuffer_layers[i] = bgfx::createFrameBuffer(4, attachments.data());
+      assert(bgfx::isValid(m_framebuffer_layers[i]));
+      bgfx::setName(m_framebuffer_layers[i], std::format("{}.Layer{}", m_name, i).c_str());
+   }
+
+   // A view clear applies to all of a framebuffer's color attachments: use a dedicated framebuffer referencing only
+   // the 2 sideband textures so that clearing them does not touch the scene color (which preserves static prerendering)
+   {
+      std::array<bgfx::Attachment, 2> attachments;
+      attachments[0].init(m_pbrSidebandTex[0], bgfx::Access::Write, 0, m_nLayers, 0, BGFX_ATTACHMENT_NONE);
+      attachments[1].init(m_pbrSidebandTex[1], bgfx::Access::Write, 0, m_nLayers, 0, BGFX_ATTACHMENT_NONE);
+      const bgfx::FrameBufferHandle clearFramebuffer = bgfx::createFrameBuffer(2, attachments.data());
+      assert(bgfx::isValid(clearFramebuffer));
+      m_pbrSidebandTarget = new RenderTarget(m_rd, m_type, clearFramebuffer, BGFX_INVALID_HANDLE, bgfx::TextureFormat::RGBA16F, BGFX_INVALID_HANDLE, bgfx::TextureFormat::Count,
+         m_name + ".PBRSideband"s, m_width, m_height, colorFormat::RGBA16F);
+   }
+}
+#endif
 
 void RenderTarget::CopyTo(RenderTarget* const dest, const bool copyColor, const bool copyDepth,
    const int x1, const int y1, const int w1, const int h1,

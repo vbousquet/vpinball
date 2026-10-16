@@ -916,8 +916,12 @@ void Primitive::Render(const unsigned int renderMask)
    
    if (isReflectionPass && !m_d.m_reflectionEnabled)
       return;
-   
-   if (isStaticOnly && !m_d.m_staticRendering)
+
+   const Material *const mat = m_ptable->GetMaterial(m_d.m_szMaterial);
+   // PBR materials are always dynamic: their shading state (lights, AO, specular resolve) can not be frozen in the static accumulation
+   const bool isPBR = m_renderer->m_renderDevice->m_pbrActive && mat->m_type == Material::MaterialType::PBR;
+
+   if (isStaticOnly && (!m_d.m_staticRendering || isPBR))
       return;
    
    // Don't render in LS when state off (visibility driven by light sequencer)
@@ -926,8 +930,8 @@ void Primitive::Render(const unsigned int renderMask)
    
    // only render if we have dynamic reflections to render above the statically prerendered primitive
    RenderTarget *const reflections = reflection_probe ? reflection_probe->Render(renderMask) : nullptr;
-   if (isDynamicOnly && m_d.m_staticRendering && (reflections == nullptr))
-      return; 
+   if (isDynamicOnly && m_d.m_staticRendering && !isPBR && (reflections == nullptr))
+      return;
 
    // Update lightmap before checking anything that uses alpha
    float alpha = m_d.m_alpha;
@@ -988,8 +992,6 @@ void Primitive::Render(const unsigned int renderMask)
    RenderProbe *const refraction_probe = m_ptable->GetRenderProbe(m_d.m_szRefractionProbe);
    RenderTarget *const refractions = refraction_probe ? refraction_probe->Render(renderMask) : nullptr;
 
-   const Material *const mat = m_ptable->GetMaterial(m_d.m_szMaterial);
-
    const bool depthMask = m_d.m_useDepthMask && !m_d.m_addBlend;
 
    RenderState::RenderStateValue cullMode = m_renderer->m_renderDevice->GetRenderState().GetRenderState(RenderState::CULLMODE);
@@ -1045,8 +1047,9 @@ void Primitive::Render(const unsigned int renderMask)
       m_renderer->m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, depthMask ? RenderState::RS_TRUE : RenderState::RS_FALSE);
       const vec4 color = convertColor(m_d.m_color, alpha * (float)(1.0 / 100.0));
       m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::staticColor_Alpha, &color);
-      m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(img ? ShaderTechnique::basic_with_texture : ShaderTechnique::basic_without_texture, 
-         *mat, img ? pinAlphaTest >= 0.f && !img->IsOpaque() : false, nMap, reflections, refractions);
+      const Shader::PBRTextureSet pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
+      m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(img ? ShaderTechnique::basic_with_texture : ShaderTechnique::basic_without_texture, *mat,
+         img ? pinAlphaTest >= 0.f && !img->IsOpaque() : false, nMap, reflections, refractions, isPBR ? &pbrMaps : nullptr);
       bool is_reflection_only_pass = false;
 
       // Handle render probes
@@ -1094,7 +1097,7 @@ void Primitive::Render(const unsigned int renderMask)
             n.Normalize();
             m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::mirrorNormal_factor, n.x, n.y, n.z, m_d.m_reflectionStrength);
             m_renderer->m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_reflection, reflections->GetColorSampler());
-            is_reflection_only_pass = m_d.m_staticRendering && isDynamicOnly;
+            is_reflection_only_pass = m_d.m_staticRendering && !isPBR && isDynamicOnly;
             if (!is_reflection_only_pass && !m_renderer->m_renderDevice->GetRenderState().IsOpaque())
             { // Primitive uses alpha transparency => render in 2 passes, one for the texture with alpha blending, one for the reflections which can happen above a transparent part (like for a glass or insert plastic)
                m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(
@@ -1102,7 +1105,7 @@ void Primitive::Render(const unsigned int renderMask)
                   *mat, img ? pinAlphaTest >= 0.f && !img->IsOpaque() : false, nMap, false, false);
                // OpenGL & BGFX shaders derive doReflections from the reflection factor: null it so that only the reflection pass applies it
                m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::mirrorNormal_factor, n.x, n.y, n.z, 0.f);
-               m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, mat->m_bOpacityActive && !m_d.m_staticRendering, m_d.m_vPosition, m_d.m_depthBias,
+               m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, mat->m_bOpacityActive && (!m_d.m_staticRendering || isPBR), m_d.m_vPosition, m_d.m_depthBias,
                   m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_groupdRendering ? m_numGroupIndices : (uint32_t)m_mesh.NumIndices());
                m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::mirrorNormal_factor, n.x, n.y, n.z, m_d.m_reflectionStrength);
                is_reflection_only_pass = true;
@@ -1128,10 +1131,12 @@ void Primitive::Render(const unsigned int renderMask)
       }
 
       // draw the mesh (back of it if backface enabled)
-      m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, 
-            is_reflection_only_pass // The reflection pass is an additive (so transparent) pass to be drawn after the opaque one
-         || refractions // Refractions must be rendered back to front since they rely on what is behind
-         || (mat->m_bOpacityActive && !m_d.m_staticRendering /* && !m_renderer->m_renderDevice->GetRenderState().IsOpaque() */), // We can not use the real render state opaque state since Blood Machine and other tables use depth masks
+      m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader,
+         is_reflection_only_pass // The reflection pass is an additive (so transparent) pass to be drawn after the opaque one
+            || refractions // Refractions must be rendered back to front since they rely on what is behind
+            || (mat->m_bOpacityActive
+               && (!m_d.m_staticRendering
+                  || isPBR) /* && !m_renderer->m_renderDevice->GetRenderState().IsOpaque() */), // We can not use the real render state opaque state since Blood Machine and other tables use depth masks
          m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_groupdRendering ? m_numGroupIndices : (uint32_t)m_mesh.NumIndices());
    }
 

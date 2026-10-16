@@ -583,12 +583,12 @@ void Rubber::Render(const unsigned int renderMask)
    const bool isUIPass = renderMask & Renderer::UI_EDGES || renderMask & Renderer::UI_FILL;
    TRACE_FUNCTION();
 
-   if (!m_d.m_visible
-   || (isReflectionPass && !m_d.m_reflectionEnabled)
-   || m_d.m_thickness == 0
-   || (isDynamicOnly && m_d.m_staticRendering)
-   || (isStaticOnly && !m_d.m_staticRendering)
-   || m_meshBuffer == nullptr) // Degenerate curve
+   const Material *const mat = m_ptable->GetMaterial(m_d.m_szMaterial);
+   // PBR materials are always dynamic: their shading state can not be frozen in the static accumulation
+   const bool isPBR = m_renderer->m_renderDevice->m_pbrActive && mat->m_type == Material::MaterialType::PBR;
+
+   if (!m_d.m_visible || (isReflectionPass && !m_d.m_reflectionEnabled) || m_d.m_thickness == 0 || (isDynamicOnly && m_d.m_staticRendering && !isPBR)
+      || (isStaticOnly && (!m_d.m_staticRendering || isPBR)) || m_meshBuffer == nullptr) // Degenerate curve
       return;
 
    if (m_dynamicVertexBufferRegenerate && !m_d.m_staticRendering)
@@ -613,6 +613,7 @@ void Rubber::Render(const unsigned int renderMask)
       material.material = m_ptable->GetMaterial(m_d.m_szMaterial);
       material.image = pin;
       material.hasTextureAlpha = pin != nullptr && !pin->IsOpaque();
+      material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
    }
    m_renderer->RenderMesh(renderMask, body, material);
 }
