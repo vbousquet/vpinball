@@ -644,10 +644,10 @@ void Flipper::Render(const unsigned int renderMask)
       material.material = m_ptable->GetMaterial(m_d.m_szMaterial);
       material.image = pin;
       material.hasTextureAlpha = pin != nullptr && !pin->IsOpaque();
-      material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, material.material->m_bOpacityActive);
+      material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, m_boundingSphereCenter, m_d.m_FlipperRadius, isReflectionPass, material.material->m_bOpacityActive, renderMask);
       rubberMaterial = material;
       rubberMaterial.material = m_ptable->GetMaterial(m_d.m_szRubberMaterial);
-      rubberMaterial.pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, rubberMaterial.material->m_bOpacityActive);
+      rubberMaterial.pbrMaps = m_renderer->GetPBRTextureSet(m_d, m_boundingSphereCenter, m_d.m_FlipperRadius, isReflectionPass, rubberMaterial.material->m_bOpacityActive, renderMask);
    }
 
    m_renderer->RenderMesh(renderMask, base, material);

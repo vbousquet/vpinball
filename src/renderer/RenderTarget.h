@@ -53,16 +53,25 @@ public:
    static void OnFrameFlushed() { current_render_target = nullptr; current_render_layer = 0; }
 
    // Optional PBR specular sideband: 2 RGBA16F textures attached as color attachments 1 & 2 of this render target's
-   // framebuffers. Attachment 1 carries probe radiance + coverage, attachment 2 specular weight + the PBR mask flag.
-   // The returned target wraps a framebuffer referencing only the 2 sideband textures, for the dedicated clear pass.
+   // framebuffers. Attachment 1 carries probe radiance + coverage, attachment 2 specular weight + the PBR mask flag
+   // (the march's roughness & opaque PBR flag come from the depth prepass data attachment).
+   // The returned target wraps a framebuffer referencing only the sideband textures, for the dedicated clear pass.
    void CreatePBRSideband();
    RenderTarget* GetPBRSidebandTarget() const { return m_pbrSidebandTarget; }
    std::shared_ptr<Sampler> GetPBRSidebandSampler(int idx) const { return m_pbrSidebandSampler[idx]; }
+
+   // Optional PBR data sideband of the depth prepass: a RG16F texture attached as color attachment 1 of this render
+   // target's framebuffers, carrying the perceptual roughness (x) and the opaque PBR flag (y) gating the specular
+   // march (attachment 0 keeps the shaded normals in xy and the motion vectors in zw when they are generated).
+   void CreatePBRDataAttachment();
+   std::shared_ptr<Sampler> GetPBRDataSampler() const { return m_pbrDataSampler; }
 #else
    // PBR is BGFX only: stubs so the renderer code compiles on the other backends
    void CreatePBRSideband() { }
    RenderTarget* GetPBRSidebandTarget() const { return nullptr; }
    std::shared_ptr<Sampler> GetPBRSidebandSampler(int idx) const { return nullptr; }
+   void CreatePBRDataAttachment() { }
+   std::shared_ptr<Sampler> GetPBRDataSampler() const { return nullptr; }
 #endif
 #if defined(ENABLE_OPENGL)
    GLuint GetCoreFrameBuffer() const { return m_framebuffer; }
@@ -105,6 +114,8 @@ private:
    bgfx::TextureHandle m_pbrSidebandTex[2] { BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE };
    std::shared_ptr<Sampler> m_pbrSidebandSampler[2];
    RenderTarget* m_pbrSidebandTarget = nullptr; // Wrapper over a framebuffer referencing only the 2 sideband textures
+   bgfx::TextureHandle m_pbrDataTex = BGFX_INVALID_HANDLE;
+   std::shared_ptr<Sampler> m_pbrDataSampler;
    bool m_needResolve = false;
 #elif defined(ENABLE_OPENGL)
    GLuint m_framebuffer = 0;

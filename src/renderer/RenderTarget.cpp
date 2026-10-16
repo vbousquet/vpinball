@@ -568,6 +568,8 @@ RenderTarget::~RenderTarget()
    for (int i = 0; i < 2; i++)
       if (bgfx::isValid(m_pbrSidebandTex[i]))
          bgfx::destroy(m_pbrSidebandTex[i]);
+   if (bgfx::isValid(m_pbrDataTex))
+      bgfx::destroy(m_pbrDataTex);
 
 #elif defined(ENABLE_OPENGL)
    glDeleteTextures(1, &m_color_tex);
@@ -689,6 +691,52 @@ void RenderTarget::CreatePBRSideband()
       assert(bgfx::isValid(clearFramebuffer));
       m_pbrSidebandTarget = new RenderTarget(m_rd, m_type, clearFramebuffer, BGFX_INVALID_HANDLE, bgfx::TextureFormat::RGBA16F, BGFX_INVALID_HANDLE, bgfx::TextureFormat::Count,
          m_name + ".PBRSideband"s, m_width, m_height, colorFormat::RGBA16F);
+   }
+}
+
+void RenderTarget::CreatePBRDataAttachment()
+{
+   assert(!m_is_back_buffer);
+   assert(m_pbrDataSampler == nullptr);
+   assert(m_has_depth && !m_shared_depth); // The data attachment is added on top of the existing color + depth attachments
+
+   uint64_t texFlags;
+   switch (m_nMSAASamples)
+   {
+   case 2: texFlags = BGFX_TEXTURE_RT_MSAA_X2; break;
+   case 4: texFlags = BGFX_TEXTURE_RT_MSAA_X4; break;
+   case 8: texFlags = BGFX_TEXTURE_RT_MSAA_X8; break;
+   case 16: texFlags = BGFX_TEXTURE_RT_MSAA_X16; break;
+   default: texFlags = BGFX_TEXTURE_RT; break;
+   }
+   m_pbrDataTex = bgfx::createTexture2D(m_width, m_height, false, m_nLayers, bgfx::TextureFormat::RG16F, texFlags);
+   bgfx::setName(m_pbrDataTex, (m_name + ".PBRData").c_str());
+   m_pbrDataSampler = std::make_shared<Sampler>(m_rd, m_name + ".PBRData", m_type, m_pbrDataTex, bgfx::TextureFormat::RG16F, m_width, m_height, false);
+
+   // Rebuild the framebuffer(s) to add the data texture as color attachment 1 (a view clear clears all of the
+   // attachments, so no dedicated clear framebuffer is needed: the flag resets with the prepass)
+   {
+      std::array<bgfx::Attachment, 3> attachments;
+      attachments[0].init(m_color_tex, bgfx::Access::Write, 0, m_nLayers, 0, BGFX_ATTACHMENT_NONE);
+      attachments[1].init(m_pbrDataTex, bgfx::Access::Write, 0, m_nLayers, 0, BGFX_ATTACHMENT_NONE);
+      attachments[2].init(IsMSAA() ? m_msaaResolveDepthTex : m_depth_tex, bgfx::Access::Write, 0, m_nLayers, 0, BGFX_ATTACHMENT_NONE);
+      bgfx::destroy(m_framebuffer);
+      m_framebuffer = bgfx::createFrameBuffer(3, attachments.data());
+      assert(bgfx::isValid(m_framebuffer));
+      bgfx::setName(m_framebuffer, m_name.c_str());
+   }
+   for (uint16_t i = 0; i < static_cast<uint16_t>(m_nLayers); i++)
+   {
+      if (!bgfx::isValid(m_framebuffer_layers[i]))
+         continue;
+      std::array<bgfx::Attachment, 3> attachments;
+      attachments[0].init(m_color_tex, bgfx::Access::Write, i, 1, 0, BGFX_ATTACHMENT_NONE);
+      attachments[1].init(m_pbrDataTex, bgfx::Access::Write, i, 1, 0, BGFX_ATTACHMENT_NONE);
+      attachments[2].init(IsMSAA() ? m_msaaResolveDepthTex : m_depth_tex, bgfx::Access::Write, i, 1, 0, BGFX_ATTACHMENT_NONE);
+      bgfx::destroy(m_framebuffer_layers[i]);
+      m_framebuffer_layers[i] = bgfx::createFrameBuffer(3, attachments.data());
+      assert(bgfx::isValid(m_framebuffer_layers[i]));
+      bgfx::setName(m_framebuffer_layers[i], std::format("{}.Layer{}", m_name, i).c_str());
    }
 }
 #endif
