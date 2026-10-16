@@ -253,6 +253,10 @@ public:
    bool m_pbrActive = false; // True when PBR materials are shaded through the dedicated PBR path (Player_PBR setting && supported backend)
    bool m_pbrAOEnabled = false; // True on frames where the AO pass was recorded ahead of the scene pass (PBR shaders sample tex_pbr_ao)
    std::shared_ptr<Sampler> m_pbrDFG; // GGX split-sum DFG LUT (tex_pbr_dfg)
+   std::shared_ptr<Sampler> m_pbrLightList; // Packed PBR light list (tex_pbr_lights): light records + cluster grid + index list
+#if defined(ENABLE_BGFX)
+   bgfx::TextureHandle m_pbrLightListTex = BGFX_INVALID_HANDLE; // Updatable RGBA32F backing store of m_pbrLightList
+#endif
 
 private:
    const bool m_isAnaglyph;
