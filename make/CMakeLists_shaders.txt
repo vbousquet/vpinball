@@ -61,7 +61,7 @@ set(VPX_SHADER_GEN_DIR "${CMAKE_BINARY_DIR}/gen")
 set(VPX_SHADER_OUT_DIR "${VPX_SHADER_GEN_DIR}/shaders")
 set(VPX_SHADER_WORK_DIR "${VPX_SHADER_OUT_DIR}/.frag")
 
-set(_vpx_shader_groups basic ball dmd flasher light stereo postprocess antialiasing tonemap blur motionblur imgui mipmap)
+set(_vpx_shader_groups basic ball dmd flasher light stereo postprocess antialiasing tonemap blur motionblur imgui mipmap pbr)
 
 set(VPX_SHADER_HEADERS "")
 foreach(_g IN LISTS _vpx_shader_groups)

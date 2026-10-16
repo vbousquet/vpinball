@@ -370,6 +370,8 @@ void Gate::Render(const unsigned int renderMask)
    {
       m_renderer->m_renderDevice->ResetRenderState();
       material.material = m_ptable->GetMaterial(m_d.m_szMaterial);
+      material.pbrMaps
+         = m_renderer->GetPBRTextureSet(m_d, pos, m_d.m_length, isReflectionPass, material.material->m_bOpacityActive, renderMask);
    }
 
    if (m_d.m_showBracket)

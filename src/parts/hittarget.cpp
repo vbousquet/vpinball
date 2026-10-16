@@ -652,6 +652,7 @@ void HitTarget::Render(const unsigned int renderMask)
       material.material = m_ptable->GetMaterial(m_d.m_szMaterial);
       material.image = pin;
       material.hasTextureAlpha = pin != nullptr && !pin->IsOpaque();
+      material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, material.material->m_bOpacityActive);
       body.transparent = material.material->m_bOpacityActive;
    }
    m_renderer->RenderMesh(renderMask, body, material);

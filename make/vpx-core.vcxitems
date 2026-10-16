@@ -60,7 +60,7 @@
       <_VpxShaderInputs Include="$(MSBuildThisFileFullPath)" />
     </ItemGroup>
     <Delete Files="$(IntDir)vpx_bgfx_shaders.stamp"
-            Condition="Exists('$(IntDir)vpx_bgfx_shaders.stamp') and (!Exists('$(VpxShaderGenDir)\bgfx_basic.h') or !Exists('$(VpxShaderGenDir)\bgfx_ball.h') or !Exists('$(VpxShaderGenDir)\bgfx_dmd.h') or !Exists('$(VpxShaderGenDir)\bgfx_flasher.h') or !Exists('$(VpxShaderGenDir)\bgfx_light.h') or !Exists('$(VpxShaderGenDir)\bgfx_stereo.h') or !Exists('$(VpxShaderGenDir)\bgfx_postprocess.h') or !Exists('$(VpxShaderGenDir)\bgfx_antialiasing.h') or !Exists('$(VpxShaderGenDir)\bgfx_tonemap.h') or !Exists('$(VpxShaderGenDir)\bgfx_blur.h') or !Exists('$(VpxShaderGenDir)\bgfx_motionblur.h') or !Exists('$(VpxShaderGenDir)\bgfx_imgui.h') or !Exists('$(VpxShaderGenDir)\bgfx_mipmap.h'))" />
+            Condition="Exists('$(IntDir)vpx_bgfx_shaders.stamp') and (!Exists('$(VpxShaderGenDir)\bgfx_basic.h') or !Exists('$(VpxShaderGenDir)\bgfx_ball.h') or !Exists('$(VpxShaderGenDir)\bgfx_dmd.h') or !Exists('$(VpxShaderGenDir)\bgfx_flasher.h') or !Exists('$(VpxShaderGenDir)\bgfx_light.h') or !Exists('$(VpxShaderGenDir)\bgfx_stereo.h') or !Exists('$(VpxShaderGenDir)\bgfx_postprocess.h') or !Exists('$(VpxShaderGenDir)\bgfx_antialiasing.h') or !Exists('$(VpxShaderGenDir)\bgfx_tonemap.h') or !Exists('$(VpxShaderGenDir)\bgfx_blur.h') or !Exists('$(VpxShaderGenDir)\bgfx_motionblur.h') or !Exists('$(VpxShaderGenDir)\bgfx_imgui.h') or !Exists('$(VpxShaderGenDir)\bgfx_mipmap.h') or !Exists('$(VpxShaderGenDir)\bgfx_pbr.h'))" />
   </Target>
   <Target Name="VpxBGFXShaders" Condition="$(Configuration.Contains('_BGFX'))"
           DependsOnTargets="VpxBGFXShaderInputs" BeforeTargets="Midl;ClCompile"
