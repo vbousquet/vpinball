@@ -825,7 +825,10 @@ void Plunger::Render(const unsigned int renderMask)
    m_prevFramePosValid = true;
 
    m_renderer->m_renderDevice->ResetRenderState();
-   m_renderer->m_renderDevice->m_basicShader->SetBasic(m_ptable->GetMaterial(m_d.m_szMaterial), m_ptable->GetImage(m_d.m_szImage));
+   const Material *const mat = m_ptable->GetMaterial(m_d.m_szMaterial);
+   const bool isPBR = m_renderer->m_renderDevice->m_pbrActive && mat->m_type == Material::MaterialType::PBR;
+   const Shader::PBRTextureSet pbrMaps = isPBR ? m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive) : Shader::PBRTextureSet();
+   m_renderer->m_renderDevice->m_basicShader->SetBasic(mat, m_ptable->GetImage(m_d.m_szImage), isPBR ? &pbrMaps : nullptr);
    m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f /*m_boundingSphereRadius*/, m_meshBuffer, RenderDevice::TRIANGLELIST,
       frame * m_indicesPerFrame, m_indicesPerFrame);
    m_renderer->UpdateBasicShaderMatrix();
