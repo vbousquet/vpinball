@@ -21,6 +21,7 @@
 #include "renderer/VRDevice.h"
 #include "renderer/trace.h"
 #include "ui/live/LiveUI.h"
+#include "utils/bulb.h"
 #include "utils/color.h"
 
 #include "ThreadPool.h"
@@ -226,6 +227,14 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
       m_pOffscreenBackBufferTexture2->CreatePBRSideband();
       m_renderDevice->m_pbrDFG = std::make_shared<Sampler>(m_renderDevice, "PBR DFG LUT"s, BuildPBRDFGLUT(), true);
       m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_pbr_dfg, m_renderDevice->m_pbrDFG);
+      // Forward+ clustered light list: CPU-built each frame, packed into an updatable RGBA32F texture
+      m_renderDevice->m_pbrLightListTex = bgfx::createTexture2D(256, 32, false, 1, bgfx::TextureFormat::RGBA32F, BGFX_TEXTURE_NONE);
+      bgfx::setName(m_renderDevice->m_pbrLightListTex, "PBR Light List");
+      m_renderDevice->m_pbrLightList
+         = std::make_shared<Sampler>(m_renderDevice, "PBR Light List"s, SurfaceType::RT_DEFAULT, m_renderDevice->m_pbrLightListTex, bgfx::TextureFormat::RGBA32F, 256, 32, true);
+      m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_pbr_lights, m_renderDevice->m_pbrLightList);
+      m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrLightGrid, 0.f, 0.f, 0.f, 1.f);
+      m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrLightGrid2, 1.f, 0.f, 0.f, 0.f);
    }
 #endif
 
@@ -2388,6 +2397,11 @@ void Renderer::PreparePBRPasses()
    if (!m_renderDevice->m_pbrActive)
       return;
 
+   // Forward+ light list: light states animate per frame so the cluster grid is rebuilt and uploaded each frame
+#ifdef ENABLE_BGFX
+   BuildPBRLightList();
+#endif
+
    // PBR parts write their specular resolve inputs to 2 sideband attachments of the scene framebuffer. Clearing them
    // goes through a dedicated framebuffer referencing only these attachments so the scene color is left untouched.
    RenderTarget* const sidebandTarget = GetMSAABackBufferTexture()->GetPBRSidebandTarget();
@@ -2405,6 +2419,129 @@ void Renderer::PreparePBRPasses()
       m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_pbr_ao, GetAORenderTarget(1)->GetColorSampler());
    }
 }
+
+#if defined(ENABLE_BGFX)
+// Builds the Forward+ light list: a world-space XY cluster grid over the table bounds, packed into a RGBA32F
+// texture (256x32 texels): [0,512) light records ((pos,range) then (radiance,mode)), [512,1024) grid cells
+// (start,count), [1024,+) the light index list. The upload runs inside RenderFrame::Execute through a
+// begin-of-frame command so it lands on the render thread.
+void Renderer::BuildPBRLightList()
+{
+   constexpr int texW = 256, texH = 32;
+   constexpr int maxLights = 256, gridBase = 512, indexBase = 1024;
+   constexpr int maxIndices = texW * texH - indexBase, maxPerCell = 16;
+
+   // Cell size adapts to the table bounds (>= 64 units) so any playfield fits the fixed 32x16 grid capacity
+   const float tableW = m_table->m_right - m_table->m_left;
+   const float tableH = m_table->m_bottom - m_table->m_top;
+   const float cellSize = max(64.f, max(tableW / 32.f, tableH / 16.f));
+   const int cellsX = clamp(static_cast<int>(ceilf(tableW / cellSize)), 1, 32);
+   const int cellsY = clamp(static_cast<int>(ceilf(tableH / cellSize)), 1, 16);
+   const int cellCount = cellsX * cellsY;
+
+   // Intensity to linear radiance scale: intensity is the authored emission power, irradiance = intensity / (4.pi.d_m^2),
+   // with the shader attenuation evaluated on distances in VPX units (1 VPU ~= 0.54mm)
+   const float intensityToLinear = 1.f / (4.f * (float)M_PI * 0.0005396875f * 0.0005396875f);
+
+   // Collect the contributing lights (opt-in through the light's PBR type, per-frame animated intensity)
+   struct LightEntry
+   {
+      Vertex3Ds pos;
+      float range;
+      vec4 radiance;
+      int index;
+   };
+   LightEntry entries[maxLights];
+   int lightCount = 0;
+   vector<uint8_t> counts(cellCount, 0);
+   for (IEditable* const part : m_table->GetParts())
+   {
+      if (part->GetItemType() != eItemLight)
+         continue;
+      const Light* const light = static_cast<const Light*>(part);
+      if (light->m_d.m_type != LightType::PBR || !light->m_d.m_visible || light->m_currentIntensity <= 0.f || light->m_desktopBackdrop)
+         continue;
+      if (lightCount >= maxLights)
+         break;
+
+      // Same tinting as the legacy lightmap path: base color modulated by the incandescent filament temperature
+      vec4 tint = convertColor(light->m_d.m_color, 1.f);
+      if (light->m_d.m_fader == FADER_INCANDESCENT)
+      {
+         float tint2700[3], ftint[3];
+         bulb_filament_temperature_to_tint(2700.f, tint2700);
+         bulb_filament_temperature_to_tint((float)light->m_currentFilamentTemperature, ftint);
+         tint.x *= ftint[0] / tint2700[0];
+         tint.y *= ftint[1] / tint2700[1];
+         tint.z *= ftint[2] / tint2700[2];
+      }
+      LightEntry& e = entries[lightCount];
+      e.pos = Vertex3Ds(light->m_d.m_vCenter.x, light->m_d.m_vCenter.y, light->GetCurrentHeight());
+      e.range = max(light->m_d.m_falloff, 1.f);
+      const float radiance = light->m_currentIntensity * intensityToLinear;
+      e.radiance = vec4(tint.x * radiance, tint.y * radiance, tint.z * radiance, (float)light->m_d.m_shadows); // w: mode, reserved for the M5 shadow mapping
+      e.index = lightCount;
+      lightCount++;
+
+      // Bucket into all cells overlapped by the light range (cell count caps at maxPerCell lights)
+      const int x0 = clamp(static_cast<int>(floorf((e.pos.x - e.range - m_table->m_left) / cellSize)), 0, cellsX - 1);
+      const int x1 = clamp(static_cast<int>(floorf((e.pos.x + e.range - m_table->m_left) / cellSize)), 0, cellsX - 1);
+      const int y0 = clamp(static_cast<int>(floorf((e.pos.y - e.range - m_table->m_top) / cellSize)), 0, cellsY - 1);
+      const int y1 = clamp(static_cast<int>(floorf((e.pos.y + e.range - m_table->m_top) / cellSize)), 0, cellsY - 1);
+      for (int y = y0; y <= y1; y++)
+         for (int x = x0; x <= x1; x++)
+            counts[y * cellsX + x]++;
+   }
+
+   // Pack the texture: light records, grid cells (prefix summed start offsets), index list
+   vector<float> texData(texW * texH * 4, 0.f);
+   int indexCount = 0;
+   for (int cell = 0; cell < cellCount; cell++)
+   {
+      const int start = indexCount;
+      const int count = min(static_cast<int>(counts[cell]), maxPerCell);
+      indexCount += count;
+      float* const cellTexel = texData.data() + (gridBase + cell) * 4;
+      cellTexel[0] = (float)start;
+      cellTexel[1] = (float)count;
+      counts[cell] = 0; // reuse as the running write offset
+   }
+   for (int i = 0; i < lightCount; i++)
+   {
+      const LightEntry& e = entries[i];
+      float* const rec = texData.data() + i * 8;
+      rec[0] = e.pos.x;
+      rec[1] = e.pos.y;
+      rec[2] = e.pos.z;
+      rec[3] = e.range;
+      rec[4] = e.radiance.x;
+      rec[5] = e.radiance.y;
+      rec[6] = e.radiance.z;
+      rec[7] = e.radiance.w;
+      const int x0 = clamp(static_cast<int>(floorf((e.pos.x - e.range - m_table->m_left) / cellSize)), 0, cellsX - 1);
+      const int x1 = clamp(static_cast<int>(floorf((e.pos.x + e.range - m_table->m_left) / cellSize)), 0, cellsX - 1);
+      const int y0 = clamp(static_cast<int>(floorf((e.pos.y - e.range - m_table->m_top) / cellSize)), 0, cellsY - 1);
+      const int y1 = clamp(static_cast<int>(floorf((e.pos.y + e.range - m_table->m_top) / cellSize)), 0, cellsY - 1);
+      for (int y = y0; y <= y1; y++)
+         for (int x = x0; x <= x1; x++)
+         {
+            const int cell = y * cellsX + x;
+            const int slot = counts[cell]++;
+            if (slot < maxPerCell)
+            {
+               const int idx = static_cast<int>(texData[(gridBase + cell) * 4]) + slot;
+               if (idx < maxIndices)
+                  texData[(indexBase + idx) * 4] = (float)e.index;
+            }
+         }
+   }
+
+   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrLightGrid, m_table->m_left, m_table->m_top, 1.f / cellSize, (float)cellsX);
+   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrLightGrid2, (float)cellsY, (float)lightCount, 0.f, 0.f);
+   m_renderDevice->AddBeginOfFrameCmd([rd = m_renderDevice, data = std::move(texData)]()
+      { bgfx::updateTexture2D(rd->m_pbrLightListTex, 0, 0, 0, 0, 256, 32, bgfx::copy(data.data(), static_cast<uint32_t>(data.size() * sizeof(float)))); });
+}
+#endif
 
 Shader::PBRTextureSet Renderer::GetPBRTextureSet(const BaseProperty& partData, const bool inShaderSpecular, const bool transparent) const
 {

@@ -237,6 +237,9 @@ private:
    void RenderItem(IEditable* const renderable, bool isNoBackdrop);
    void RenderStatics(); // Render background, then static parts if IsUsingStaticPrepass
    void PreparePBRPasses(); // Record PBR sideband clear and early AO passes when PBR is active
+#if defined(ENABLE_BGFX)
+   void BuildPBRLightList(); // Rebuild the Forward+ clustered light list (CPU world-space XY grid, per frame)
+#endif
    void RenderDynamics(); // Render static parts if not IsUsingStaticPrepass, then render dynamic parts
    void DrawBackground();
    void DrawBulbLightBuffer();
