@@ -53,7 +53,7 @@
       <ExcludedFromBuild Condition="!$(Configuration.Contains('_BGFX'))">true</ExcludedFromBuild>
       <Message>Compiling BGFX embedded shaders</Message>
       <Command>setlocal EnableDelayedExpansion &amp; set "VPX_CMAKE=cmake" &amp; where cmake &gt;nul 2&gt;nul || set "VPX_CMAKE=$(VsInstallRoot)Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" &amp; if not exist "$(VpxShaderGenDir)" mkdir "$(VpxShaderGenDir)" &amp; "!VPX_CMAKE!" -DSHADERC="$(VpxShaderc)" -DOUT_DIR="$(VpxShaderGenDir)" -DWORK_DIR="$(VpxShaderGenDir)\.frag" -DBACKENDS="glsl,dxbc,dxil,spv" -P "$(SolutionDir)..\..\src\shaders\bgfx\shaders.cmake"</Command>
-      <Outputs>$(VpxShaderGenDir)\bgfx_basic.h;$(VpxShaderGenDir)\bgfx_ball.h;$(VpxShaderGenDir)\bgfx_dmd.h;$(VpxShaderGenDir)\bgfx_flasher.h;$(VpxShaderGenDir)\bgfx_light.h;$(VpxShaderGenDir)\bgfx_stereo.h;$(VpxShaderGenDir)\bgfx_postprocess.h;$(VpxShaderGenDir)\bgfx_antialiasing.h;$(VpxShaderGenDir)\bgfx_tonemap.h;$(VpxShaderGenDir)\bgfx_blur.h;$(VpxShaderGenDir)\bgfx_motionblur.h;$(VpxShaderGenDir)\bgfx_imgui.h;$(VpxShaderGenDir)\bgfx_mipmap.h</Outputs>
+      <Outputs>$(VpxShaderGenDir)\bgfx_basic.h;$(VpxShaderGenDir)\bgfx_ball.h;$(VpxShaderGenDir)\bgfx_dmd.h;$(VpxShaderGenDir)\bgfx_flasher.h;$(VpxShaderGenDir)\bgfx_light.h;$(VpxShaderGenDir)\bgfx_stereo.h;$(VpxShaderGenDir)\bgfx_postprocess.h;$(VpxShaderGenDir)\bgfx_antialiasing.h;$(VpxShaderGenDir)\bgfx_tonemap.h;$(VpxShaderGenDir)\bgfx_blur.h;$(VpxShaderGenDir)\bgfx_motionblur.h;$(VpxShaderGenDir)\bgfx_imgui.h;$(VpxShaderGenDir)\bgfx_mipmap.h;$(VpxShaderGenDir)\bgfx_pbr.h</Outputs>
       <AdditionalInputs>@(VpxShaderInputs)</AdditionalInputs>
     </CustomBuild>
   </ItemGroup>

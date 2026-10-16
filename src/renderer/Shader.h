@@ -152,6 +152,16 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(display_CRT),
    SHADER_TECHNIQUE(basic_DMD),
    SHADER_TECHNIQUE(basic_DMD_world),
+   // PBR materials (BGFX only): opaque, opaque alpha-tested, opaque untextured, transparent, transparent untextured,
+   // and the 3 'is' variants used when rendering inside probes (in-shader envmap specular, no sideband output)
+   SHADER_TECHNIQUE(pbr),
+   SHADER_TECHNIQUE(pbr_at),
+   SHADER_TECHNIQUE(pbr_notex),
+   SHADER_TECHNIQUE(pbr_t),
+   SHADER_TECHNIQUE(pbr_t_notex),
+   SHADER_TECHNIQUE(pbr_is),
+   SHADER_TECHNIQUE(pbr_is_at),
+   SHADER_TECHNIQUE(pbr_is_notex),
    // Lottes-CRT
    SHADER_TECHNIQUE(display_CRT_world),
    // Same as above but built with the Nuance-CRT filter, the renderer picking between them per display (see Renderer::SetupCRTRender)
@@ -338,6 +348,17 @@ enum class ShaderUniform : unsigned int
    SHADER_SAMPLER(tex_refraction, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // screen space refraction
    SHADER_SAMPLER(tex_probe_depth, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // depth probe
 
+   // PBR extensions (BGFX only)
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrFactors, 1), // metallic/occlusion/roughness factors + AO flag
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrEmission, 1), // emission color + intensity
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrMapFlags, 1), // bound map flags (ORM, emission)
+   SHADER_SAMPLER(tex_pbr_orm, 8, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // packed occlusion/roughness/metallic
+   SHADER_SAMPLER(tex_pbr_emission, 9, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // emission map
+   SHADER_SAMPLER(tex_pbr_ao, 10, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // screenspace ambient occlusion
+   SHADER_SAMPLER(tex_pbr_dfg, 11, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // GGX split-sum DFG LUT
+   SHADER_SAMPLER(tex_pbr_mask, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP,
+      SamplerFilter::SF_BILINEAR), // PBR pixel mask (sideband attachment alpha), masks the tonemap AO application
+
    // Ball Shader
    SHADER_UNIFORM(ShaderUniformType::Float4x3, orientation, 1),
    SHADER_UNIFORM(ShaderUniformType::Float4, invTableRes_reflection, 1),
@@ -463,8 +484,21 @@ public:
    // Disables the normal mapping flag of a depth prepass state whose source is not a material technique (unshaded, decals, ... holding a stale flag). No-op on DX9 which bakes it in the technique.
    static void DisableDepthPrepassNormalMapping(ShaderState* const state);
    void SetTechnique(const ShaderTechnique technique);
-   void SetTechniqueMaterial(ShaderTechnique technique, const Material& mat, const bool doAlphaTest = false, const bool doNormalMapping = false, const bool doReflection = false, const bool doRefraction = false);
-   void SetBasic(const Material * const mat, Texture * const pin);
+   // Optional PBR textures & context bound on top of the base material state. When non-null and the material is
+   // a PBR one (and PBR rendering is active), the selected technique is remapped to its PBR variant. The maps use
+   // the part's base UVs; 'inShaderSpecular' selects the in-probe variant (in-shader envmap specular, no sideband
+   // output) and 'transparent' the premultiplied alpha-blended variant.
+   struct PBRTextureSet
+   {
+      Texture* normalMap = nullptr;
+      Texture* ormMap = nullptr;
+      Texture* emissionMap = nullptr;
+      bool inShaderSpecular = false;
+      bool transparent = false;
+   };
+   void SetTechniqueMaterial(ShaderTechnique technique, const Material& mat, const bool doAlphaTest = false, const bool doNormalMapping = false, const bool doReflection = false,
+      const bool doRefraction = false, const PBRTextureSet* const pbrMaps = nullptr);
+   void SetBasic(const Material* const mat, Texture* const pin, const PBRTextureSet* const pbrMaps = nullptr);
    static void SetDefaultSamplerFilter(const ShaderUniform sampler, const SamplerFilter sf);
    static SamplerFilter GetDefaultSamplerFilter(const ShaderUniform sampler);
 
@@ -514,6 +548,7 @@ private:
    bool m_hasError = false; // True if loading the shader failed
    unsigned int m_stateSize = 0; // Overall size of a shader state data block
    int m_stateOffsets[static_cast<unsigned int>(ShaderUniform::COUNT)]; // Position of each uniform inside the state data block
+   bool m_pbrPremultiply = false; // Pending premultiplied alpha blending request (PBR transparent parts output premultiplied radiance)
 
    void Load();
    void ApplyUniform(const ShaderUniform uniformName);

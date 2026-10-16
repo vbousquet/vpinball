@@ -48,6 +48,7 @@ struct VisualMaterial
    SamplerAddressMode clampV = SamplerAddressMode::SA_UNDEFINED;
    bool hasTextureAlpha = false;
    bool forceAlphaBlend = false; // Force non-additive alpha blending after material setup (e.g. kicker hole)
+   Shader::PBRTextureSet pbrMaps; // PBR material maps, bound when material->m_type is MaterialType::PBR
 };
 
 // Definition of a (sub)mesh to render, with slots holding the editor UI variants that are lazily built by the renderer
@@ -293,10 +294,15 @@ public:
    VPXRenderContext2D& GetAncillaryRenderContext(
       VPXWindowId window, float width, float height, bool is2D, bool isOutputLinear, float depthbias, const Matrix3D& displayTransform = Matrix3D::MatrixIdentity());
 
+   // Builds the optional PBR texture set for a part (normal/ORM/emission maps). Pass to SetTechniqueMaterial/SetBasic
+   // only for PBR materials. inShaderSpecular selects the probe render path, transparent the premultiplied alpha one.
+   Shader::PBRTextureSet GetPBRTextureSet(const BaseProperty& partData, const bool inShaderSpecular, const bool transparent) const;
+
 private:
    void SetSpaceReference(PartGroupData::SpaceReference spaceReference, bool force);
    void RenderItem(IEditable* const renderable, bool isNoBackdrop);
    void RenderStatics(); // Render background, then static parts if IsUsingStaticPrepass
+   void PreparePBRPasses(); // Record PBR sideband clear and early AO passes when PBR is active
    void RenderDynamics(); // Render static parts if not IsUsingStaticPrepass, then render dynamic parts
    void DrawBackground();
    void DrawBulbLightBuffer();
