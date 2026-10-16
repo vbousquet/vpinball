@@ -141,6 +141,12 @@ Shader::TechniqueDef Shader::shaderTechniqueNames[static_cast<unsigned int>(Shad
    SHADER_TECHNIQUE(ball_depth_n),
    SHADER_TECHNIQUE(basic_DMD),
    SHADER_TECHNIQUE(basic_DMD_world),
+   // PBR depth prepass variants: shaded normals in xy, perceptual roughness in z, opaque PBR flag in w
+   SHADER_TECHNIQUE(pbr_depth),
+   SHADER_TECHNIQUE(pbr_depth_at),
+   // PBR depth prepass variants additionally writing the camera & object motion vectors in zw of attachment 0
+   SHADER_TECHNIQUE(pbr_depth_mv),
+   SHADER_TECHNIQUE(pbr_depth_at_mv),
    // Depth prepass variants that additionally write the camera motion vectors to the 2 free channels of the color
    // attachment (BGFX only: they are used by the AO temporal accumulation under a dynamic camera, e.g. in VR)
    SHADER_TECHNIQUE(basic_depth_n_mv),
@@ -164,25 +170,25 @@ Shader::TechniqueDef Shader::shaderTechniqueNames[static_cast<unsigned int>(Shad
    SHADER_TECHNIQUE(pbr_is_notex),
    SHADER_TECHNIQUE(display_CRT_world),
    SHADER_TECHNIQUE(display_CRTnuance_world),
-   // Lottes-CRT
    SHADER_TECHNIQUE(basic_noDMD),
-   // Same as above but built with the Nuance-CRT filter, the renderer picking between them per display (see Renderer::SetupCRTRender)
    SHADER_TECHNIQUE(basic_noDMD_notex),
-
    SHADER_TECHNIQUE(basic_noDMD_world),
    SHADER_TECHNIQUE(basic_noLight),
    SHADER_TECHNIQUE(bulb_light),
-
+   // Lottes-CRT
    SHADER_TECHNIQUE(bulb_light_with_ball_shadows),
-
+   // Same as above but built with the Nuance-CRT filter, the renderer picking between them per display (see Renderer::SetupCRTRender)
    SHADER_TECHNIQUE(fb_rhtonemap),
-   SHADER_TECHNIQUE(fb_rhtonemap_AO),
 
+   SHADER_TECHNIQUE(fb_rhtonemap_AO),
    SHADER_TECHNIQUE(fb_rhtonemap_no_filter),
    SHADER_TECHNIQUE(fb_rhtonemap_AO_no_filter),
+
    SHADER_TECHNIQUE(fb_fmtonemap),
+
    SHADER_TECHNIQUE(fb_fmtonemap_AO),
    SHADER_TECHNIQUE(fb_fmtonemap_no_filter),
+
    SHADER_TECHNIQUE(fb_fmtonemap_AO_no_filter),
    SHADER_TECHNIQUE(fb_nttonemap),
    SHADER_TECHNIQUE(fb_nttonemap_AO),
@@ -198,12 +204,12 @@ Shader::TechniqueDef Shader::shaderTechniqueNames[static_cast<unsigned int>(Shad
    SHADER_TECHNIQUE(fb_wcgtonemap_AO_no_filter),
    SHADER_TECHNIQUE(fb_blur_horiz7x7),
    SHADER_TECHNIQUE(fb_blur_vert7x7),
-
    SHADER_TECHNIQUE(fb_blur_horiz9x9),
    SHADER_TECHNIQUE(fb_blur_vert9x9),
    SHADER_TECHNIQUE(fb_blur_horiz11x11),
    SHADER_TECHNIQUE(fb_blur_vert11x11),
    SHADER_TECHNIQUE(fb_blur_horiz13x13),
+
    SHADER_TECHNIQUE(fb_blur_vert13x13),
    SHADER_TECHNIQUE(fb_blur_horiz15x15),
    SHADER_TECHNIQUE(fb_blur_vert15x15),
@@ -217,47 +223,54 @@ Shader::TechniqueDef Shader::shaderTechniqueNames[static_cast<unsigned int>(Shad
    SHADER_TECHNIQUE(fb_blur_vert39x39),
    SHADER_TECHNIQUE(AO),
    SHADER_TECHNIQUE(AO_shaded),
-
    SHADER_TECHNIQUE(fb_AO),
    SHADER_TECHNIQUE(fb_prepass_depth),
-   SHADER_TECHNIQUE(fb_prepass_normal), // Display debug AO
-   SHADER_TECHNIQUE(fb_prepass_motion), // Display debug depth prepass depth attachment
-   SHADER_TECHNIQUE(fb_AO_static), // Display debug depth prepass shaded normals
-   SHADER_TECHNIQUE(fb_AO_no_filter_static), // Display debug depth prepass motion vectors
-   SHADER_TECHNIQUE(fb_motionblur), // Apply AO during static prerender pass (no tonemapping)
-   SHADER_TECHNIQUE(fb_bloom), // Apply AO during static prerender pass (no tonemapping)
-   SHADER_TECHNIQUE(fb_mirror),
-   SHADER_TECHNIQUE(fb_copy),
-   SHADER_TECHNIQUE(SSReflection),
-   SHADER_TECHNIQUE(AO_shaded_mv),
-   SHADER_TECHNIQUE(fb_copy_depth),
+   SHADER_TECHNIQUE(fb_prepass_normal),
+   SHADER_TECHNIQUE(fb_prepass_motion),
+   SHADER_TECHNIQUE(fb_AO_static),
+
+   SHADER_TECHNIQUE(fb_AO_no_filter_static),
+   SHADER_TECHNIQUE(fb_motionblur),
+   SHADER_TECHNIQUE(fb_bloom), // Display debug AO
+   SHADER_TECHNIQUE(fb_mirror), // Display debug depth prepass depth attachment
+   SHADER_TECHNIQUE(fb_copy), // Display debug depth prepass shaded normals
+   SHADER_TECHNIQUE(SSReflection), // Display debug depth prepass motion vectors
+   SHADER_TECHNIQUE(AO_shaded_mv), // Apply AO during static prerender pass (no tonemapping)
+   SHADER_TECHNIQUE(fb_copy_depth), // Apply AO during static prerender pass (no tonemapping)
+   SHADER_TECHNIQUE(SSReflection_shaded),
+   SHADER_TECHNIQUE(SSReflection_masked),
+   SHADER_TECHNIQUE(SSReflection_shaded_masked),
+   SHADER_TECHNIQUE(PBR_march),
+   SHADER_TECHNIQUE(PBR_resolve),
    // Same as AO_shaded but also consumes the camera motion vectors written by the depth prepass to reproject the
    // previous frame AO when the camera is dynamic (BGFX only, e.g. VR)
    SHADER_TECHNIQUE(NFAA),
 #ifdef ENABLE_BGFX
+   // Shaded normals variant (normals from the depth prepass instead of depth neighbors)
    SHADER_TECHNIQUE(DLAA_edge),
-#endif
-
+   // PBR specular resolve: masked SSR variants (skip PBR pixels), PBR half res march and full res composite
    SHADER_TECHNIQUE(DLAA),
    SHADER_TECHNIQUE(FXAA1),
    SHADER_TECHNIQUE(FXAA2),
    SHADER_TECHNIQUE(FXAA3),
    SHADER_TECHNIQUE(FAAA),
+#endif
+
    SHADER_TECHNIQUE(CAS),
    SHADER_TECHNIQUE(BilateralSharp_CAS),
    SHADER_TECHNIQUE(SMAA_ColorEdgeDetection),
    SHADER_TECHNIQUE(SMAA_BlendWeightCalculation),
-#ifndef __OPENGLES__
    SHADER_TECHNIQUE(SMAA_NeighborhoodBlending),
    SHADER_TECHNIQUE(stereo_SBS),
    SHADER_TECHNIQUE(stereo_TB),
-#endif
-
    SHADER_TECHNIQUE(stereo_Int),
    SHADER_TECHNIQUE(stereo_Flipped_Int),
+#ifndef __OPENGLES__
    SHADER_TECHNIQUE(Stereo_sRGBAnaglyph),
    SHADER_TECHNIQUE(Stereo_GammaAnaglyph),
    SHADER_TECHNIQUE(Stereo_sRGBDynDesatAnaglyph),
+#endif
+
    SHADER_TECHNIQUE(Stereo_GammaDynDesatAnaglyph),
    SHADER_TECHNIQUE(Stereo_DeghostAnaglyph),
 };
@@ -366,13 +379,22 @@ ShaderUniformDef ShaderUniformDef::coreUniforms[static_cast<unsigned int>(Shader
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrMapFlags, 1), // bound map flags (ORM, emission)
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrLightGrid, 1), // xy: cluster grid origin (table pos), z: inverse cell size, w: cell count x
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrLightGrid2, 1), // x: cell count y, y: light count
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrProbes0, 1), // reflection plane of the first bound probe (dot(n,p) + w = 0)
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrProbes1, 1), // reflection plane of the second bound probe
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrProbeParams, 1), // x/y: influence range of probe0/1 (0 = unbound), z: SSR suppression weight mu, w: refraction probe bound
    SHADER_SAMPLER(tex_pbr_orm, 8, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // packed occlusion/roughness/metallic
    SHADER_SAMPLER(tex_pbr_emission, 9, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // emission map
    SHADER_SAMPLER(tex_pbr_ao, 10, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // screenspace ambient occlusion
    SHADER_SAMPLER(tex_pbr_dfg, 11, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // GGX split-sum DFG LUT
    SHADER_SAMPLER(tex_pbr_lights, 12, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // packed light records + cluster grid + index list
+   SHADER_SAMPLER(tex_pbr_probe0, 13, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // first planar reflection probe
+   SHADER_SAMPLER(tex_pbr_probe1, 14, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // second planar reflection probe
+   SHADER_SAMPLER(tex_pbr_refr, 15, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // screen space refraction probe (transparent parts)
    SHADER_SAMPLER(tex_pbr_mask, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP,
       SamplerFilter::SF_BILINEAR), // PBR pixel mask (sideband attachment alpha), masks the tonemap AO application
+   SHADER_SAMPLER(tex_pbr_att1, 8, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // sideband att1: probe radiance + coverage
+   SHADER_SAMPLER(tex_pbr_att2, 9, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // sideband att2: specular weight + mask
+
 
    // Ball Shader
    SHADER_UNIFORM(ShaderUniformType::Float4x3, orientation, 1),
@@ -431,7 +453,9 @@ ShaderUniformDef ShaderUniformDef::coreUniforms[static_cast<unsigned int>(Shader
    SHADER_SAMPLER(tex_ao, 3, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // AO Result
    SHADER_SAMPLER(tex_depth, 4, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // Depth
    SHADER_SAMPLER(tex_ao_dither, 5, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_NONE), // AO dither
-   SHADER_SAMPLER(tex_normals, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // Shaded normals from the depth prepass
+   SHADER_SAMPLER(tex_normals, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // Shaded normals from the depth prepass (attachment 0)
+   SHADER_SAMPLER(tex_pbr_data, 10, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // PBR roughness & opaque flag from the depth prepass (attachment 1)
+   SHADER_SAMPLER(tex_ssr_lowres, 3, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // Half resolution raymarched reflections
    //SHADER_SAMPLER(tex_tonemap_lut, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // Tonemap LUT
    SHADER_SAMPLER(edgesTex, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // SMAA
    SHADER_SAMPLER(blendTex, 8, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // SMAA
@@ -1049,14 +1073,17 @@ ShaderTechnique Shader::GetDepthPrepassTechnique(const ShaderTechnique technique
    case ShaderTechnique::bg_decal_with_texture:
       return withNormals ? (withMotion ? ShaderTechnique::basic_depth_at_n_mv : ShaderTechnique::basic_depth_at_n) : ShaderTechnique::basic_depth_at;
 
-   // PBR opaque materials contribute to the prepass like their legacy counterparts (normal mapped through their normal map,
-   // alpha tested ones preserving their base color discard). Transparent PBR parts are excluded (filtered out in RenderFrame).
+   // Opaque PBR materials use their own prepass variants carrying the perceptual roughness and the opaque PBR flag
+   // (gating the PBR specular march) alongside the shaded normals. Transparent PBR parts are excluded (filtered out
+   // in RenderFrame).
    case ShaderTechnique::pbr_at:
-   case ShaderTechnique::pbr_is_at: return withNormals ? ShaderTechnique::basic_depth_at_n : ShaderTechnique::basic_depth_at;
+   case ShaderTechnique::pbr_is_at:
+      return withNormals ? (withMotion ? ShaderTechnique::pbr_depth_at_mv : ShaderTechnique::pbr_depth_at) : ShaderTechnique::basic_depth_at;
    case ShaderTechnique::pbr:
    case ShaderTechnique::pbr_notex:
    case ShaderTechnique::pbr_is:
-   case ShaderTechnique::pbr_is_notex: return withNormals ? ShaderTechnique::basic_depth_n : ShaderTechnique::basic_depth;
+   case ShaderTechnique::pbr_is_notex:
+      return withNormals ? (withMotion ? ShaderTechnique::pbr_depth_mv : ShaderTechnique::pbr_depth) : ShaderTechnique::basic_depth;
 
    // Everything else drawn with the basic shader (untextured or non alpha tested materials, unshaded, decals and light inserts)
    default: return withNormals ? (withMotion ? ShaderTechnique::basic_depth_n_mv : ShaderTechnique::basic_depth_n) : ShaderTechnique::basic_depth;
@@ -1589,6 +1616,10 @@ void Shader::Load()
       BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_notex_n_mv),
       BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_tex_n_mv),
       BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_tex_at_n_mv),
+      BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_pbr_n),
+      BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_pbr_at_n),
+      BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_pbr_n_mv),
+      BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_pbr_at_n_mv),
       BGFX_EMBEDDED_SHADER(vs_vr_mask),
       // PBR material shaders (share the depth prepass fragment shaders, have their own vertex shader always emitting texcoords)
       BGFX_EMBEDDED_SHADER_ST_CLIP(vs_pbr),
@@ -1658,7 +1689,8 @@ void Shader::Load()
       BGFX_EMBEDDED_SHADER_ST(fs_pp_ao_filter), BGFX_EMBEDDED_SHADER_ST(fs_pp_ao_nofilter), BGFX_EMBEDDED_SHADER_ST(fs_pp_ao_display), BGFX_EMBEDDED_SHADER_ST(fs_pp_prepass_depth),
       BGFX_EMBEDDED_SHADER_ST(fs_pp_prepass_normal), BGFX_EMBEDDED_SHADER_ST(fs_pp_prepass_motion), BGFX_EMBEDDED_SHADER_ST(fs_pp_ssao), BGFX_EMBEDDED_SHADER_ST(fs_pp_ssao_shaded),
       BGFX_EMBEDDED_SHADER_ST(fs_pp_ssao_shaded_mv), BGFX_EMBEDDED_SHADER_ST(fs_pp_bloom), BGFX_EMBEDDED_SHADER_ST(fs_pp_mirror), BGFX_EMBEDDED_SHADER_ST(fs_pp_copy),
-      BGFX_EMBEDDED_SHADER_ST(fs_pp_ssr), BGFX_EMBEDDED_SHADER_ST(fs_pp_copy_depth),
+      BGFX_EMBEDDED_SHADER_ST(fs_pp_ssr), BGFX_EMBEDDED_SHADER_ST(fs_pp_ssr_masked), BGFX_EMBEDDED_SHADER_ST(fs_pp_ssr_shaded), BGFX_EMBEDDED_SHADER_ST(fs_pp_ssr_shaded_masked),
+      BGFX_EMBEDDED_SHADER_ST(fs_pp_pbr_march), BGFX_EMBEDDED_SHADER_ST(fs_pp_pbr_resolve), BGFX_EMBEDDED_SHADER_ST(fs_pp_copy_depth),
       BGFX_EMBEDDED_SHADER(fs_pp_passthrough),
       // Motion Blur as post-processes
       BGFX_EMBEDDED_SHADER_ST(fs_pp_motionblur),
@@ -1729,6 +1761,10 @@ void Shader::Load()
       loadProgram(embeddedShaders, ShaderTechnique::basic_depth_at_n, STEREO(vs_depth_noclip), STEREO(fs_depth_tex_at_n_noclip));
       loadProgram(embeddedShaders, ShaderTechnique::basic_depth_n_mv, STEREO(vs_depth_mv_noclip), STEREO(fs_depth_tex_n_mv_noclip));
       loadProgram(embeddedShaders, ShaderTechnique::basic_depth_at_n_mv, STEREO(vs_depth_mv_noclip), STEREO(fs_depth_tex_at_n_mv_noclip));
+      loadProgram(embeddedShaders, ShaderTechnique::pbr_depth, STEREO(vs_depth_noclip), STEREO(fs_depth_pbr_n_noclip));
+      loadProgram(embeddedShaders, ShaderTechnique::pbr_depth_at, STEREO(vs_depth_noclip), STEREO(fs_depth_pbr_at_n_noclip));
+      loadProgram(embeddedShaders, ShaderTechnique::pbr_depth_mv, STEREO(vs_depth_mv_noclip), STEREO(fs_depth_pbr_n_mv_noclip));
+      loadProgram(embeddedShaders, ShaderTechnique::pbr_depth_at_mv, STEREO(vs_depth_mv_noclip), STEREO(fs_depth_pbr_at_n_mv_noclip));
       // PBR material variants
       loadProgram(embeddedShaders, ShaderTechnique::pbr, STEREO(vs_pbr_noclip), STEREO(fs_pbr_tex_noat_noclip));
       loadProgram(embeddedShaders, ShaderTechnique::pbr_at, STEREO(vs_pbr_noclip), STEREO(fs_pbr_tex_at_noclip));
@@ -1759,6 +1795,10 @@ void Shader::Load()
       loadProgram(embeddedShaders, ShaderTechnique::basic_depth_at_n, STEREO(vs_depth_clip), STEREO(fs_depth_tex_at_n_clip), true);
       loadProgram(embeddedShaders, ShaderTechnique::basic_depth_n_mv, STEREO(vs_depth_mv_clip), STEREO(fs_depth_tex_n_mv_clip), true);
       loadProgram(embeddedShaders, ShaderTechnique::basic_depth_at_n_mv, STEREO(vs_depth_mv_clip), STEREO(fs_depth_tex_at_n_mv_clip), true);
+      loadProgram(embeddedShaders, ShaderTechnique::pbr_depth, STEREO(vs_depth_clip), STEREO(fs_depth_pbr_n_clip), true);
+      loadProgram(embeddedShaders, ShaderTechnique::pbr_depth_at, STEREO(vs_depth_clip), STEREO(fs_depth_pbr_at_n_clip), true);
+      loadProgram(embeddedShaders, ShaderTechnique::pbr_depth_mv, STEREO(vs_depth_mv_clip), STEREO(fs_depth_pbr_n_mv_clip), true);
+      loadProgram(embeddedShaders, ShaderTechnique::pbr_depth_at_mv, STEREO(vs_depth_mv_clip), STEREO(fs_depth_pbr_at_n_mv_clip), true);
       // PBR material variants
       loadProgram(embeddedShaders, ShaderTechnique::pbr, STEREO(vs_pbr_clip), STEREO(fs_pbr_tex_noat_clip), true);
       loadProgram(embeddedShaders, ShaderTechnique::pbr_at, STEREO(vs_pbr_clip), STEREO(fs_pbr_tex_at_clip), true);
@@ -1876,6 +1916,11 @@ void Shader::Load()
       loadProgram(embeddedShaders, ShaderTechnique::fb_mirror, STEREO(vs_postprocess), STEREO(fs_pp_mirror));
       loadProgram(embeddedShaders, ShaderTechnique::fb_copy, STEREO(vs_postprocess), STEREO(fs_pp_copy));
       loadProgram(embeddedShaders, ShaderTechnique::SSReflection, STEREO(vs_postprocess), STEREO(fs_pp_ssr));
+      loadProgram(embeddedShaders, ShaderTechnique::SSReflection_shaded, STEREO(vs_postprocess), STEREO(fs_pp_ssr_shaded));
+      loadProgram(embeddedShaders, ShaderTechnique::SSReflection_masked, STEREO(vs_postprocess), STEREO(fs_pp_ssr_masked));
+      loadProgram(embeddedShaders, ShaderTechnique::SSReflection_shaded_masked, STEREO(vs_postprocess), STEREO(fs_pp_ssr_shaded_masked));
+      loadProgram(embeddedShaders, ShaderTechnique::PBR_march, STEREO(vs_postprocess), STEREO(fs_pp_pbr_march));
+      loadProgram(embeddedShaders, ShaderTechnique::PBR_resolve, STEREO(vs_postprocess), STEREO(fs_pp_pbr_resolve));
       loadProgram(embeddedShaders, ShaderTechnique::fb_copy_depth, STEREO(vs_postprocess), STEREO(fs_pp_copy_depth));
 
       // Postprocessed motion blur

@@ -172,6 +172,9 @@ public:
 
    RenderTarget* GetReflectionBufferTexture();
 
+   RenderTarget* GetReflectionHalfBufferTexture();
+   RenderTarget* GetPBRResolveBufferTexture(); // Full res scratch for the PBR specular resolve composite
+
    RenderTarget* GetMotionBlurBufferTexture();
 
    RenderTarget* GetBloomBufferTexture() const { return m_pBloomBufferTexture; }
@@ -238,6 +241,7 @@ private:
    void SetupTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapRT, bool isFullTonemap);
    RenderTarget* ApplyTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapRT);
    RenderTarget* ApplyAdditiveScreenSpaceReflection(RenderTarget* renderedRT);
+   RenderTarget* ApplyPBRSpecularResolve(RenderTarget* renderedRT); // Composites deferred PBR specular (probes + SSR march)
    RenderTarget* ApplyBallMotionBlur(RenderTarget* beforeTonemapRT, RenderTarget* afterTonemapRT);
    RenderTarget* ApplyPostProcessedAntialiasing(RenderTarget* renderedRT, RenderTarget* outputBackBuffer);
    RenderTarget* ApplySharpening(RenderTarget* renderedRT, RenderTarget* outputBackBuffer);
@@ -296,6 +300,8 @@ private:
    RenderTarget* m_pPostProcessRenderTarget3 = nullptr;
 
    RenderTarget* m_pReflectionBufferTexture = nullptr;
+   RenderTarget* m_pReflectionHalfBufferTexture = nullptr;
+   RenderTarget* m_pPBRResolveBufferTexture = nullptr;
 
    RenderTarget* m_pMotionBlurBufferTexture = nullptr;
 

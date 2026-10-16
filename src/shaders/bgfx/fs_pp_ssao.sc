@@ -203,8 +203,8 @@ void main()
 	// weight with result(s) from previous frames
 	const float ao = 1.0 - total_strength * occlusion;
 	#if defined(NORMAL_TEX) && defined(MOTION)
-		// Reproject the previous frame AO using the camera motion vectors stored in the prepass (avoids
-		// smearing the temporal accumulation when the camera is dynamic, e.g. VR or headtracking).
+		// Reproject the previous frame AO using the camera & object motion vectors stored in the prepass
+		// (avoids smearing the temporal accumulation when the camera is dynamic, e.g. VR or headtracking).
 		// The reprojection has no disocclusion test (no previous frame depth is kept): fade out the
 		// history weight where the motion is large, as the reprojected result there is likely stale
 		const vec2 mv = texStereoNoLod(tex_normals, u).zw;

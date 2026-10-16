@@ -386,7 +386,7 @@ void Trigger::Render(const unsigned int renderMask)
          m_renderer->m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
       material.material = m_ptable->GetMaterial(m_d.m_szMaterial);
       material.pbrMaps = m_renderer->GetPBRTextureSet(
-         m_d, isReflectionPass, material.material->m_bOpacityActive);
+         m_d, m_boundingSphereCenter, m_d.m_radius, isReflectionPass, material.material->m_bOpacityActive, renderMask);
    }
    m_renderer->RenderMesh(renderMask, body, material);
 }
