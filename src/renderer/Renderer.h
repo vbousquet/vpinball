@@ -406,6 +406,9 @@ public:
 private:
    void SetSpaceReference(PartGroupData::SpaceReference spaceReference, bool force) { m_activeView->SetSpaceReference(spaceReference, force); }
    bool IsBloomEnabled() const;
+#if defined(ENABLE_BGFX)
+   void BuildPBRLightList(); // Rebuild the Forward+ clustered light list (CPU world-space XY grid, per frame)
+#endif
 
    // Per view render target accessors, delegated to the active view (used by ancillary and postprocess helpers)
    RenderTarget* GetMSAABackBufferTexture() const { return m_activeView->GetMSAABackBufferTexture(); }

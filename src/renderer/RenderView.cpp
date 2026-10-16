@@ -1062,6 +1062,11 @@ void RenderView::PreparePBRPasses()
    if (!rd->m_pbrActive)
       return;
 
+   // Forward+ light list: light states animate per frame so the cluster grid is rebuilt and uploaded each frame
+#ifdef ENABLE_BGFX
+   r->BuildPBRLightList();
+#endif
+
    // PBR parts write their specular resolve inputs to 2 sideband attachments of the scene framebuffer. Clearing them
    // goes through a dedicated framebuffer referencing only these attachments so the scene color is left untouched.
    RenderTarget* const sidebandTarget = GetMSAABackBufferTexture()->GetPBRSidebandTarget();

@@ -2090,8 +2090,11 @@ RenderDevice::~RenderDevice()
       m_nullTexture = nullptr;
       m_SMAAareaTexture = nullptr;
       m_SMAAsearchTexture = nullptr;
+      m_pbrDFG = nullptr;
+      m_pbrLightList = nullptr;
       m_texMan.UnloadAll();
 #if defined(ENABLE_BGFX)
+      m_pbrLightListTex = BGFX_INVALID_HANDLE;
       // Samplers still queued here own BGFX textures: release them before BGFX is shut down
       m_pendingTextureUploads.clear();
 #endif
