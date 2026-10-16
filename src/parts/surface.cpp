@@ -784,10 +784,15 @@ void Surface::Render(const unsigned int renderMask)
 
    RenderSlingshots();
 
-   if (isStaticOnly && !StaticRendering())
+   // PBR materials are always dynamic: their shading state can not be frozen in the static accumulation
+   const bool isPBR = m_renderer->m_renderDevice->m_pbrActive
+      && ((m_d.m_sideVisible && m_ptable->GetMaterial(m_d.m_szSideMaterial)->m_type == Material::MaterialType::PBR)
+         || (m_d.m_topBottomVisible && m_ptable->GetMaterial(m_d.m_szTopMaterial)->m_type == Material::MaterialType::PBR));
+
+   if (isStaticOnly && (!StaticRendering() || isPBR))
       return;
 
-   if (isDynamicOnly && StaticRendering())
+   if (isDynamicOnly && StaticRendering() && !isPBR)
       return;
 
    if (isUIPass)
@@ -892,7 +897,9 @@ void Surface::RenderWallsAtHeight(const bool drop, const bool isReflectionPass)
       m_renderer->m_renderDevice->ResetRenderState();
       if ((mat->m_bOpacityActive || !m_isDynamic) || (m_d.m_topBottomVisible && m_isDynamic))
          m_renderer->m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
-      m_renderer->m_renderDevice->m_basicShader->SetBasic(mat, m_ptable->GetImage(m_d.m_szSideImage));
+      const bool isPBR = m_renderer->m_renderDevice->m_pbrActive && mat->m_type == Material::MaterialType::PBR;
+      const Shader::PBRTextureSet pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
+      m_renderer->m_renderDevice->m_basicShader->SetBasic(mat, m_ptable->GetImage(m_d.m_szSideImage), isPBR ? &pbrMaps : nullptr);
       // combine drawcalls into one (hopefully faster)
       m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, m_isDynamic, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numVertices * 6);
    }
@@ -904,7 +911,9 @@ void Surface::RenderWallsAtHeight(const bool drop, const bool isReflectionPass)
       m_renderer->m_renderDevice->ResetRenderState();
       if (mat->m_bOpacityActive || !m_isDynamic)
          m_renderer->m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
-      m_renderer->m_renderDevice->m_basicShader->SetBasic(mat, m_ptable->GetImage(m_d.m_szImage));
+      const bool isPBR = m_renderer->m_renderDevice->m_pbrActive && mat->m_type == Material::MaterialType::PBR;
+      const Shader::PBRTextureSet pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
+      m_renderer->m_renderDevice->m_basicShader->SetBasic(mat, m_ptable->GetImage(m_d.m_szImage), isPBR ? &pbrMaps : nullptr);
 
       // Top
       m_renderer->m_renderDevice->DrawMesh(

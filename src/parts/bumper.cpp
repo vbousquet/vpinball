@@ -249,12 +249,15 @@ void Bumper::Render(const unsigned int renderMask)
       else
       {
          const Material *const mat = m_ptable->GetMaterial(m_d.m_szBaseMaterial);
-         if ((!mat->m_bOpacityActive && !isDynamicOnly) || (mat->m_bOpacityActive && !isStaticOnly))
+         // PBR materials are always dynamic: their shading state can not be frozen in the static accumulation
+         const bool isPBR = m_renderer->m_renderDevice->m_pbrActive && mat->m_type == Material::MaterialType::PBR;
+         if (isPBR ? !isStaticOnly : ((!mat->m_bOpacityActive && !isDynamicOnly) || (mat->m_bOpacityActive && !isStaticOnly)))
          {
             m_renderer->m_renderDevice->ResetRenderState();
             if (mat->m_bOpacityActive)
                m_renderer->m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
-            m_renderer->m_renderDevice->m_basicShader->SetBasic(mat, m_baseTexture.get());
+            const Shader::PBRTextureSet pbrMaps = isPBR ? m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive) : Shader::PBRTextureSet();
+            m_renderer->m_renderDevice->m_basicShader->SetBasic(mat, m_baseTexture.get(), isPBR ? &pbrMaps : nullptr);
             m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_baseMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperBaseNumIndices);
          }
       }
@@ -272,12 +275,14 @@ void Bumper::Render(const unsigned int renderMask)
       else
       {
          const Material *const mat = m_ptable->GetMaterial(m_d.m_szCapMaterial);
-         if ((!mat->m_bOpacityActive && !isDynamicOnly) || (mat->m_bOpacityActive && !isStaticOnly))
+         const bool isPBR = m_renderer->m_renderDevice->m_pbrActive && mat->m_type == Material::MaterialType::PBR;
+         if (isPBR ? !isStaticOnly : ((!mat->m_bOpacityActive && !isDynamicOnly) || (mat->m_bOpacityActive && !isStaticOnly)))
          {
             m_renderer->m_renderDevice->ResetRenderState();
             if (mat->m_bOpacityActive)
                m_renderer->m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
-            m_renderer->m_renderDevice->m_basicShader->SetBasic(mat, m_capTexture.get());
+            const Shader::PBRTextureSet pbrMaps = isPBR ? m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive) : Shader::PBRTextureSet();
+            m_renderer->m_renderDevice->m_basicShader->SetBasic(mat, m_capTexture.get(), isPBR ? &pbrMaps : nullptr);
             m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_capMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperCapNumIndices);
          }
       }
@@ -306,7 +311,9 @@ void Bumper::Render(const unsigned int renderMask)
             ringMaterial.m_type = Material::MaterialType::METAL;
          }
          m_renderer->m_renderDevice->ResetRenderState();
-         m_renderer->m_renderDevice->m_basicShader->SetBasic(&ringMaterial, m_ringTexture.get());
+         const bool isPBR = m_renderer->m_renderDevice->m_pbrActive && ringMaterial.m_type == Material::MaterialType::PBR;
+         const Shader::PBRTextureSet pbrMaps = isPBR ? m_renderer->GetPBRTextureSet(m_d, isReflectionPass, ringMaterial.m_bOpacityActive) : Shader::PBRTextureSet();
+         m_renderer->m_renderDevice->m_basicShader->SetBasic(&ringMaterial, m_ringTexture.get(), isPBR ? &pbrMaps : nullptr);
          m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_ringMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperRingNumIndices);
       }
    }
@@ -326,7 +333,9 @@ void Bumper::Render(const unsigned int renderMask)
          m_renderer->m_renderDevice->ResetRenderState();
          if (mat->m_bOpacityActive)
             m_renderer->m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
-         m_renderer->m_renderDevice->m_basicShader->SetBasic(mat, m_skirtTexture.get());
+         const bool isPBR = m_renderer->m_renderDevice->m_pbrActive && mat->m_type == Material::MaterialType::PBR;
+         const Shader::PBRTextureSet pbrMaps = isPBR ? m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive) : Shader::PBRTextureSet();
+         m_renderer->m_renderDevice->m_basicShader->SetBasic(mat, m_skirtTexture.get(), isPBR ? &pbrMaps : nullptr);
          m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_socketMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperSocketNumIndices);
       }
    }

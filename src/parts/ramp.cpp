@@ -721,12 +721,13 @@ void Ramp::Render(const unsigned int renderMask)
    TRACE_FUNCTION();
 
    const Material *const mat = m_ptable->GetMaterial(m_d.m_szMaterial);
-   if (!m_d.m_visible
-    || (!isUIPass && mat == nullptr)
-    || (isReflectionPass && !m_d.m_reflectionEnabled)
-    || (isStaticOnly && mat->m_bOpacityActive)
-    || (isDynamicOnly && !mat->m_bOpacityActive))
+   // PBR materials are always dynamic: their shading state can not be frozen in the static accumulation
+   const bool isPBR = m_renderer->m_renderDevice->m_pbrActive && mat != nullptr && mat->m_type == Material::MaterialType::PBR;
+   if (!m_d.m_visible || (!isUIPass && mat == nullptr) || (isReflectionPass && !m_d.m_reflectionEnabled) || (isStaticOnly && (mat->m_bOpacityActive || isPBR))
+      || (isDynamicOnly && !mat->m_bOpacityActive && !isPBR))
       return;
+
+   const Shader::PBRTextureSet pbrMaps = isPBR ? m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive) : Shader::PBRTextureSet();
 
    if (m_d.m_widthbottom == 0.0f && m_d.m_widthtop == 0.0f)
    {
@@ -762,13 +763,14 @@ void Ramp::Render(const unsigned int renderMask)
       Texture * const pin = m_ptable->GetImage(m_d.m_szImage);
       if (!pin)
       {
-         m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(ShaderTechnique::basic_without_texture, *mat);
+         m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(ShaderTechnique::basic_without_texture, *mat, false, false, false, false, isPBR ? &pbrMaps : nullptr);
          m_renderer->m_renderDevice->m_basicShader->SetMaterial(mat, false);
       }
       else
       {
          m_renderer->m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_base_color, pin, false, SamplerFilter::SF_TRILINEAR, sam, sam);
-         m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(ShaderTechnique::basic_with_texture, *mat, pin->m_alphaTestValue >= 0.f && !pin->IsOpaque());
+         m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(
+            ShaderTechnique::basic_with_texture, *mat, pin->m_alphaTestValue >= 0.f && !pin->IsOpaque(), false, false, false, isPBR ? &pbrMaps : nullptr);
          m_renderer->m_renderDevice->m_basicShader->SetAlphaTestValue(pin->m_alphaTestValue);
          m_renderer->m_renderDevice->m_basicShader->SetMaterial(mat, !pin->IsOpaque());
       }
@@ -817,14 +819,15 @@ void Ramp::Render(const unsigned int renderMask)
           * with transparent textures. Probably the option should simply be renamed to ImageModeClamp,
           * since the texture coordinates always stay within [0,1] anyway. */
          const SamplerAddressMode sam = m_d.m_imagealignment == ImageModeWrap ? SamplerAddressMode::SA_CLAMP : SamplerAddressMode::SA_REPEAT;
-         m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(ShaderTechnique::basic_with_texture, *mat, pin->m_alphaTestValue >= 0.f && !pin->IsOpaque());
+         m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(
+            ShaderTechnique::basic_with_texture, *mat, pin->m_alphaTestValue >= 0.f && !pin->IsOpaque(), false, false, false, isPBR ? &pbrMaps : nullptr);
          m_renderer->m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_base_color, pin, false, SamplerFilter::SF_TRILINEAR, sam, sam);
          m_renderer->m_renderDevice->m_basicShader->SetAlphaTestValue(pin->m_alphaTestValue);
          m_renderer->m_renderDevice->m_basicShader->SetMaterial(mat, !pin->IsOpaque());
       }
       else
       {
-         m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(ShaderTechnique::basic_without_texture, *mat);
+         m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(ShaderTechnique::basic_without_texture, *mat, false, false, false, false, isPBR ? &pbrMaps : nullptr);
          m_renderer->m_renderDevice->m_basicShader->SetMaterial(mat, false);
       }
 
@@ -841,7 +844,7 @@ void Ramp::Render(const unsigned int renderMask)
          if (m_d.m_rightwallheightvisible != 0.f || m_d.m_leftwallheightvisible != 0.f)
          {
             if (pin && !m_d.m_imageWalls)
-               m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(ShaderTechnique::basic_without_texture, *mat);
+               m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(ShaderTechnique::basic_without_texture, *mat, false, false, false, false, isPBR ? &pbrMaps : nullptr);
             if (m_d.m_rightwallheightvisible != 0.f && m_d.m_leftwallheightvisible != 0.f) //only render left & right side if the height is >0
                m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, mat->m_bOpacityActive, m_boundingSphereCenter, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, (m_rampVertex - 1) * 6,
                   (m_rampVertex - 1) * 6 * 2);

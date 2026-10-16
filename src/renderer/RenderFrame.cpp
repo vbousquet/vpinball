@@ -242,6 +242,8 @@ bool RenderFrame::Execute(const bool log)
                const ShaderTechnique tech = cmd->GetShaderState()->GetTechnique();
                if (tech == ShaderTechnique::kickerBoolean || tech == ShaderTechnique::kickerBoolean_isMetal)
                   continue; // Kicker 'holes' carve the playfield in the shaded render: they must not occlude in the prepass
+               if (tech == ShaderTechnique::pbr_t || tech == ShaderTechnique::pbr_t_notex)
+                  continue; // Transparent PBR is excluded: a glass normal in the prepass would make SSR/AO rays hit the glass
                RenderCommand* clone = NewCommand();
                clone->CopyFrom(cmd);
                const ShaderTechnique depthTech = Shader::GetDepthPrepassTechnique(tech, m_rd->m_depthPrepassNormals);

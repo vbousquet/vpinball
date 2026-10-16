@@ -41,6 +41,63 @@ extern marker_series series;
 
 #define MAX_BALL_SHADOW 8
 
+#if defined(ENABLE_BGFX)
+// Builds the GGX split-sum DFG LUT (Karis' environment BRDF approximation): x = NoV, y = roughness, stores (scale, bias)
+static std::shared_ptr<BaseTexture> BuildPBRDFGLUT()
+{
+   constexpr unsigned int size = 64;
+   constexpr unsigned int sampleCount = 256;
+   std::shared_ptr<BaseTexture> lut = BaseTexture::Create(size, size, BaseTexture::Format::RGBA_FP32);
+   float* const data = static_cast<float*>(lut->data());
+   for (unsigned int y = 0; y < size; y++)
+   {
+      const float roughness = (y + 0.5f) / size;
+      const float a = roughness * roughness;
+      for (unsigned int x = 0; x < size; x++)
+      {
+         const float NoV = (x + 0.5f) / size;
+         const vec3 V(sqrtf(1.f - NoV * NoV), 0.f, NoV); // Tangent space: N = (0,0,1)
+         float scale = 0.f, bias = 0.f;
+         for (unsigned int i = 0; i < sampleCount; i++)
+         {
+            // Hammersley low discrepancy sequence
+            uint32_t bits = i;
+            bits = (bits << 16u) | (bits >> 16u);
+            bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+            bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+            bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+            bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+            const Vertex2D Xi((float)i / sampleCount, (float)bits * 2.3283064365386963e-10f);
+            // GGX importance sampling of the half vector
+            const float phi = 2.f * (float)M_PI * Xi.x;
+            const float cosT = sqrtf((1.f - Xi.y) / (1.f + (a * a - 1.f) * Xi.y));
+            const float sinT = sqrtf(1.f - cosT * cosT);
+            const vec3 H(sinT * cosf(phi), sinT * sinf(phi), cosT);
+            const float VoH = saturate(V.Dot(H));
+            const vec3 L = 2.f * VoH * H - V;
+            const float NoL = saturate(L.z);
+            if (NoL <= 0.f)
+               continue;
+            const float NoH = H.z;
+            // Smith visibility (Schlick-GGX, k = a/2) * VoH / (NoH * NoV)
+            const float k = a * 0.5f;
+            const float vis = (NoL * NoV) / ((NoL * (1.f - k) + k) * (NoV * (1.f - k) + k));
+            const float Gvis = vis * VoH / NoH;
+            const float Fc = powf(1.f - VoH, 5.f);
+            scale += (1.f - Fc) * Gvis;
+            bias += Fc * Gvis;
+         }
+         float* const texel = data + 4 * (y * size + x);
+         texel[0] = scale / sampleCount;
+         texel[1] = bias / sampleCount;
+         texel[2] = 0.f;
+         texel[3] = 1.f;
+      }
+   }
+   return lut;
+}
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 
 Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncMode, const StereoMode stereo3D)
@@ -156,6 +213,19 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
 
    // Second render target to swap, allowing to read previous frame render for ball reflection and motion blur
    m_pOffscreenBackBufferTexture2 = m_pOffscreenBackBufferTexture1->Duplicate("BackBuffer2"s, false);
+
+#ifdef ENABLE_BGFX
+   // PBR forward shading is only available on BGFX (requestable through the Player_PBR setting on compute capable GPUs)
+   m_renderDevice->m_pbrActive = m_table->GetSettings().GetPlayer_PBR() && (bgfx::getCaps()->supported & BGFX_CAPS_COMPUTE) != 0;
+   if (m_renderDevice->m_pbrActive)
+   {
+      // PBR parts additionally write their specular resolve inputs to 2 sideband attachments of the scene framebuffer
+      m_pOffscreenBackBufferTexture1->CreatePBRSideband();
+      m_pOffscreenBackBufferTexture2->CreatePBRSideband();
+      m_renderDevice->m_pbrDFG = std::make_shared<Sampler>(m_renderDevice, "PBR DFG LUT"s, BuildPBRDFGLUT(), true);
+      m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_pbr_dfg, m_renderDevice->m_pbrDFG);
+   }
+#endif
 
    // Initialize shaders
    m_renderDevice->m_basicShader->SetVector(ShaderUniform::w_h_height, (float)(1.0 / (double)GetMSAABackBufferTexture()->GetWidth()), (float)(1.0 / (double)GetMSAABackBufferTexture()->GetHeight()), 0.0f, 0.0f);
@@ -1911,6 +1981,8 @@ void Renderer::RenderStatics()
    const bool useDepthPrepass = IsUsingDepthPrepass();
    m_renderDevice->m_depthPrepassTarget = useDepthPrepass ? GetDepthPrepassRenderTarget() : nullptr;
    m_renderDevice->m_depthPrepassNormals = useDepthPrepass && m_depthPrepassMode >= 2;
+   // PBR parts apply AO inside their shader: it is computed early on the shaded depth prepass instead of post scene
+   m_renderDevice->m_pbrAOEnabled = m_renderDevice->m_pbrActive && m_renderDevice->m_depthPrepassNormals && GetAOMode() == 2;
 
    if (!useStaticPrepass)
    {
@@ -1922,6 +1994,7 @@ void Renderer::RenderStatics()
          m_renderDevice->SetRenderTarget("PreRender Depth"s, GetDepthPrepassRenderTarget());
          m_renderDevice->Clear(clearType::ZBUFFER, 0);
       }
+      PreparePBRPasses();
       m_renderDevice->SetRenderTarget("Render Scene"s, GetMSAABackBufferTexture(), true, true); // Force new pass to avoid sorting background draw calls with 3D rendering draw calls
       m_renderDevice->GetCurrentPass()->m_emitDepthPrepass = useDepthPrepass;
       if (useDepthPrepass)
@@ -2078,6 +2151,7 @@ void Renderer::RenderStatics()
          m_renderDevice->BlitRenderTarget(m_staticPrepassRT, GetDepthPrepassRenderTarget(), false, true);
       }
    }
+   PreparePBRPasses();
    m_renderDevice->SetRenderTarget("Render Scene"s, GetMSAABackBufferTexture());
    m_renderDevice->GetCurrentPass()->m_emitDepthPrepass = useDepthPrepass;
    if (useDepthPrepass)
@@ -2105,6 +2179,40 @@ void Renderer::RenderStatics()
       m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
       m_renderDevice->m_FBShader->SetTextureNull(ShaderUniform::tex_fb_unfiltered);
    }
+}
+
+void Renderer::PreparePBRPasses()
+{
+   if (!m_renderDevice->m_pbrActive)
+      return;
+
+   // PBR parts write their specular resolve inputs to 2 sideband attachments of the scene framebuffer. Clearing them
+   // goes through a dedicated framebuffer referencing only these attachments so the scene color is left untouched.
+   RenderTarget* const sidebandTarget = GetMSAABackBufferTexture()->GetPBRSidebandTarget();
+   if (sidebandTarget != nullptr)
+   {
+      m_renderDevice->SetRenderTarget("PBR Sideband Clear"s, sidebandTarget);
+      m_renderDevice->Clear(clearType::TARGET, 0x00000000);
+   }
+
+   // PBR shaders sample the AO texture while shading: compute it early, right after the depth prepass and before the
+   // scene pass (the legacy post scene AO call is then skipped and PBR pixels are masked out of its application)
+   if (m_renderDevice->m_pbrAOEnabled)
+   {
+      UpdateAmbientOcclusion(GetBackBufferTexture(), g_pplayer->m_overall_frames % 2048, m_renderDevice->m_depthPrepassNormals);
+      m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_pbr_ao, GetAORenderTarget(1)->GetColorSampler());
+   }
+}
+
+Shader::PBRTextureSet Renderer::GetPBRTextureSet(const BaseProperty& partData, const bool inShaderSpecular, const bool transparent) const
+{
+   Shader::PBRTextureSet pbrMaps;
+   pbrMaps.normalMap = m_table->GetImage(partData.m_szNormalMap);
+   pbrMaps.ormMap = m_table->GetImage(partData.m_szORMMap);
+   pbrMaps.emissionMap = m_table->GetImage(partData.m_szEmissionMap);
+   pbrMaps.inShaderSpecular = inShaderSpecular;
+   pbrMaps.transparent = transparent;
+   return pbrMaps;
 }
 
 void Renderer::RenderDynamics()
@@ -2515,10 +2623,18 @@ void Renderer::SetupTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapR
       m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_bloom, GetBloomBufferTexture()->GetColorSampler());
    }
 
+   // PBR parts apply AO inside their shader when the early AO pass ran: their pixels are masked out of the legacy
+   // application through the sideband mask attachment (w flag of bloom_dither_colorgrade)
+   const bool pbrMask = useAO && m_renderDevice->m_pbrAOEnabled && GetBackBufferTexture()->GetPBRSidebandSampler(1) != nullptr;
    if (useAO)
    {
       m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_ao, GetAORenderTarget(1)->GetColorSampler());
       m_renderDevice->AddRenderTargetDependency(GetAORenderTarget(1));
+      if (pbrMask)
+      {
+         m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_pbr_mask, GetBackBufferTexture()->GetPBRSidebandSampler(1));
+         m_renderDevice->AddRenderTargetDependency(GetBackBufferTexture());
+      }
    }
 
    // For information mode, override with the wanted render target instead of the render buffer
@@ -3312,8 +3428,8 @@ void Renderer::Render3DScene()
    ClearEmbeddedAncillaryWindow(VPXWindowId::VPXWINDOW_ScoreView, g_pplayer->m_scoreViewOutput, renderedRT);
    ClearEmbeddedAncillaryWindow(VPXWindowId::VPXWINDOW_Topper, g_pplayer->m_topperOutput, renderedRT);
 
-   // Compute AO contribution (to be applied later, with tonemapping)
-   if (GetAOMode() == 2) // Only process for dynamic AO
+   // Compute AO contribution (to be applied later, with tonemapping). Skipped when it ran early for PBR.
+   if (GetAOMode() == 2 && !m_renderDevice->m_pbrAOEnabled) // Only process for dynamic AO
       UpdateAmbientOcclusion(GetBackBufferTexture(), g_pplayer->m_overall_frames % 2048, m_renderDevice->m_depthPrepassNormals);
 
    // Compute bloom (to be applied later, with tonemapping)
@@ -3412,6 +3528,11 @@ void Renderer::RenderDesktopScene(RenderTarget* outputRT)
       m_desktopBackBuffer1 = new RenderTarget(m_renderDevice, GetBackBufferTexture()->m_type, "DesktopBuffer1"s, m_desktopRenderWidth, m_desktopRenderHeight,
          GetBackBufferTexture()->GetColorFormat(), true, GetBackBufferTexture()->GetMSAASamples(), "Fatal Error: unable to create desktop display back buffer");
       m_desktopBackBuffer2 = m_desktopBackBuffer1->Duplicate("DesktopBuffer2"s, false);
+      if (m_renderDevice->m_pbrActive)
+      {
+         m_desktopBackBuffer1->CreatePBRSideband();
+         m_desktopBackBuffer2->CreatePBRSideband();
+      }
       if (m_pOffscreenMSAABackBufferTexture != nullptr)
          m_desktopMSAABackBuffer = new RenderTarget(m_renderDevice, m_pOffscreenMSAABackBufferTexture->m_type, "DesktopMSAABackBuffer"s, m_desktopRenderWidth, m_desktopRenderHeight,
             m_pOffscreenMSAABackBufferTexture->GetColorFormat(), true, m_pOffscreenMSAABackBufferTexture->GetMSAASamples(), "Fatal Error: unable to create desktop display MSAA back buffer");
@@ -3487,8 +3608,8 @@ void Renderer::RenderDesktopScene(RenderTarget* outputRT)
    ClearEmbeddedAncillaryWindow(VPXWindowId::VPXWINDOW_ScoreView, g_pplayer->m_scoreViewOutput, renderedRT);
    ClearEmbeddedAncillaryWindow(VPXWindowId::VPXWINDOW_Topper, g_pplayer->m_topperOutput, renderedRT);
 
-   // Compute AO contribution (to be applied later, with tonemapping)
-   if (GetAOMode() == 2) // Only process for dynamic AO
+   // Compute AO contribution (to be applied later, with tonemapping). Skipped when it ran early for PBR.
+   if (GetAOMode() == 2 && !m_renderDevice->m_pbrAOEnabled) // Only process for dynamic AO
       UpdateAmbientOcclusion(GetBackBufferTexture(), g_pplayer->m_overall_frames % 2048, m_renderDevice->m_depthPrepassNormals);
 
    // Compute bloom (to be applied later, with tonemapping)

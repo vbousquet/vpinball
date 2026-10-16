@@ -4,6 +4,7 @@ set -e
 
 gen_ball=true
 gen_basic=true
+gen_pbr=true
 gen_dmd=true
 gen_flasher=true
 gen_light=true
@@ -107,6 +108,30 @@ if [ "$gen_basic" = true ]; then
             process_shader "fs_depth.sc" "basic.h" "fs_depth_tex_at_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT"
             process_shader "fs_depth.sc" "basic.h" "fs_depth_tex_at_n_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT" "OUT_NORMAL"
             process_shader "vs_depth.sc" "basic.h" "vs_depth_${variant2_lower}${st_output[$k]}" "vertex" "${stereo[$k]}" "$variant2"
+        done
+    done
+fi
+
+################################
+# PBR material shaders (share vs_basic vertex shaders)
+if [ "$gen_pbr" = true ]; then
+    echo -e "\n>>>>>>>>>>>>>>>> PBR material shader"
+    echo "// PBR material Shaders" > "../bgfx_pbr.h"
+    for variant2 in "CLIP" "NOCLIP"; do
+        for k in 0 1; do
+            variant2_lower=$(echo "$variant2" | tr '[:upper:]' '[:lower:]')
+            process_shader "vs_pbr.sc" "pbr.h" "vs_pbr_${variant2_lower}${st_output[$k]}" "vertex" "${stereo[$k]}" "$variant2"
+            # Opaque variants (sideband specular output + in-shader envmap specular until the resolve pass)
+            process_shader "fs_pbr.sc" "pbr.h" "fs_pbr_tex_noat_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "NOAT" "SIDEBAND" "INSHADERSPEC"
+            process_shader "fs_pbr.sc" "pbr.h" "fs_pbr_tex_at_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT" "SIDEBAND" "INSHADERSPEC"
+            process_shader "fs_pbr.sc" "pbr.h" "fs_pbr_notex_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "$variant2" "NOAT" "SIDEBAND" "INSHADERSPEC"
+            # Transparent variants (premultiplied output, sideband specular output)
+            process_shader "fs_pbr.sc" "pbr.h" "fs_pbr_t_tex_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "NOAT" "TRANSPARENT" "SIDEBAND" "INSHADERSPEC"
+            process_shader "fs_pbr.sc" "pbr.h" "fs_pbr_t_notex_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "$variant2" "NOAT" "TRANSPARENT" "SIDEBAND" "INSHADERSPEC"
+            # In-probe variants (in-shader envmap specular, no sideband output)
+            process_shader "fs_pbr.sc" "pbr.h" "fs_pbr_is_tex_noat_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "NOAT" "INSHADERSPEC"
+            process_shader "fs_pbr.sc" "pbr.h" "fs_pbr_is_tex_at_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT" "INSHADERSPEC"
+            process_shader "fs_pbr.sc" "pbr.h" "fs_pbr_is_notex_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "$variant2" "NOAT" "INSHADERSPEC"
         done
     done
 fi
