@@ -1538,14 +1538,71 @@ void Renderer::BuildPBRLightList()
 }
 #endif
 
-Shader::PBRTextureSet Renderer::GetPBRTextureSet(const BaseProperty& partData, const bool inShaderSpecular, const bool transparent) const
+Shader::PBRTextureSet Renderer::GetPBRTextureSet(const BaseProperty& partData, const Vertex3Ds& center, const float radius, const bool inShaderSpecular, const bool transparent,
+   const unsigned int renderMask, RenderTarget* const refrProbe)
 {
    Shader::PBRTextureSet pbrMaps;
    pbrMaps.normalMap = m_table->GetImage(partData.m_szNormalMap);
    pbrMaps.ormMap = m_table->GetImage(partData.m_szORMMap);
    pbrMaps.emissionMap = m_table->GetImage(partData.m_szEmissionMap);
-   pbrMaps.inShaderSpecular = inShaderSpecular;
+   // Without the depth prepass the specular resolve pass cannot run: opaque parts degrade to in-shader specular
+   pbrMaps.inShaderSpecular = inShaderSpecular || !IsUsingDepthPrepass();
    pbrMaps.transparent = transparent;
+
+   m_renderDevice->m_basicShader->SetTextureNull(ShaderUniform::tex_pbr_probe0);
+   m_renderDevice->m_basicShader->SetTextureNull(ShaderUniform::tex_pbr_probe1);
+   float probeRanges[2] = { 0.f, 0.f };
+   if (!inShaderSpecular)
+   {
+      // Automated probe assignment: score all planar reflection probes against the part bounds (signed
+      // distance to the reflection plane, positive side only) and bind the 2 best scoring ones
+      RenderProbe* probes[2] = { nullptr, nullptr };
+      float probeDists[2] = { FLT_MAX, FLT_MAX };
+      for (RenderProbe* const probe : m_table->GetRenderProbeList(RenderProbe::PLANE_REFLECTION))
+      {
+         const vec3 n = probe->GetReflectionPlaneNormal();
+         const float d = n.x * center.x + n.y * center.y + n.z * center.z + probe->GetReflectionPlaneDistance();
+         const float r = max(radius, 0.f); // Negative radius = unbounded part extent
+         // Cap the influence distance: beyond ~35 VPUs the probe content does not cover the
+         // mirrored rays of elevated parts (plastics sit ~50 VPUs above the playfield)
+         if (d + r < 0.f || d - r > min(probe->GetInfluenceRange(), 35.f))
+            continue;
+         if (d >= probeDists[1])
+            continue;
+         const int slot = d < probeDists[0] ? 0 : 1;
+         probes[1] = probes[slot];
+         probeDists[1] = probeDists[slot];
+         probes[slot] = probe;
+         probeDists[slot] = d;
+      }
+      vec4 plane[2] = { vec4(0.f, 0.f, 0.f, 0.f), vec4(0.f, 0.f, 0.f, 0.f) };
+      for (int i = 0; i < 2; i++)
+      {
+         RenderTarget* const probeRT = probes[i] ? probes[i]->Render(renderMask) : nullptr;
+         if (probeRT == nullptr)
+            continue;
+         probes[i]->GetReflectionPlane(plane[i]);
+         probeRanges[i] = min(probes[i]->GetInfluenceRange(), 35.f);
+         m_renderDevice->m_basicShader->SetTexture(i == 0 ? ShaderUniform::tex_pbr_probe0 : ShaderUniform::tex_pbr_probe1, probeRT->GetColorSampler());
+         m_renderDevice->AddRenderTargetDependency(probeRT);
+      }
+      m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrProbes0, plane[0].x, plane[0].y, plane[0].z, plane[0].w);
+      m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrProbes1, plane[1].x, plane[1].y, plane[1].z, plane[1].w);
+   }
+   else
+   {
+      m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrProbes0, 0.f, 0.f, 0.f, 0.f);
+      m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrProbes1, 0.f, 0.f, 0.f, 0.f);
+   }
+   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrProbeParams, probeRanges[0], probeRanges[1], 0.8f, refrProbe != nullptr ? 1.f : 0.f);
+   if (refrProbe != nullptr)
+   {
+      m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_pbr_refr, refrProbe->GetColorSampler());
+      // The refraction probe is a copy of the in-progress pass content: the dependency must be tracked on the draw command
+      m_renderDevice->AddRenderTargetDependencyOnNextRenderCommand(refrProbe);
+   }
+   else
+      m_renderDevice->m_basicShader->SetTextureNull(ShaderUniform::tex_pbr_refr);
    return pbrMaps;
 }
 

@@ -911,7 +911,7 @@ void Surface::RenderWallsAtHeight(const bool drop, const unsigned int renderMask
       material.material = mat;
       material.image = pin;
       material.hasTextureAlpha = pin != nullptr && !pin->IsOpaque();
-      material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
+      material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, m_boundingSphereCenter, -1.f, isReflectionPass, mat->m_bOpacityActive, renderMask);
 
       // combine drawcalls into one (hopefully faster)
       m_renderer->RenderMesh(renderMask, side, material);
@@ -935,7 +935,7 @@ void Surface::RenderWallsAtHeight(const bool drop, const unsigned int renderMask
       material.material = mat;
       material.image = pin;
       material.hasTextureAlpha = pin != nullptr && !pin->IsOpaque();
-      material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
+      material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, m_boundingSphereCenter, -1.f, isReflectionPass, mat->m_bOpacityActive, renderMask);
 
       // Top
       m_renderer->RenderMesh(renderMask, topBottom, material);
