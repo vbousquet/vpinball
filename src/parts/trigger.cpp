@@ -385,6 +385,8 @@ void Trigger::Render(const unsigned int renderMask)
       if (m_d.m_shape == TriggerWireA || m_d.m_shape == TriggerWireB || m_d.m_shape == TriggerWireC || m_d.m_shape == TriggerWireD || m_d.m_shape == TriggerInder)
          m_renderer->m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
       material.material = m_ptable->GetMaterial(m_d.m_szMaterial);
+      material.pbrMaps = m_renderer->GetPBRTextureSet(
+         m_d, isReflectionPass, material.material->m_bOpacityActive);
    }
    m_renderer->RenderMesh(renderMask, body, material);
 }

@@ -65,6 +65,7 @@ SAMPLER2D      (tex_color_lut,    2); // Color grade
 SAMPLER2DSTEREO(tex_ao,           3); // Ambient Occlusion
 SAMPLER2DSTEREO(tex_depth,        4); // Depth Buffer
 SAMPLER2D      (tex_ao_dither,    5); // Ambient Occlusion Dither
+SAMPLER2DSTEREO(tex_pbr_mask,     7); // PBR pixel mask (alpha channel), skips AO application on PBR parts which apply AO in shader
 //SAMPLER2D      (tex_tonemap_lut,  6); // Precomputed Tonemapping LUT
 
 
@@ -443,7 +444,10 @@ void main()
 
    // moving AO before tonemap does not really change the look
    #ifdef AO
-      result *= texStereoNoLod(tex_ao, v_texcoord0 - 0.5*w_h_height.xy).x; // shift half a texel to blurs over 2x2 window
+      float ao = texStereoNoLod(tex_ao, v_texcoord0 - 0.5*w_h_height.xy).x; // shift half a texel to blurs over 2x2 window
+      BRANCH if (bloom_dither_colorgrade.w != 0.0) // PBR pixels apply AO in shader: skip the legacy application
+         ao = mix(ao, 1.0, texStereoNoLod(tex_pbr_mask, v_texcoord0 - 0.5*w_h_height.xy).a);
+      result *= ao;
    #endif
 
    BRANCH if (do_bloom)

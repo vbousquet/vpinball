@@ -50,7 +50,20 @@ public:
    bgfx::FrameBufferHandle GetCoreFrameBuffer() const { return m_framebuffer; }
    bgfx::TextureFormat::Enum GetCoreColorFormat() const { return m_colorFormat; }
    static void OnFrameFlushed() { current_render_target = nullptr; current_render_layer = 0; }
-#elif defined(ENABLE_OPENGL)
+
+   // Optional PBR specular sideband: 2 RGBA16F textures attached as color attachments 1 & 2 of this render target's
+   // framebuffers. Attachment 1 carries probe radiance + coverage, attachment 2 specular weight + the PBR mask flag.
+   // The returned target wraps a framebuffer referencing only the 2 sideband textures, for the dedicated clear pass.
+   void CreatePBRSideband();
+   RenderTarget* GetPBRSidebandTarget() const { return m_pbrSidebandTarget; }
+   std::shared_ptr<Sampler> GetPBRSidebandSampler(int idx) const { return m_pbrSidebandSampler[idx]; }
+#else
+   // PBR is BGFX only: stubs so the renderer code compiles on the other backends
+   void CreatePBRSideband() { }
+   RenderTarget* GetPBRSidebandTarget() const { return nullptr; }
+   std::shared_ptr<Sampler> GetPBRSidebandSampler(int idx) const { return nullptr; }
+#endif
+#if defined(ENABLE_OPENGL)
    GLuint GetCoreFrameBuffer() const { return m_framebuffer; }
 #elif defined(ENABLE_DX9)
    IDirect3DSurface9* GetCoreColorSurface() { return m_color_surface; }
@@ -84,6 +97,9 @@ private:
    bgfx::TextureFormat::Enum m_depthFormat = bgfx::TextureFormat::Count;
    bgfx::FrameBufferHandle m_framebuffer_layers[6] { BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE };
    bgfx::FrameBufferHandle m_framebuffer = BGFX_INVALID_HANDLE;
+   bgfx::TextureHandle m_pbrSidebandTex[2] { BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE };
+   std::shared_ptr<Sampler> m_pbrSidebandSampler[2];
+   RenderTarget* m_pbrSidebandTarget = nullptr; // Wrapper over a framebuffer referencing only the 2 sideband textures
 #elif defined(ENABLE_OPENGL)
    GLuint m_framebuffer = 0;
    GLenum m_texTarget = 0;

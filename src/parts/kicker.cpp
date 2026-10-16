@@ -343,6 +343,7 @@ void Kicker::Render(const unsigned int renderMask)
       cupMaterial.image = m_d.m_kickertype == KickerHoleSimple ? nullptr : m_texture.get();
       cupMaterial.hasTextureAlpha = cupMaterial.image != nullptr && !cupMaterial.image->IsOpaque();
       cupMaterial.forceAlphaBlend = true;
+      cupMaterial.pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
       m_renderer->RenderMesh(renderMask, cup, cupMaterial);
    }
 }
