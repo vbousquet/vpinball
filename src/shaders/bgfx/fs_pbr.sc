@@ -37,21 +37,26 @@ SAMPLER2D      (tex_pbr_orm, 8); // packed occlusion/roughness/metallic map
 SAMPLER2D      (tex_pbr_emission, 9); // emission map
 SAMPLER2DSTEREO(tex_pbr_ao, 10); // screenspace ambient occlusion
 SAMPLER2D      (tex_pbr_dfg, 11); // GGX split-sum DFG LUT
+SAMPLER2D      (tex_pbr_lights, 12); // packed light records + cluster grid + index list (RGBA32F, texel fetch)
 
 #ifdef STEREO
     uniform mat4 matView[2];
     uniform mat4 matWorldView[2];
     uniform mat4 matWorldViewInverseTranspose[2];
+    uniform vec4 cameraPosWorld[2];
     #define mView                      matView[int(round(v_eye))]
     #define mWorldView                 matWorldView[int(round(v_eye))]
     #define mWorldViewInverseTranspose matWorldViewInverseTranspose[int(round(v_eye))]
+    #define cCameraPosWorld            cameraPosWorld[int(round(v_eye))].xyz
 #else
     uniform mat4 matView;
     uniform mat4 matWorldView;
     uniform mat4 matWorldViewInverseTranspose;
+    uniform vec4 cameraPosWorld;
     #define mView                      matView
     #define mWorldView                 matWorldView
     #define mWorldViewInverseTranspose matWorldViewInverseTranspose
+    #define cCameraPosWorld            cameraPosWorld.xyz
 #endif
 
 uniform vec4 u_basic_shade_mode;
@@ -83,6 +88,9 @@ uniform vec4 pbrEmission; // rgb: emission color, w: emission intensity
 uniform vec4 pbrMapFlags; // x: ORM map bound, y: emission map bound
 #define hasORMMap      (pbrMapFlags.x != 0.0)
 #define hasEmissionMap (pbrMapFlags.y != 0.0)
+
+uniform vec4 pbrLightGrid;  // xy: cluster grid origin (table pos), z: inverse cell size, w: cell count x
+uniform vec4 pbrLightGrid2; // x: cell count y, y: light count
 
 #include "ball_shadows.sh"
 
@@ -156,6 +164,59 @@ vec3 pbr_specular_weight(const vec3 N, const vec3 V, const vec3 F0, const float 
    const float lod = roughness * log2(fenvEmissionScale_TexWidth.y);
    envSpec = texture2DLod(tex_env, ray_to_equirectangular_uv(R), lod).xyz * fenvEmissionScale_TexWidth.x;
    return (Fss + Fms) * SO;
+}
+
+// Forward+ clustered direct lighting. The CPU builds a world-space XY grid over the table bounds each
+// frame and packs it into tex_pbr_lights (RGBA32F, 256 texels wide, texel fetch):
+// [0,512)    light records, 2 texels each: (pos.xyz, range) then (radiance.rgb, mode)
+// [512,1024) grid cells: (start, count) into the index list
+// [1024,+)   light index list
+// World-space evaluation (v_tablePos): view independent, a single grid serves both stereo eyes.
+vec4 pbr_light_texel(const int idx)
+{
+   return texelFetch(tex_pbr_lights, ivec2(idx & 255, idx >> 8), 0);
+}
+
+vec3 pbr_direct_light(const vec3 wN, const vec3 wV, const vec3 wPos, const vec3 diffuse, const vec3 F0, const float roughness)
+{
+   const vec2 cellf = clamp((wPos.xy - pbrLightGrid.xy) * pbrLightGrid.z, vec2_splat(0.0),
+      vec2(pbrLightGrid.w - 1.0, pbrLightGrid2.x - 1.0));
+   const vec4 cell = pbr_light_texel(512 + int(cellf.y) * int(pbrLightGrid.w) + int(cellf.x));
+   const int start = int(cell.x);
+   const int count = min(int(cell.y), 16);
+   const float a = roughness * roughness;
+   const float a2 = a * a;
+   const float NdotV = saturate(dot(wN, wV));
+   vec3 acc = vec3_splat(0.0);
+   for (int i = 0; i < count; i++)
+   {
+      const int li = int(pbr_light_texel(1024 + start + i).x);
+      const vec4 lPos = pbr_light_texel(li * 2);
+      const vec3 lCol = pbr_light_texel(li * 2 + 1).rgb;
+      const vec3 dl = lPos.xyz - wPos;
+      const float dist2 = dot(dl, dl);
+      // Windowed inverse square attenuation: (1 - (d/r)^4)^2 / d^2 gives a smooth cutoff at the light range
+      const float rangeRatio = dist2 / (lPos.w * lPos.w);
+      const float x = saturate(1.0 - rangeRatio * rangeRatio);
+      if (x <= 0.0)
+         continue;
+      const vec3 l = dl * inversesqrt(dist2);
+      const float NdotL = saturate(dot(wN, l));
+      if (NdotL <= 0.0)
+         continue;
+      const vec3 h = normalize(l + wV);
+      const float NdotH = saturate(dot(wN, h));
+      const float VdotH = saturate(dot(wV, h));
+      // GGX D + Schlick F + height-correlated Smith visibility (already includes the 1/(4 NdotL NdotV) term)
+      const float denom = NdotH * NdotH * (a2 - 1.0) + 1.0;
+      const float D = a2 / (PI * denom * denom);
+      const vec3 F = F0 + (vec3_splat(1.0) - F0) * pow(1.0 - VdotH, 5.0);
+      const float gv = NdotL * sqrt(NdotV * NdotV * (1.0 - a2) + a2);
+      const float gl = NdotV * sqrt(NdotL * NdotL * (1.0 - a2) + a2);
+      const float G = 0.5 / max(gv + gl, 1e-6);
+      acc += (diffuse * (vec3_splat(1.0) - F) * (1.0 / PI) + D * F * G) * (lCol * (x * x / dist2)) * NdotL;
+   }
+   return acc;
 }
 
 #if !defined(AT) && !defined(CLIP)
@@ -236,6 +297,14 @@ void main() {
       #if defined(INSHADERSPEC)
          spec = W * envSpec;
       #endif
+
+      // Forward+ clustered direct lighting (world space: the light grid is built over the table XY plane)
+      BRANCH if (pbrLightGrid2.y > 0.0)
+      {
+         const vec3 wN = mul(vec4(N, 0.0), mView).xyz; // trafo back to world (orthonormal, no renormalize needed)
+         const vec3 wV = normalize(cCameraPosWorld - v_tablePos);
+         color += pbr_direct_light(wN, wV, v_tablePos, diffuse, F0, roughness);
+      }
    }
 
    BRANCH if (lightCenter_doShadow.w != 0.)
