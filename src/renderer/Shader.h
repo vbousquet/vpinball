@@ -162,6 +162,13 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(pbr_is),
    SHADER_TECHNIQUE(pbr_is_at),
    SHADER_TECHNIQUE(pbr_is_notex),
+   SHADER_TECHNIQUE(basic_DMD),
+   SHADER_TECHNIQUE(basic_DMD_world),
+   SHADER_TECHNIQUE(display_DMD),
+   SHADER_TECHNIQUE(display_DMD_world),
+   SHADER_TECHNIQUE(display_Seg),
+   SHADER_TECHNIQUE(display_Seg_world),
+   SHADER_TECHNIQUE(display_CRT),
    // Lottes-CRT
    SHADER_TECHNIQUE(display_CRT_world),
    // Same as above but built with the Nuance-CRT filter, the renderer picking between them per display (see Renderer::SetupCRTRender)
@@ -355,10 +362,13 @@ enum class ShaderUniform : unsigned int
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrFactors, 1), // metallic/occlusion/roughness factors + AO flag
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrEmission, 1), // emission color + intensity
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrMapFlags, 1), // bound map flags (ORM, emission)
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrLightGrid, 1), // xy: cluster grid origin (table pos), z: inverse cell size, w: cell count x
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrLightGrid2, 1), // x: cell count y, y: light count
    SHADER_SAMPLER(tex_pbr_orm, 8, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // packed occlusion/roughness/metallic
    SHADER_SAMPLER(tex_pbr_emission, 9, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // emission map
    SHADER_SAMPLER(tex_pbr_ao, 10, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // screenspace ambient occlusion
    SHADER_SAMPLER(tex_pbr_dfg, 11, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // GGX split-sum DFG LUT
+   SHADER_SAMPLER(tex_pbr_lights, 12, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // packed light records + cluster grid + index list
    SHADER_SAMPLER(tex_pbr_mask, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP,
       SamplerFilter::SF_BILINEAR), // PBR pixel mask (sideband attachment alpha), masks the tonemap AO application
 
