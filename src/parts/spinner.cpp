@@ -398,6 +398,7 @@ void Spinner::Render(const unsigned int renderMask)
       plateMaterial.material = m_ptable->GetMaterial(m_d.m_szMaterial);
       plateMaterial.image = pin;
       plateMaterial.hasTextureAlpha = pin != nullptr && !pin->IsOpaque();
+      plateMaterial.pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, plateMaterial.material->m_bOpacityActive);
    }
 
    if (m_d.m_showBracket && !isDynamicOnly)

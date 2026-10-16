@@ -249,6 +249,11 @@ public:
    bool m_depthPrepassNormals = false; // When set, the depth prepass also writes view space shaded normals to its color attachment
    bool m_depthPrepassMotion = false; // When set, the shaded normals depth prepass target is promoted to RGBA16F and also writes the camera motion vectors to its 2 free channels
 
+   // PBR (Forward+) rendering state (BGFX only)
+   bool m_pbrActive = false; // True when PBR materials are shaded through the dedicated PBR path (Player_PBR setting && supported backend)
+   bool m_pbrAOEnabled = false; // True on frames where the AO pass was recorded ahead of the scene pass (PBR shaders sample tex_pbr_ao)
+   std::shared_ptr<Sampler> m_pbrDFG; // GGX split-sum DFG LUT (tex_pbr_dfg)
+
 private:
    const bool m_isAnaglyph;
    const bool m_isVR;
