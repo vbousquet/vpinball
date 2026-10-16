@@ -481,6 +481,8 @@ Renderer::~Renderer()
    delete m_pPostProcessRenderTarget2;
    delete m_pPostProcessRenderTarget3;
    delete m_pReflectionBufferTexture;
+   delete m_pReflectionHalfBufferTexture;
+   delete m_pPBRResolveBufferTexture;
    delete m_pMotionBlurBufferTexture;
    delete m_pOffscreenVRLeft;
    delete m_pOffscreenVRRight;
@@ -724,6 +726,29 @@ RenderTarget* Renderer::GetReflectionBufferTexture()
    return m_pReflectionBufferTexture;
 }
 
+RenderTarget* Renderer::GetReflectionHalfBufferTexture()
+{
+   // Lazily creates the half resolution buffer that receives the raymarched premultiplied
+   // reflections, composited at full resolution by the following bilateral upsample pass
+   if (m_pReflectionHalfBufferTexture == nullptr)
+   {
+      m_pReflectionHalfBufferTexture = new RenderTarget(m_renderDevice, GetBackBufferTexture()->m_type, "ReflectionBufferHalf"s, GetBackBufferTexture()->GetWidth() / 2,
+         GetBackBufferTexture()->GetHeight() / 2, colorFormat::RGBA16F, false, 1, "Fatal Error: unable to create half resolution reflection buffer!");
+   }
+   return m_pReflectionHalfBufferTexture;
+}
+
+RenderTarget* Renderer::GetPBRResolveBufferTexture()
+{
+   // Lazily created full res scratch that receives the PBR specular resolve composite (scene + deferred specular)
+   if (m_pPBRResolveBufferTexture == nullptr)
+   {
+      m_pPBRResolveBufferTexture = new RenderTarget(m_renderDevice, GetBackBufferTexture()->m_type, "PBRResolve"s, GetBackBufferTexture()->GetWidth(), GetBackBufferTexture()->GetHeight(),
+         GetBackBufferTexture()->GetColorFormat(), false, 1, "Fatal Error: unable to create PBR resolve buffer!");
+   }
+   return m_pPBRResolveBufferTexture;
+}
+
 RenderTarget* Renderer::GetMotionBlurBufferTexture()
 {
    if (m_pMotionBlurBufferTexture == nullptr)
@@ -764,12 +789,15 @@ RenderTarget* Renderer::GetDepthPrepassRenderTarget()
    // with the scene since blended parts may write to the depth buffer, and prepopulating them in the scene depth
    // would wrongly cull the parts rendered before them but behind them (besides, MSAA depth can not be shared).
    // In 'Depth & Shaded Normals' mode, its color attachment holds the view space shaded normals (xy, fp16).
-   // When camera motion vectors are generated (dynamic AO while the static prepass is disabled, e.g. VR,
-   // headtracking or the editor), the target is promoted to RGBA16F, the 2 additional channels holding the
+   // When camera & object motion vectors are generated (dynamic AO while the static prepass is disabled, e.g.
+   // VR, headtracking or the editor), the target is promoted to RGBA16F, the 2 additional channels holding the
    // screen space motion vector.
+   // When PBR is active, the normals are always emitted and a RG16F attachment 1 is added, carrying the perceptual
+   // roughness (x) and the opaque PBR flag (y) gating the specular march.
    // The scene's render targets ping pong between the two back buffer render targets (previous frame history), so
    // one prepass target is kept per scene render target, recreated on format or surface change.
-   const colorFormat format = m_renderDevice->m_depthPrepassMotion ? colorFormat::RGBA16F : m_depthPrepassMode >= 2 ? colorFormat::RG16F : colorFormat::GREY8;
+   const colorFormat format
+      = m_renderDevice->m_depthPrepassMotion ? colorFormat::RGBA16F : ((m_depthPrepassMode >= 2 || m_renderDevice->m_pbrActive) ? colorFormat::RG16F : colorFormat::GREY8);
    RenderTarget* const sceneRT = GetMSAABackBufferTexture();
    for (int i = 0; i < 2; i++)
    {
@@ -787,6 +815,8 @@ RenderTarget* Renderer::GetDepthPrepassRenderTarget()
    m_depthPrepassSceneRT[slot] = sceneRT;
    m_depthPrepassRT[slot] = new RenderTarget(m_renderDevice, GetBackBufferTexture()->m_type, "DepthPrepass"s, sceneRT->GetWidth(), sceneRT->GetHeight(), format, true, 1,
       "Unable to create depth prepass render target!");
+   if (m_renderDevice->m_pbrActive)
+      m_depthPrepassRT[slot]->CreatePBRDataAttachment();
    return m_depthPrepassRT[slot];
 }
 
@@ -2325,14 +2355,18 @@ void Renderer::RenderStatics()
    // commands that write to the depth buffer, into a dedicated non-MSAA depth surface (the scene depth can not be
    // shared since blended parts may write to it, breaking rendering of the parts behind them).
    const bool useDepthPrepass = IsUsingDepthPrepass();
-   // The shaded normals are emitted when the setting forces them, or when they are actually needed: dynamic AO
-   // under a moving camera consumes them and needs the RGBA16F target holding the camera motion vectors
-   m_renderDevice->m_depthPrepassNormals = useDepthPrepass && (m_depthPrepassMode >= 2 || IsMotionVectorPrepass());
-   // Camera motion vectors are generated when dynamic AO can consume them to reproject its temporal
-   // accumulation under a dynamic camera (they use the 2 free channels of the target which is promoted to RGBA16F)
+   // The shaded normals are emitted when the setting forces them, or when they are actually needed: PBR always
+   // (its color attachment carries the normals, the perceptual roughness and the opaque PBR flag consumed by the
+   // specular march, it also applies AO in shader like mode 2), and dynamic AO under a moving camera (it
+   // consumes them and needs the RGBA16F target holding the camera motion vectors)
+   m_renderDevice->m_depthPrepassNormals = useDepthPrepass && (m_depthPrepassMode >= 2 || m_renderDevice->m_pbrActive || IsMotionVectorPrepass());
+   // Camera & object motion vectors are generated when dynamic AO can consume them to reproject its temporal
+   // accumulation under a dynamic camera (they use the 2 free zw channels of attachment 0 which is promoted to
+   // RGBA16F; the PBR data lives in its own attachment 1 so the two never conflict)
    m_renderDevice->m_depthPrepassMotion = m_renderDevice->m_depthPrepassNormals && IsMotionVectorPrepass();
    m_renderDevice->m_depthPrepassTarget = useDepthPrepass ? GetDepthPrepassRenderTarget() : nullptr;
-   // PBR parts apply AO inside their shader: it is computed early on the shaded depth prepass instead of post scene
+   // PBR parts apply AO inside their shader: it is computed early on the shaded depth prepass instead of post scene,
+   // whenever it is emitted (PBR itself forces the normals, so this covers all PBR renders on the prepass)
    m_renderDevice->m_pbrAOEnabled = m_renderDevice->m_pbrActive && m_renderDevice->m_depthPrepassNormals && GetAOMode() == 2;
 
    if (!useStaticPrepass)
@@ -2684,14 +2718,71 @@ void Renderer::BuildPBRLightList()
 }
 #endif
 
-Shader::PBRTextureSet Renderer::GetPBRTextureSet(const BaseProperty& partData, const bool inShaderSpecular, const bool transparent) const
+Shader::PBRTextureSet Renderer::GetPBRTextureSet(const BaseProperty& partData, const Vertex3Ds& center, const float radius, const bool inShaderSpecular, const bool transparent,
+   const unsigned int renderMask, RenderTarget* const refrProbe)
 {
    Shader::PBRTextureSet pbrMaps;
    pbrMaps.normalMap = m_table->GetImage(partData.m_szNormalMap);
    pbrMaps.ormMap = m_table->GetImage(partData.m_szORMMap);
    pbrMaps.emissionMap = m_table->GetImage(partData.m_szEmissionMap);
-   pbrMaps.inShaderSpecular = inShaderSpecular;
+   // Without the depth prepass the specular resolve pass cannot run: opaque parts degrade to in-shader specular
+   pbrMaps.inShaderSpecular = inShaderSpecular || !IsUsingDepthPrepass();
    pbrMaps.transparent = transparent;
+
+   m_renderDevice->m_basicShader->SetTextureNull(ShaderUniform::tex_pbr_probe0);
+   m_renderDevice->m_basicShader->SetTextureNull(ShaderUniform::tex_pbr_probe1);
+   float probeRanges[2] = { 0.f, 0.f };
+   if (!inShaderSpecular)
+   {
+      // Automated probe assignment: score all planar reflection probes against the part bounds (signed
+      // distance to the reflection plane, positive side only) and bind the 2 best scoring ones
+      RenderProbe* probes[2] = { nullptr, nullptr };
+      float probeDists[2] = { FLT_MAX, FLT_MAX };
+      for (RenderProbe* const probe : m_table->GetRenderProbeList(RenderProbe::PLANE_REFLECTION))
+      {
+         const vec3 n = probe->GetReflectionPlaneNormal();
+         const float d = n.x * center.x + n.y * center.y + n.z * center.z + probe->GetReflectionPlaneDistance();
+         const float r = max(radius, 0.f); // Negative radius = unbounded part extent
+         // Cap the influence distance: beyond ~35 VPUs the probe content does not cover the
+         // mirrored rays of elevated parts (plastics sit ~50 VPUs above the playfield)
+         if (d + r < 0.f || d - r > min(probe->GetInfluenceRange(), 35.f))
+            continue;
+         if (d >= probeDists[1])
+            continue;
+         const int slot = d < probeDists[0] ? 0 : 1;
+         probes[1] = probes[slot];
+         probeDists[1] = probeDists[slot];
+         probes[slot] = probe;
+         probeDists[slot] = d;
+      }
+      vec4 plane[2] = { vec4(0.f, 0.f, 0.f, 0.f), vec4(0.f, 0.f, 0.f, 0.f) };
+      for (int i = 0; i < 2; i++)
+      {
+         RenderTarget* const probeRT = probes[i] ? probes[i]->Render(renderMask) : nullptr;
+         if (probeRT == nullptr)
+            continue;
+         probes[i]->GetReflectionPlane(plane[i]);
+         probeRanges[i] = min(probes[i]->GetInfluenceRange(), 35.f);
+         m_renderDevice->m_basicShader->SetTexture(i == 0 ? ShaderUniform::tex_pbr_probe0 : ShaderUniform::tex_pbr_probe1, probeRT->GetColorSampler());
+         m_renderDevice->AddRenderTargetDependency(probeRT);
+      }
+      m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrProbes0, plane[0].x, plane[0].y, plane[0].z, plane[0].w);
+      m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrProbes1, plane[1].x, plane[1].y, plane[1].z, plane[1].w);
+   }
+   else
+   {
+      m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrProbes0, 0.f, 0.f, 0.f, 0.f);
+      m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrProbes1, 0.f, 0.f, 0.f, 0.f);
+   }
+   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrProbeParams, probeRanges[0], probeRanges[1], 0.8f, refrProbe != nullptr ? 1.f : 0.f);
+   if (refrProbe != nullptr)
+   {
+      m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_pbr_refr, refrProbe->GetColorSampler());
+      // The refraction probe is a copy of the in-progress pass content: the dependency must be tracked on the draw command
+      m_renderDevice->AddRenderTargetDependencyOnNextRenderCommand(refrProbe);
+   }
+   else
+      m_renderDevice->m_basicShader->SetTextureNull(ShaderUniform::tex_pbr_refr);
    return pbrMaps;
 }
 
@@ -2865,7 +2956,17 @@ void Renderer::UpdateBloom(RenderTarget* renderedRT)
 
 RenderTarget* Renderer::ApplyAdditiveScreenSpaceReflection(RenderTarget* renderedRT)
 {
-   if (!m_ss_refl || !m_table->m_enableSSR || !m_renderDevice->DepthBufferReadBackAvailable() || m_table->m_SSRScale <= 0.f)
+   if (!m_ss_refl || !m_table->m_enableSSR || m_table->m_SSRScale <= 0.f)
+      return renderedRT;
+
+#ifdef ENABLE_BGFX
+   // When the depth prepass is available, source its opaque non-MSAA depth (and its shaded
+   // normals) instead of the MSAA resolved backbuffer ones for the legacy screen space blur
+   const bool usePrepass = IsUsingDepthPrepass();
+#else
+   const bool usePrepass = false;
+#endif
+   if (!usePrepass && !m_renderDevice->DepthBufferReadBackAvailable())
       return renderedRT;
 
    m_renderDevice->ResetRenderState();
@@ -2876,21 +2977,120 @@ RenderTarget* Renderer::ApplyAdditiveScreenSpaceReflection(RenderTarget* rendere
 
    RenderTarget* outputRT = GetReflectionBufferTexture();
    m_renderDevice->SetRenderTarget("ScreenSpace Reflection"s, outputRT, true);
-   m_renderDevice->AddRenderTargetDependency(GetBackBufferTexture(), true);
-   m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_depth, GetBackBufferTexture()->GetDepthSampler());
+#ifdef ENABLE_BGFX
+   const bool shadedNormals = usePrepass && m_renderDevice->m_depthPrepassNormals;
+   if (usePrepass)
+   {
+      RenderTarget* const prepassRT = GetDepthPrepassRenderTarget();
+      m_renderDevice->AddRenderTargetDependency(prepassRT);
+      m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_depth, prepassRT->GetDepthSampler());
+      if (shadedNormals)
+         m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_normals, prepassRT->GetColorSampler());
+   }
+   else
+#endif
+   {
+      m_renderDevice->AddRenderTargetDependency(GetBackBufferTexture(), true);
+      m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_depth, GetBackBufferTexture()->GetDepthSampler());
+   }
    m_renderDevice->AddRenderTargetDependency(renderedRT);
    m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_fb_filtered, renderedRT->GetColorSampler());
    m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_fb_unfiltered, renderedRT->GetColorSampler());
    m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_ao_dither, m_aoDitherSampler);
    // FIXME check if size should not be taken from renderdevice to account for stereo (double width/height) or supersampling
-   m_renderDevice->m_FBShader->SetVector(ShaderUniform::w_h_height, (float)(1.0 / renderedRT->GetWidth()), (float)(1.0 / renderedRT->GetHeight()), 1.0f /*radical_inverse(m_overall_frames%2048)*/, 1.0f);
+   m_renderDevice->m_FBShader->SetVector(
+      ShaderUniform::w_h_height, (float)(1.0 / renderedRT->GetWidth()), (float)(1.0 / renderedRT->GetHeight()), 1.0f /*radical_inverse(m_overall_frames%2048)*/, 1.0f);
    const float rotation = m_table->GetViewSetup().GetRotation(m_stereo3D, m_renderDevice->GetOutputBackBuffer()->GetWidth(), m_renderDevice->GetOutputBackBuffer()->GetHeight());
    m_renderDevice->m_FBShader->SetVector(ShaderUniform::SSR_bumpHeight_fresnelRefl_scale_FS, 0.3f, 0.3f, m_table->m_SSRScale, rotation);
+#ifdef ENABLE_BGFX
+   const bool pbrMask = m_renderDevice->m_pbrActive && GetBackBufferTexture()->GetPBRSidebandSampler(1) != nullptr;
+   if (pbrMask)
+      m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_pbr_mask, GetBackBufferTexture()->GetPBRSidebandSampler(1));
+   m_renderDevice->m_FBShader->SetTechnique(shadedNormals ? (pbrMask ? ShaderTechnique::SSReflection_shaded_masked : ShaderTechnique::SSReflection_shaded)
+                                                          : (pbrMask ? ShaderTechnique::SSReflection_masked : ShaderTechnique::SSReflection));
+#else
    m_renderDevice->m_FBShader->SetTechnique(ShaderTechnique::SSReflection);
+#endif
    m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
+   m_renderDevice->m_FBShader->SetTextureNull(ShaderUniform::tex_pbr_mask);
+   m_renderDevice->m_FBShader->SetTextureNull(ShaderUniform::tex_normals);
    if (g_pplayer->GetProfilingMode() == PF_ENABLED)
       m_gpu_profiler.Timestamp(GTS_SSR);
    return outputRT;
+}
+
+RenderTarget* Renderer::ApplyPBRSpecularResolve(RenderTarget* renderedRT)
+{
+#ifdef ENABLE_BGFX
+   // Composites the deferred PBR specular: a half res march of the prepass (GGX lobe jitter sized by the
+   // perceptual roughness recorded in its color attachment, gated by its opaque PBR flag so that only PBR
+   // materials receive the contribution) then a full res bilateral upsample blended against the planar
+   // probe radiance recorded in the sideband attachments (scene + W * lerp(L_probe, L_ssr, a')).
+   if (!m_renderDevice->m_pbrActive || !IsUsingDepthPrepass())
+      return renderedRT;
+   if (renderedRT->GetPBRSidebandSampler(1) == nullptr)
+      return renderedRT;
+
+   m_renderDevice->ResetRenderState();
+   m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
+   m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
+   m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
+   m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
+
+   // The prepass normals (and PBR payload) are always emitted when PBR is active
+   RenderTarget* const prepassRT = GetDepthPrepassRenderTarget();
+   RenderTarget* const halfRT = GetReflectionHalfBufferTexture();
+   RenderTarget* const outRT = GetPBRResolveBufferTexture();
+   Matrix3D matProj[2];
+   Matrix3D matProjInv[2];
+   const int nEyes = m_renderDevice->m_nEyes;
+   for (int eye = 0; eye < nEyes; eye++)
+   {
+      matProj[eye] = GetMVP().GetProj(eye);
+      matProjInv[eye] = matProj[eye];
+      matProjInv[eye].Invert();
+   }
+
+   // Ray march the PBR specular lobe at half resolution against the prepass opaque depth
+   m_renderDevice->SetRenderTarget("PBR Specular March"s, halfRT, true);
+   m_renderDevice->AddRenderTargetDependency(prepassRT);
+   m_renderDevice->AddRenderTargetDependency(renderedRT);
+   m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_fb_filtered, renderedRT->GetColorSampler());
+   m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_depth, prepassRT->GetDepthSampler());
+   m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_normals, prepassRT->GetColorSampler());
+   m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_pbr_data, prepassRT->GetPBRDataSampler());
+   m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_ao_dither, m_aoDitherSampler);
+   m_renderDevice->m_FBShader->SetVector(ShaderUniform::w_h_height, (float)(1.0 / halfRT->GetWidth()), (float)(1.0 / halfRT->GetHeight()), 1.0f, 1.0f);
+   m_renderDevice->m_FBShader->SetMatrix(ShaderUniform::matProj, &matProj[0], nEyes);
+   m_renderDevice->m_FBShader->SetMatrix(ShaderUniform::matProjInv, &matProjInv[0], nEyes);
+   m_renderDevice->m_FBShader->SetTechnique(ShaderTechnique::PBR_march);
+   m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
+
+   // Full res joint bilateral upsample & composite with the planar probe radiance
+   m_renderDevice->SetRenderTarget("PBR Specular Resolve"s, outRT, true);
+   m_renderDevice->AddRenderTargetDependency(prepassRT);
+   m_renderDevice->AddRenderTargetDependency(renderedRT);
+   m_renderDevice->AddRenderTargetDependency(halfRT);
+   m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_fb_filtered, renderedRT->GetColorSampler());
+   m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_ssr_lowres, halfRT->GetColorSampler());
+   m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_depth, prepassRT->GetDepthSampler());
+   m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_normals, prepassRT->GetColorSampler());
+   m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_pbr_data, prepassRT->GetPBRDataSampler());
+   m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_pbr_att1, renderedRT->GetPBRSidebandSampler(0));
+   m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_pbr_att2, renderedRT->GetPBRSidebandSampler(1));
+   m_renderDevice->m_FBShader->SetVector(ShaderUniform::w_h_height, (float)(1.0 / renderedRT->GetWidth()), (float)(1.0 / renderedRT->GetHeight()), 1.0f, 1.0f);
+   m_renderDevice->m_FBShader->SetVector(ShaderUniform::pbrProbeParams, 0.f, 0.f, 0.8f, 0.f); // mu: SSR suppression weight against probe coverage
+   m_renderDevice->m_FBShader->SetMatrix(ShaderUniform::matProjInv, &matProjInv[0], nEyes);
+   m_renderDevice->m_FBShader->SetTechnique(ShaderTechnique::PBR_resolve);
+   m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
+   m_renderDevice->m_FBShader->SetTextureNull(ShaderUniform::tex_ssr_lowres);
+   m_renderDevice->m_FBShader->SetTextureNull(ShaderUniform::tex_normals);
+   if (g_pplayer->GetProfilingMode() == PF_ENABLED)
+      m_gpu_profiler.Timestamp(GTS_SSR);
+   return outRT;
+#else
+   return renderedRT;
+#endif
 }
 
 
@@ -3930,7 +4130,8 @@ void Renderer::Render3DScene()
    // Starts from the output of the render passes
    RenderTarget* renderedRT = GetBackBufferTexture();
 
-   // Add screen space reflections
+   // Resolve the deferred PBR specular (planar probes + screen space march), then add screen space reflections
+   renderedRT = ApplyPBRSpecularResolve(renderedRT);
    renderedRT = ApplyAdditiveScreenSpaceReflection(renderedRT);
 
    // Clear embedded ancillary windows before updarting bloom & AO
@@ -4112,6 +4313,7 @@ void Renderer::RenderDesktopScene(RenderTarget* outputRT)
 
    RenderTarget* renderedRT = GetBackBufferTexture();
 
+   renderedRT = ApplyPBRSpecularResolve(renderedRT);
    renderedRT = ApplyAdditiveScreenSpaceReflection(renderedRT);
 
    // Clear embedded ancillary windows before updating bloom & AO

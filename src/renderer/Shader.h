@@ -139,6 +139,13 @@ enum class ShaderTechnique : unsigned int
 
    SHADER_TECHNIQUE(basic_DMD),
    SHADER_TECHNIQUE(basic_DMD_world),
+   // PBR depth prepass variants: shaded normals in xy of attachment 0, perceptual roughness in x and
+   // opaque PBR flag in y of attachment 1
+   SHADER_TECHNIQUE(pbr_depth),
+   SHADER_TECHNIQUE(pbr_depth_at),
+   // PBR depth prepass variants additionally writing the camera & object motion vectors in zw of attachment 0
+   SHADER_TECHNIQUE(pbr_depth_mv),
+   SHADER_TECHNIQUE(pbr_depth_at_mv),
    // Depth prepass variants that additionally write the camera motion vectors to the 2 free channels of the color
    // attachment (BGFX only: they are used by the AO temporal accumulation under a dynamic camera, e.g. in VR)
    SHADER_TECHNIQUE(basic_depth_n_mv),
@@ -239,6 +246,13 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(AO_shaded_mv),
 #ifdef ENABLE_BGFX
    SHADER_TECHNIQUE(fb_resolve_depth_msaa),
+   // Shaded normals variant (normals from the depth prepass instead of depth neighbors)
+   SHADER_TECHNIQUE(SSReflection_shaded),
+   // PBR specular resolve: masked SSR variants (skip PBR pixels), PBR half res march and full res composite
+   SHADER_TECHNIQUE(SSReflection_masked),
+   SHADER_TECHNIQUE(SSReflection_shaded_masked),
+   SHADER_TECHNIQUE(PBR_march),
+   SHADER_TECHNIQUE(PBR_resolve),
 #endif
 
    SHADER_TECHNIQUE(NFAA),
@@ -361,13 +375,22 @@ enum class ShaderUniform : unsigned int
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrMapFlags, 1), // bound map flags (ORM, emission)
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrLightGrid, 1), // xy: cluster grid origin (table pos), z: inverse cell size, w: cell count x
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrLightGrid2, 1), // x: cell count y, y: light count
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrProbes0, 1), // reflection plane of the first bound probe (dot(n,p) + w = 0)
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrProbes1, 1), // reflection plane of the second bound probe
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrProbeParams, 1), // x/y: influence range of probe0/1 (0 = unbound), z: SSR suppression weight mu, w: refraction probe bound
    SHADER_SAMPLER(tex_pbr_orm, 8, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // packed occlusion/roughness/metallic
    SHADER_SAMPLER(tex_pbr_emission, 9, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // emission map
    SHADER_SAMPLER(tex_pbr_ao, 10, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // screenspace ambient occlusion
    SHADER_SAMPLER(tex_pbr_dfg, 11, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // GGX split-sum DFG LUT
    SHADER_SAMPLER(tex_pbr_lights, 12, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // packed light records + cluster grid + index list
+   SHADER_SAMPLER(tex_pbr_probe0, 13, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // first planar reflection probe
+   SHADER_SAMPLER(tex_pbr_probe1, 14, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // second planar reflection probe
+   SHADER_SAMPLER(tex_pbr_refr, 15, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // screen space refraction probe (transparent parts)
    SHADER_SAMPLER(tex_pbr_mask, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP,
       SamplerFilter::SF_BILINEAR), // PBR pixel mask (sideband attachment alpha), masks the tonemap AO application
+   SHADER_SAMPLER(tex_pbr_att1, 8, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // sideband att1: probe radiance + coverage
+   SHADER_SAMPLER(tex_pbr_att2, 9, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // sideband att2: specular weight + mask
+
 
    // Ball Shader
    SHADER_UNIFORM(ShaderUniformType::Float4x3, orientation, 1),
@@ -424,7 +447,9 @@ enum class ShaderUniform : unsigned int
    SHADER_SAMPLER(tex_ao, 3, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // AO Result
    SHADER_SAMPLER(tex_depth, 4, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // Depth
    SHADER_SAMPLER(tex_ao_dither, 5, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_NONE), // AO dither
-   SHADER_SAMPLER(tex_normals, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // Shaded normals from the depth prepass
+   SHADER_SAMPLER(tex_normals, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // Shaded normals from the depth prepass (attachment 0)
+   SHADER_SAMPLER(tex_pbr_data, 10, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // PBR roughness & opaque flag from the depth prepass (attachment 1)
+   SHADER_SAMPLER(tex_ssr_lowres, 3, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // Half resolution raymarched reflections
    //SHADER_SAMPLER(tex_tonemap_lut, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // Tonemap LUT
    SHADER_SAMPLER(edgesTex, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // SMAA
    SHADER_SAMPLER(blendTex, 8, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // SMAA
