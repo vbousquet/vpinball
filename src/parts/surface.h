@@ -116,7 +116,7 @@ public:
 
 protected:
    void RenderSlingshots();
-   void RenderWallsAtHeight(const bool drop, const bool isReflectionPass);
+   void RenderWallsAtHeight(const bool drop, const unsigned int renderMask);
 
    Renderer *m_renderer = nullptr;
 

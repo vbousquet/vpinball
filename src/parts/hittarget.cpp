@@ -642,7 +642,10 @@ void HitTarget::Render(const unsigned int renderMask)
       m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::fDisableLighting_top_below, m_d.m_disableLightingTop, m_d.m_disableLightingBelow, 0.f, 0.f);
       const Material *const mat = m_ptable->GetMaterial(m_d.m_szMaterial);
       const bool isPBR = m_renderer->m_renderDevice->m_pbrActive && mat->m_type == Material::MaterialType::PBR;
-      const Shader::PBRTextureSet pbrMaps = isPBR ? m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive) : Shader::PBRTextureSet();
+      const Shader::PBRTextureSet pbrMaps = isPBR
+         ? m_renderer->GetPBRTextureSet(m_d, Vertex3Ds(m_d.m_vPosition.x + 0.5f * m_d.m_vSize.x, m_d.m_vPosition.y + 0.5f * m_d.m_vSize.y, m_d.m_vPosition.z + 0.5f * m_d.m_vSize.z),
+              0.5f * m_d.m_vSize.Length(), isReflectionPass, mat->m_bOpacityActive, renderMask)
+         : Shader::PBRTextureSet();
       m_renderer->m_renderDevice->m_basicShader->SetBasic(mat, m_ptable->GetImage(m_d.m_szImage), isPBR ? &pbrMaps : nullptr);
       m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, mat->m_bOpacityActive, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
       m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::fDisableLighting_top_below, 0.f, 0.f, 0.f, 0.f);

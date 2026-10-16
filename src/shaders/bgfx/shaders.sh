@@ -109,6 +109,10 @@ if [ "$gen_basic" = true ]; then
             process_shader "fs_depth.sc" "basic.h" "fs_depth_tex_at_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT"
             process_shader "fs_depth.sc" "basic.h" "fs_depth_tex_at_n_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT" "OUT_NORMAL"
             process_shader "fs_depth.sc" "basic.h" "fs_depth_tex_at_n_mv_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT" "OUT_NORMAL" "MOTION"
+            process_shader "fs_depth.sc" "basic.h" "fs_depth_pbr_n_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "OUT_NORMAL" "PBR"
+            process_shader "fs_depth.sc" "basic.h" "fs_depth_pbr_at_n_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT" "OUT_NORMAL" "PBR"
+            process_shader "fs_depth.sc" "basic.h" "fs_depth_pbr_n_mv_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "OUT_NORMAL" "PBR" "MOTION"
+            process_shader "fs_depth.sc" "basic.h" "fs_depth_pbr_at_n_mv_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT" "OUT_NORMAL" "PBR" "MOTION"
             process_shader "vs_depth.sc" "basic.h" "vs_depth_${variant2_lower}${st_output[$k]}" "vertex" "${stereo[$k]}" "$variant2"
             process_shader "vs_depth.sc" "basic.h" "vs_depth_mv_${variant2_lower}${st_output[$k]}" "vertex" "${stereo[$k]}" "$variant2" "MOTION"
         done
@@ -124,10 +128,10 @@ if [ "$gen_pbr" = true ]; then
         for k in 0 1; do
             variant2_lower=$(echo "$variant2" | tr '[:upper:]' '[:lower:]')
             process_shader "vs_pbr.sc" "pbr.h" "vs_pbr_${variant2_lower}${st_output[$k]}" "vertex" "${stereo[$k]}" "$variant2"
-            # Opaque variants (sideband specular output + in-shader envmap specular until the resolve pass)
-            process_shader "fs_pbr.sc" "pbr.h" "fs_pbr_tex_noat_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "NOAT" "SIDEBAND" "INSHADERSPEC"
-            process_shader "fs_pbr.sc" "pbr.h" "fs_pbr_tex_at_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT" "SIDEBAND" "INSHADERSPEC"
-            process_shader "fs_pbr.sc" "pbr.h" "fs_pbr_notex_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "$variant2" "NOAT" "SIDEBAND" "INSHADERSPEC"
+            # Opaque variants (specular deferred to the resolve pass through the sideband)
+            process_shader "fs_pbr.sc" "pbr.h" "fs_pbr_tex_noat_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "NOAT" "SIDEBAND"
+            process_shader "fs_pbr.sc" "pbr.h" "fs_pbr_tex_at_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT" "SIDEBAND"
+            process_shader "fs_pbr.sc" "pbr.h" "fs_pbr_notex_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "$variant2" "NOAT" "SIDEBAND"
             # Transparent variants (premultiplied output, sideband specular output)
             process_shader "fs_pbr.sc" "pbr.h" "fs_pbr_t_tex_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "NOAT" "TRANSPARENT" "SIDEBAND" "INSHADERSPEC"
             process_shader "fs_pbr.sc" "pbr.h" "fs_pbr_t_notex_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "$variant2" "NOAT" "TRANSPARENT" "SIDEBAND" "INSHADERSPEC"
@@ -254,6 +258,11 @@ if [ "$gen_postprocess" = true ]; then
         process_shader "fs_pp_ssao.sc" "postprocess.h" "fs_pp_ssao_shaded${st_output[$k]}" "fragment" "${stereo[$k]}" "NORMAL_TEX"
         process_shader "fs_pp_ssao.sc" "postprocess.h" "fs_pp_ssao_shaded_mv${st_output[$k]}" "fragment" "${stereo[$k]}" "NORMAL_TEX" "MOTION"
         process_shader "fs_pp_ssr.sc" "postprocess.h" "fs_pp_ssr${st_output[$k]}" "fragment" "${stereo[$k]}"
+        process_shader "fs_pp_ssr.sc" "postprocess.h" "fs_pp_ssr_masked${st_output[$k]}" "fragment" "${stereo[$k]}" "PBR_MASK"
+        process_shader "fs_pp_ssr.sc" "postprocess.h" "fs_pp_ssr_shaded${st_output[$k]}" "fragment" "${stereo[$k]}" "NORMAL_TEX"
+        process_shader "fs_pp_ssr.sc" "postprocess.h" "fs_pp_ssr_shaded_masked${st_output[$k]}" "fragment" "${stereo[$k]}" "NORMAL_TEX" "PBR_MASK"
+        process_shader "fs_pp_pbr_ssr.sc" "postprocess.h" "fs_pp_pbr_march${st_output[$k]}" "fragment" "${stereo[$k]}"
+        process_shader "fs_pp_pbr_resolve.sc" "postprocess.h" "fs_pp_pbr_resolve${st_output[$k]}" "fragment" "${stereo[$k]}"
         process_shader "fs_pp_ao_display.sc" "postprocess.h" "fs_pp_ao_display${st_output[$k]}" "fragment" "${stereo[$k]}"
         for variant in "FILTER" "NOFILTER"; do
             variant_lower=$(echo "$variant" | tr '[:upper:]' '[:lower:]')

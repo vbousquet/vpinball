@@ -8,7 +8,9 @@
 // - indirect diffuse lighting from the prefiltered irradiance envmap (tex_diffuse_env)
 // - indirect specular from the envmap mip chain (tex_env) weighted by the split-sum approximation
 //   (DFG LUT + multiscattering compensation + Lagarde's specular occlusion)
-// - specular sideband output for the resolve pass (attachment 1: W/Wt, attachment 2: L_probe)
+// - planar reflection probes blended per pixel by distance to their reflection plane (tex_pbr_probe0/1)
+// - specular sideband output for the resolve pass (attachment 1: L_probe+W_probe, attachment 2: W+mask,
+//   attachment 3: roughness for the half res specular march)
 // - TRANSPARENT variant outputs premultiplied radiance (ONE/INVSRC_ALPHA blend state)
 //
 // Defines: TEX (base color texture), AT (alpha test), TRANSPARENT (premultiplied blend output),
@@ -38,24 +40,31 @@ SAMPLER2D      (tex_pbr_emission, 9); // emission map
 SAMPLER2DSTEREO(tex_pbr_ao, 10); // screenspace ambient occlusion
 SAMPLER2D      (tex_pbr_dfg, 11); // GGX split-sum DFG LUT
 SAMPLER2D      (tex_pbr_lights, 12); // packed light records + cluster grid + index list (RGBA32F, texel fetch)
+SAMPLER2DSTEREO(tex_pbr_probe0, 13); // first planar reflection probe (screen space)
+SAMPLER2DSTEREO(tex_pbr_probe1, 14); // second planar reflection probe (screen space)
+SAMPLER2DSTEREO(tex_pbr_refr, 15);   // screen space refraction probe (transmitted light of transparent parts)
 
 #ifdef STEREO
     uniform mat4 matView[2];
     uniform mat4 matWorldView[2];
     uniform mat4 matWorldViewInverseTranspose[2];
+    uniform mat4 matRotViewProj[2];
     uniform vec4 cameraPosWorld[2];
     #define mView                      matView[int(round(v_eye))]
     #define mWorldView                 matWorldView[int(round(v_eye))]
     #define mWorldViewInverseTranspose matWorldViewInverseTranspose[int(round(v_eye))]
+    #define mRotViewProj               matRotViewProj[int(round(v_eye))]
     #define cCameraPosWorld            cameraPosWorld[int(round(v_eye))].xyz
 #else
     uniform mat4 matView;
     uniform mat4 matWorldView;
     uniform mat4 matWorldViewInverseTranspose;
+    uniform mat4 matRotViewProj;
     uniform vec4 cameraPosWorld;
     #define mView                      matView
     #define mWorldView                 matWorldView
     #define mWorldViewInverseTranspose matWorldViewInverseTranspose
+    #define mRotViewProj               matRotViewProj
     #define cCameraPosWorld            cameraPosWorld.xyz
 #endif
 
@@ -91,6 +100,14 @@ uniform vec4 pbrMapFlags; // x: ORM map bound, y: emission map bound
 
 uniform vec4 pbrLightGrid;  // xy: cluster grid origin (table pos), z: inverse cell size, w: cell count x
 uniform vec4 pbrLightGrid2; // x: cell count y, y: light count
+
+uniform vec4 pbrProbes0; // reflection plane of the first bound probe (dot(n,p) + w = 0)
+uniform vec4 pbrProbes1; // reflection plane of the second bound probe
+uniform vec4 pbrProbeParams; // x/y: influence ranges of probe0/1 (0 = unbound), z: SSR/probe blend factor, w: refraction probe bound
+
+#ifdef TRANSPARENT
+uniform vec4 refractionTint_thickness;
+#endif
 
 #include "ball_shadows.sh"
 
@@ -165,6 +182,55 @@ vec3 pbr_specular_weight(const vec3 N, const vec3 V, const vec3 F0, const float 
    envSpec = texture2DLod(tex_env, ray_to_equirectangular_uv(R), lod).xyz * fenvEmissionScale_TexWidth.x;
    return (Fss + Fms) * SO;
 }
+
+// Automated planar probe specular: the bound probes are sampled in screen space and weighted per
+// pixel by the fragment's distance to their reflection plane, faded by their influence range.
+// Returns (blended probe radiance, aggregate coverage). No bound probe => coverage 0 => envmap fallback.
+#ifdef STEREO
+vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv, const float v_eye)
+#else
+vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv)
+#endif
+{
+   vec3 Lp = vec3_splat(0.0);
+   float wSum = 0.0;
+   BRANCH if (pbrProbeParams.x > 0.0)
+   {
+      const float d = max(dot(pbrProbes0.xyz, wPos) + pbrProbes0.w, 0.0);
+      const float w = saturate(1.0 - d / pbrProbeParams.x);
+      Lp += w * texStereo(tex_pbr_probe0, suv).rgb;
+      wSum += w;
+   }
+   BRANCH if (pbrProbeParams.y > 0.0)
+   {
+      const float d = max(dot(pbrProbes1.xyz, wPos) + pbrProbes1.w, 0.0);
+      const float w = saturate(1.0 - d / pbrProbeParams.y);
+      Lp += w * texStereo(tex_pbr_probe1, suv).rgb;
+      wSum += w;
+   }
+   return vec4(Lp / max(wSum, 1e-6), saturate(wSum));
+}
+
+#ifdef TRANSPARENT
+// Transmitted light through a transparent part: refract the view ray by the part thickness, project
+// back to screen space and sample the refraction probe (screen space copy of what's behind the part).
+#ifdef STEREO
+vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV, const float v_eye)
+#else
+vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV)
+#endif
+{
+   const vec3 R = refract(-wV, wN, 1.0 / 1.5); // n1 = 1.0 (air), n2 = 1.5 (plastic), eta = n1 / n2
+   const vec3 refracted_pos = wPos + refractionTint_thickness.w * R; // Shift ray by the thickness of the material
+   const vec4 proj = mul(mRotViewProj, vec4(refracted_pos - cCameraPosWorld, 1.0));
+   #if TEX_V_IS_UP
+   const vec2 uv = vec2(0.5, 0.5) + proj.xy * (0.5 / proj.w);
+   #else
+   const vec2 uv = vec2(0.5, 0.5) + vec2(proj.x, -proj.y) * (0.5 / proj.w);
+   #endif
+   return refractionTint_thickness.rgb * texStereo(tex_pbr_refr, uv).rgb;
+}
+#endif
 
 // Forward+ clustered direct lighting. The CPU builds a world-space XY grid over the table bounds each
 // frame and packs it into tex_pbr_lights (RGBA32F, 256 texels wide, point sampled texel fetch):
@@ -281,6 +347,17 @@ void main() {
    #else
       const vec3 W = pbr_specular_weight(N, V, F0, roughness, occlusion, envSpec);
    #endif
+   // Planar probe radiance, blended per pixel between the assigned probes by distance to their
+   // reflection planes, mixed with the envmap specular over the uncovered range. In probe render
+   // contexts (INSHADERSPEC without bound probes) the weights are 0 leaving envmap only.
+   const vec2 suv = gl_FragCoord.xy * w_h_height.xy;
+   #ifdef STEREO
+      const vec4 probe = pbr_probe_specular(v_tablePos, suv, v_eye);
+   #else
+      const vec4 probe = pbr_probe_specular(v_tablePos, suv);
+   #endif
+   const vec3 specSrc = mix(envSpec, probe.rgb, probe.a);
+
    vec3 color = vec3_splat(0.0);
    vec3 spec = vec3_splat(0.0);
 
@@ -297,7 +374,7 @@ void main() {
          color += pbr_indirect_diffuse(N, diffuse, kd, occlusion);
       #endif
       #if defined(INSHADERSPEC)
-         spec = W * envSpec;
+         spec = W * specSrc;
       #endif
 
       // Forward+ clustered direct lighting (world space: the light grid is built over the table XY plane)
@@ -332,8 +409,21 @@ void main() {
    spec *= staticColor_Alpha.rgb;
 
    #ifdef TRANSPARENT
-      // Premultiplied output (used with ONE/INVSRC_ALPHA blending): diffuse & emission are modulated
-      // by coverage while the specular contribution stays unmodulated (reflects even on thin glass)
+      BRANCH if (pbrProbeParams.w > 0.0)
+      {
+         // Transmission through a bound refraction probe replaces the shaded term (composited
+         // unblended like legacy refraction parts through the premultiplied blend below)
+         const vec3 wN = mul(vec4(N, 0.0), mView).xyz; // trafo back to world (orthonormal, no renormalize needed)
+         const vec3 wV = normalize(cCameraPosWorld - v_tablePos);
+         #ifdef STEREO
+            color = pbr_transmit(v_tablePos, wN, wV, v_eye) * staticColor_Alpha.rgb;
+         #else
+            color = pbr_transmit(v_tablePos, wN, wV) * staticColor_Alpha.rgb;
+         #endif
+      }
+      // Premultiplied output (used with ONE/INVSRC_ALPHA blending): diffuse & emission (or the
+      // transmitted term) are modulated by coverage while specular stays unmodulated (reflects
+      // even on thin glass)
       gl_FragData[0] = vec4(color.rgb * alpha + spec, alpha);
    #else
       gl_FragData[0] = vec4(color.rgb + spec, alpha);
@@ -346,8 +436,8 @@ void main() {
          gl_FragData[1] = vec4(0.0, 0.0, 0.0, alpha);
          gl_FragData[2] = vec4(0.0, 0.0, 0.0, alpha);
       #else
-         gl_FragData[1] = vec4(envSpec, 0.0); // L_probe radiance (envmap fallback until probes blend in) + W_probe coverage
-         gl_FragData[2] = vec4(W, 1.0); // specular weight + PBR mask flag
+         gl_FragData[1] = vec4(specSrc, probe.a); // probe radiance (envmap fallback mix) + probe coverage
+         gl_FragData[2] = vec4(fDisableLighting_top_below.x != 0.0 ? vec3_splat(0.0) : W, 1.0); // specular weight (0 for unlit) + PBR mask flag
       #endif
    #endif
 }

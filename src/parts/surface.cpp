@@ -830,13 +830,13 @@ void Surface::Render(const unsigned int renderMask)
    }
    else if (!m_isDropped || StaticRendering())
    {
-      RenderWallsAtHeight(false, isReflectionPass);
+      RenderWallsAtHeight(false, renderMask);
    }
    else if (!m_d.m_flipbook)
    {
       // if this wall is part of flipbook animation, do not render when dropped
       // Render wall dropped (smashed to a pancake at bottom height).
-      RenderWallsAtHeight(true, isReflectionPass);
+      RenderWallsAtHeight(true, renderMask);
    }
 }
 
@@ -883,8 +883,9 @@ void Surface::RenderSlingshots()
    m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, m_isDynamic, m_boundingSphereCenter, 0.f, m_slingshotMeshBuffer, RenderDevice::TRIANGLELIST, 0, static_cast<uint32_t>(m_vlinesling.size() * 24));
 }
 
-void Surface::RenderWallsAtHeight(const bool drop, const bool isReflectionPass)
+void Surface::RenderWallsAtHeight(const bool drop, const unsigned int renderMask)
 {
+   const bool isReflectionPass = renderMask & Renderer::REFLECTION_PASS;
    if (isReflectionPass && (/*m_d.m_heightbottom < 0.0f ||*/ m_d.m_heighttop < 0.0f))
       return;
 
@@ -898,7 +899,7 @@ void Surface::RenderWallsAtHeight(const bool drop, const bool isReflectionPass)
       if ((mat->m_bOpacityActive || !m_isDynamic) || (m_d.m_topBottomVisible && m_isDynamic))
          m_renderer->m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
       const bool isPBR = m_renderer->m_renderDevice->m_pbrActive && mat->m_type == Material::MaterialType::PBR;
-      const Shader::PBRTextureSet pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
+      const Shader::PBRTextureSet pbrMaps = m_renderer->GetPBRTextureSet(m_d, m_boundingSphereCenter, -1.f, isReflectionPass, mat->m_bOpacityActive, renderMask);
       m_renderer->m_renderDevice->m_basicShader->SetBasic(mat, m_ptable->GetImage(m_d.m_szSideImage), isPBR ? &pbrMaps : nullptr);
       // combine drawcalls into one (hopefully faster)
       m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, m_isDynamic, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numVertices * 6);
@@ -912,7 +913,7 @@ void Surface::RenderWallsAtHeight(const bool drop, const bool isReflectionPass)
       if (mat->m_bOpacityActive || !m_isDynamic)
          m_renderer->m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
       const bool isPBR = m_renderer->m_renderDevice->m_pbrActive && mat->m_type == Material::MaterialType::PBR;
-      const Shader::PBRTextureSet pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
+      const Shader::PBRTextureSet pbrMaps = m_renderer->GetPBRTextureSet(m_d, m_boundingSphereCenter, -1.f, isReflectionPass, mat->m_bOpacityActive, renderMask);
       m_renderer->m_renderDevice->m_basicShader->SetBasic(mat, m_ptable->GetImage(m_d.m_szImage), isPBR ? &pbrMaps : nullptr);
 
       // Top

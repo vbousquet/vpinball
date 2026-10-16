@@ -727,7 +727,8 @@ void Ramp::Render(const unsigned int renderMask)
       || (isDynamicOnly && !mat->m_bOpacityActive && !isPBR))
       return;
 
-   const Shader::PBRTextureSet pbrMaps = isPBR ? m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive) : Shader::PBRTextureSet();
+   const Shader::PBRTextureSet pbrMaps
+      = isPBR ? m_renderer->GetPBRTextureSet(m_d, m_boundingSphereCenter, -1.f, isReflectionPass, mat->m_bOpacityActive, renderMask) : Shader::PBRTextureSet();
 
    if (m_d.m_widthbottom == 0.0f && m_d.m_widthtop == 0.0f)
    {

@@ -228,9 +228,13 @@ public:
    VPXRenderContext2D& GetAncillaryRenderContext(
       VPXWindowId window, float width, float height, bool is2D, bool isOutputLinear, float depthbias, const Matrix3D& displayTransform = Matrix3D::MatrixIdentity());
 
-   // Builds the optional PBR texture set for a part (normal/ORM/emission maps). Pass to SetTechniqueMaterial/SetBasic
-   // only for PBR materials. inShaderSpecular selects the probe render path, transparent the premultiplied alpha one.
-   Shader::PBRTextureSet GetPBRTextureSet(const BaseProperty& partData, const bool inShaderSpecular, const bool transparent) const;
+   // Builds the optional PBR texture set for a part (normal/ORM/emission maps) and scores/binds the planar reflection
+   // probes covering the part bounds (up to 2, by signed distance to the reflection plane on the positive side).
+   // Pass to SetTechniqueMaterial/SetBasic only for PBR materials. inShaderSpecular selects the probe render path
+   // (no probe binding, no sideband), transparent the premultiplied alpha one. refrProbe is an optional screen space
+   // transparency probe render target used for the transmission term of transparent parts.
+   Shader::PBRTextureSet GetPBRTextureSet(const BaseProperty& partData, const Vertex3Ds& center, const float radius, const bool inShaderSpecular, const bool transparent,
+      const unsigned int renderMask, RenderTarget* const refrProbe = nullptr);
 
 private:
    void SetSpaceReference(PartGroupData::SpaceReference spaceReference, bool force);
@@ -252,6 +256,7 @@ private:
    void SetupTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapRT, bool isFullTonemap);
    RenderTarget* ApplyTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapRT);
    RenderTarget* ApplyAdditiveScreenSpaceReflection(RenderTarget* renderedRT);
+   RenderTarget* ApplyPBRSpecularResolve(RenderTarget* renderedRT); // Composites deferred PBR specular (probes + SSR march)
    RenderTarget* ApplyBallMotionBlur(RenderTarget* beforeTonemapRT, RenderTarget* afterTonemapRT);
    RenderTarget* ApplyPostProcessedAntialiasing(RenderTarget* renderedRT, RenderTarget* outputBackBuffer);
    RenderTarget* ApplySharpening(RenderTarget* renderedRT, RenderTarget* outputBackBuffer);
@@ -319,6 +324,10 @@ private:
 
    RenderTarget* m_pReflectionBufferTexture = nullptr;
    RenderTarget* GetReflectionBufferTexture();
+   RenderTarget* m_pReflectionHalfBufferTexture = nullptr;
+   RenderTarget* m_pPBRResolveBufferTexture = nullptr; // Full res scratch for the PBR specular resolve composite
+   RenderTarget* GetReflectionHalfBufferTexture();
+   RenderTarget* GetPBRResolveBufferTexture();
 
    RenderTarget* m_pMotionBlurBufferTexture = nullptr;
    RenderTarget* GetMotionBlurBufferTexture();

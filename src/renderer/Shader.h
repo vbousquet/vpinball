@@ -199,6 +199,23 @@ enum class ShaderTechnique : unsigned int
       ShaderUniform::tex_base_normalmap, ShaderUniform::clip_plane),
    SHADER_TECHNIQUE(basic_depth_nm_n),
    SHADER_TECHNIQUE(basic_depth_at_nm_n),
+   // PBR depth prepass variants: shaded normals in xy of attachment 0, perceptual roughness in x and
+   // opaque PBR flag in y of attachment 1
+   SHADER_TECHNIQUE(pbr_depth, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorld, ShaderUniform::matWorldView,
+      ShaderUniform::matWorldViewInverseTranspose, ShaderUniform::u_basic_shade_mode, ShaderUniform::objectSpaceNormalMap, ShaderUniform::pbrFactors, ShaderUniform::pbrMapFlags,
+      ShaderUniform::tex_base_normalmap, ShaderUniform::tex_pbr_orm, ShaderUniform::clip_plane),
+   SHADER_TECHNIQUE(pbr_depth_at, ShaderUniform::layer, ShaderUniform::alphaTestValue, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorld,
+      ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverseTranspose, ShaderUniform::u_basic_shade_mode, ShaderUniform::objectSpaceNormalMap, ShaderUniform::pbrFactors,
+      ShaderUniform::pbrMapFlags, ShaderUniform::tex_base_color, ShaderUniform::tex_base_normalmap, ShaderUniform::tex_pbr_orm, ShaderUniform::clip_plane),
+   // PBR depth prepass variants additionally writing the camera & object motion vectors in zw of attachment 0
+   SHADER_TECHNIQUE(pbr_depth_mv, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matRotViewProjPrev,
+      ShaderUniform::cameraPosWorldPrev, ShaderUniform::matWorld, ShaderUniform::matWorldPrev, ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverseTranspose,
+      ShaderUniform::u_basic_shade_mode, ShaderUniform::objectSpaceNormalMap, ShaderUniform::pbrFactors, ShaderUniform::pbrMapFlags, ShaderUniform::tex_base_normalmap,
+      ShaderUniform::tex_pbr_orm, ShaderUniform::clip_plane),
+   SHADER_TECHNIQUE(pbr_depth_at_mv, ShaderUniform::layer, ShaderUniform::alphaTestValue, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matRotViewProjPrev,
+      ShaderUniform::cameraPosWorldPrev, ShaderUniform::matWorld, ShaderUniform::matWorldPrev, ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverseTranspose,
+      ShaderUniform::u_basic_shade_mode, ShaderUniform::objectSpaceNormalMap, ShaderUniform::pbrFactors, ShaderUniform::pbrMapFlags, ShaderUniform::tex_base_color,
+      ShaderUniform::tex_base_normalmap, ShaderUniform::tex_pbr_orm, ShaderUniform::clip_plane),
    SHADER_TECHNIQUE(ball_depth, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverse,
       ShaderUniform::orientation, ShaderUniform::clip_plane),
    SHADER_TECHNIQUE(ball_depth_n, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverse,
@@ -221,49 +238,57 @@ enum class ShaderTechnique : unsigned int
       ShaderUniform::fenvEmissionScale_TexWidth, ShaderUniform::fDisableLighting_top_below, ShaderUniform::lightCenter_doShadow, ShaderUniform::balls, ShaderUniform::u_basic_shade_mode,
       ShaderUniform::pbrFactors, ShaderUniform::pbrEmission, ShaderUniform::pbrMapFlags, ShaderUniform::tex_base_color, ShaderUniform::tex_base_normalmap, ShaderUniform::tex_env,
       ShaderUniform::tex_diffuse_env, ShaderUniform::tex_pbr_orm, ShaderUniform::tex_pbr_emission, ShaderUniform::tex_pbr_ao, ShaderUniform::tex_pbr_dfg, ShaderUniform::tex_pbr_lights,
-      ShaderUniform::pbrLightGrid, ShaderUniform::pbrLightGrid2, ShaderUniform::clip_plane),
+      ShaderUniform::pbrLightGrid, ShaderUniform::pbrLightGrid2, ShaderUniform::pbrProbes0, ShaderUniform::pbrProbes1, ShaderUniform::pbrProbeParams, ShaderUniform::tex_pbr_probe0,
+      ShaderUniform::tex_pbr_probe1, ShaderUniform::clip_plane),
    SHADER_TECHNIQUE(pbr_at, ShaderUniform::layer, ShaderUniform::alphaTestValue, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorld,
       ShaderUniform::matView, ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverseTranspose, ShaderUniform::staticColor_Alpha, ShaderUniform::w_h_height,
       ShaderUniform::cBase_Alpha, ShaderUniform::cAmbient_LightRange, ShaderUniform::fenvEmissionScale_TexWidth, ShaderUniform::fDisableLighting_top_below,
       ShaderUniform::lightCenter_doShadow, ShaderUniform::balls, ShaderUniform::u_basic_shade_mode, ShaderUniform::pbrFactors, ShaderUniform::pbrEmission, ShaderUniform::pbrMapFlags,
       ShaderUniform::tex_base_color, ShaderUniform::tex_base_normalmap, ShaderUniform::tex_env, ShaderUniform::tex_diffuse_env, ShaderUniform::tex_pbr_orm, ShaderUniform::tex_pbr_emission,
-      ShaderUniform::tex_pbr_ao, ShaderUniform::tex_pbr_dfg, ShaderUniform::tex_pbr_lights, ShaderUniform::pbrLightGrid, ShaderUniform::pbrLightGrid2, ShaderUniform::clip_plane),
+      ShaderUniform::tex_pbr_ao, ShaderUniform::tex_pbr_dfg, ShaderUniform::tex_pbr_lights, ShaderUniform::pbrLightGrid, ShaderUniform::pbrLightGrid2, ShaderUniform::pbrProbes0,
+      ShaderUniform::pbrProbes1, ShaderUniform::pbrProbeParams, ShaderUniform::tex_pbr_probe0, ShaderUniform::tex_pbr_probe1, ShaderUniform::clip_plane),
    SHADER_TECHNIQUE(pbr_notex, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorld, ShaderUniform::matView,
       ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverseTranspose, ShaderUniform::staticColor_Alpha, ShaderUniform::w_h_height, ShaderUniform::cBase_Alpha,
       ShaderUniform::cAmbient_LightRange, ShaderUniform::fenvEmissionScale_TexWidth, ShaderUniform::fDisableLighting_top_below, ShaderUniform::lightCenter_doShadow, ShaderUniform::balls,
       ShaderUniform::u_basic_shade_mode, ShaderUniform::pbrFactors, ShaderUniform::pbrEmission, ShaderUniform::pbrMapFlags, ShaderUniform::tex_base_normalmap, ShaderUniform::tex_env,
       ShaderUniform::tex_diffuse_env, ShaderUniform::tex_pbr_orm, ShaderUniform::tex_pbr_emission, ShaderUniform::tex_pbr_ao, ShaderUniform::tex_pbr_dfg, ShaderUniform::tex_pbr_lights,
-      ShaderUniform::pbrLightGrid, ShaderUniform::pbrLightGrid2, ShaderUniform::clip_plane),
+      ShaderUniform::pbrLightGrid, ShaderUniform::pbrLightGrid2, ShaderUniform::pbrProbes0, ShaderUniform::pbrProbes1, ShaderUniform::pbrProbeParams, ShaderUniform::tex_pbr_probe0,
+      ShaderUniform::tex_pbr_probe1, ShaderUniform::clip_plane),
    SHADER_TECHNIQUE(pbr_t, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorld, ShaderUniform::matView, ShaderUniform::matWorldView,
       ShaderUniform::matWorldViewInverseTranspose, ShaderUniform::staticColor_Alpha, ShaderUniform::w_h_height, ShaderUniform::cBase_Alpha, ShaderUniform::cAmbient_LightRange,
       ShaderUniform::fenvEmissionScale_TexWidth, ShaderUniform::fDisableLighting_top_below, ShaderUniform::lightCenter_doShadow, ShaderUniform::balls, ShaderUniform::u_basic_shade_mode,
       ShaderUniform::pbrFactors, ShaderUniform::pbrEmission, ShaderUniform::pbrMapFlags, ShaderUniform::tex_base_color, ShaderUniform::tex_base_normalmap, ShaderUniform::tex_env,
       ShaderUniform::tex_diffuse_env, ShaderUniform::tex_pbr_orm, ShaderUniform::tex_pbr_emission, ShaderUniform::tex_pbr_ao, ShaderUniform::tex_pbr_dfg, ShaderUniform::tex_pbr_lights,
-      ShaderUniform::pbrLightGrid, ShaderUniform::pbrLightGrid2, ShaderUniform::clip_plane),
+      ShaderUniform::pbrLightGrid, ShaderUniform::pbrLightGrid2, ShaderUniform::pbrProbes0, ShaderUniform::pbrProbes1, ShaderUniform::pbrProbeParams, ShaderUniform::tex_pbr_probe0,
+      ShaderUniform::tex_pbr_probe1, ShaderUniform::refractionTint_thickness, ShaderUniform::tex_pbr_refr, ShaderUniform::clip_plane),
    SHADER_TECHNIQUE(pbr_t_notex, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorld, ShaderUniform::matView,
       ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverseTranspose, ShaderUniform::staticColor_Alpha, ShaderUniform::w_h_height, ShaderUniform::cBase_Alpha,
       ShaderUniform::cAmbient_LightRange, ShaderUniform::fenvEmissionScale_TexWidth, ShaderUniform::fDisableLighting_top_below, ShaderUniform::lightCenter_doShadow, ShaderUniform::balls,
       ShaderUniform::u_basic_shade_mode, ShaderUniform::pbrFactors, ShaderUniform::pbrEmission, ShaderUniform::pbrMapFlags, ShaderUniform::tex_base_normalmap, ShaderUniform::tex_env,
       ShaderUniform::tex_diffuse_env, ShaderUniform::tex_pbr_orm, ShaderUniform::tex_pbr_emission, ShaderUniform::tex_pbr_ao, ShaderUniform::tex_pbr_dfg, ShaderUniform::tex_pbr_lights,
-      ShaderUniform::pbrLightGrid, ShaderUniform::pbrLightGrid2, ShaderUniform::clip_plane),
+      ShaderUniform::pbrLightGrid, ShaderUniform::pbrLightGrid2, ShaderUniform::pbrProbes0, ShaderUniform::pbrProbes1, ShaderUniform::pbrProbeParams, ShaderUniform::tex_pbr_probe0,
+      ShaderUniform::tex_pbr_probe1, ShaderUniform::refractionTint_thickness, ShaderUniform::tex_pbr_refr, ShaderUniform::clip_plane),
    SHADER_TECHNIQUE(pbr_is, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorld, ShaderUniform::matView, ShaderUniform::matWorldView,
       ShaderUniform::matWorldViewInverseTranspose, ShaderUniform::staticColor_Alpha, ShaderUniform::w_h_height, ShaderUniform::cBase_Alpha, ShaderUniform::cAmbient_LightRange,
       ShaderUniform::fenvEmissionScale_TexWidth, ShaderUniform::fDisableLighting_top_below, ShaderUniform::lightCenter_doShadow, ShaderUniform::balls, ShaderUniform::u_basic_shade_mode,
       ShaderUniform::pbrFactors, ShaderUniform::pbrEmission, ShaderUniform::pbrMapFlags, ShaderUniform::tex_base_color, ShaderUniform::tex_base_normalmap, ShaderUniform::tex_env,
       ShaderUniform::tex_diffuse_env, ShaderUniform::tex_pbr_orm, ShaderUniform::tex_pbr_emission, ShaderUniform::tex_pbr_ao, ShaderUniform::tex_pbr_dfg, ShaderUniform::tex_pbr_lights,
-      ShaderUniform::pbrLightGrid, ShaderUniform::pbrLightGrid2, ShaderUniform::clip_plane),
+      ShaderUniform::pbrLightGrid, ShaderUniform::pbrLightGrid2, ShaderUniform::pbrProbes0, ShaderUniform::pbrProbes1, ShaderUniform::pbrProbeParams, ShaderUniform::tex_pbr_probe0,
+      ShaderUniform::tex_pbr_probe1, ShaderUniform::clip_plane),
    SHADER_TECHNIQUE(pbr_is_at, ShaderUniform::layer, ShaderUniform::alphaTestValue, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorld,
       ShaderUniform::matView, ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverseTranspose, ShaderUniform::staticColor_Alpha, ShaderUniform::w_h_height,
       ShaderUniform::cBase_Alpha, ShaderUniform::cAmbient_LightRange, ShaderUniform::fenvEmissionScale_TexWidth, ShaderUniform::fDisableLighting_top_below,
       ShaderUniform::lightCenter_doShadow, ShaderUniform::balls, ShaderUniform::u_basic_shade_mode, ShaderUniform::pbrFactors, ShaderUniform::pbrEmission, ShaderUniform::pbrMapFlags,
       ShaderUniform::tex_base_color, ShaderUniform::tex_base_normalmap, ShaderUniform::tex_env, ShaderUniform::tex_diffuse_env, ShaderUniform::tex_pbr_orm, ShaderUniform::tex_pbr_emission,
-      ShaderUniform::tex_pbr_ao, ShaderUniform::tex_pbr_dfg, ShaderUniform::tex_pbr_lights, ShaderUniform::pbrLightGrid, ShaderUniform::pbrLightGrid2, ShaderUniform::clip_plane),
+      ShaderUniform::tex_pbr_ao, ShaderUniform::tex_pbr_dfg, ShaderUniform::tex_pbr_lights, ShaderUniform::pbrLightGrid, ShaderUniform::pbrLightGrid2, ShaderUniform::pbrProbes0,
+      ShaderUniform::pbrProbes1, ShaderUniform::pbrProbeParams, ShaderUniform::tex_pbr_probe0, ShaderUniform::tex_pbr_probe1, ShaderUniform::clip_plane),
    SHADER_TECHNIQUE(pbr_is_notex, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorld, ShaderUniform::matView,
       ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverseTranspose, ShaderUniform::staticColor_Alpha, ShaderUniform::w_h_height, ShaderUniform::cBase_Alpha,
       ShaderUniform::cAmbient_LightRange, ShaderUniform::fenvEmissionScale_TexWidth, ShaderUniform::fDisableLighting_top_below, ShaderUniform::lightCenter_doShadow, ShaderUniform::balls,
       ShaderUniform::u_basic_shade_mode, ShaderUniform::pbrFactors, ShaderUniform::pbrEmission, ShaderUniform::pbrMapFlags, ShaderUniform::tex_base_normalmap, ShaderUniform::tex_env,
       ShaderUniform::tex_diffuse_env, ShaderUniform::tex_pbr_orm, ShaderUniform::tex_pbr_emission, ShaderUniform::tex_pbr_ao, ShaderUniform::tex_pbr_dfg, ShaderUniform::tex_pbr_lights,
-      ShaderUniform::pbrLightGrid, ShaderUniform::pbrLightGrid2, ShaderUniform::clip_plane),
+      ShaderUniform::pbrLightGrid, ShaderUniform::pbrLightGrid2, ShaderUniform::pbrProbes0, ShaderUniform::pbrProbes1, ShaderUniform::pbrProbeParams, ShaderUniform::tex_pbr_probe0,
+      ShaderUniform::tex_pbr_probe1, ShaderUniform::clip_plane),
 
    SHADER_TECHNIQUE(basic_DMD, ShaderUniform::glassPad, ShaderUniform::glassArea, ShaderUniform::vRes_Alpha_time, ShaderUniform::vColor_Intensity, ShaderUniform::tex_dmd),
    SHADER_TECHNIQUE(basic_DMD_world, ShaderUniform::glassPad, ShaderUniform::glassArea, ShaderUniform::matWorld, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld,
@@ -389,6 +414,18 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(SSReflection, ShaderUniform::layer, ShaderUniform::w_h_height, ShaderUniform::SSR_bumpHeight_fresnelRefl_scale_FS, ShaderUniform::tex_fb_filtered,
       ShaderUniform::tex_depth, ShaderUniform::tex_ao_dither),
 #ifdef ENABLE_BGFX
+   // Shaded normals variant (normals from the depth prepass instead of depth neighbors)
+   SHADER_TECHNIQUE(SSReflection_shaded, ShaderUniform::layer, ShaderUniform::w_h_height, ShaderUniform::SSR_bumpHeight_fresnelRefl_scale_FS, ShaderUniform::tex_fb_filtered,
+      ShaderUniform::tex_depth, ShaderUniform::tex_normals, ShaderUniform::tex_ao_dither),
+   // PBR specular resolve: masked SSR variants (skip PBR pixels), PBR half res march and full res composite
+   SHADER_TECHNIQUE(SSReflection_masked, ShaderUniform::layer, ShaderUniform::w_h_height, ShaderUniform::SSR_bumpHeight_fresnelRefl_scale_FS, ShaderUniform::tex_fb_filtered,
+      ShaderUniform::tex_depth, ShaderUniform::tex_ao_dither, ShaderUniform::tex_pbr_mask),
+   SHADER_TECHNIQUE(SSReflection_shaded_masked, ShaderUniform::layer, ShaderUniform::w_h_height, ShaderUniform::SSR_bumpHeight_fresnelRefl_scale_FS, ShaderUniform::tex_fb_filtered,
+      ShaderUniform::tex_depth, ShaderUniform::tex_normals, ShaderUniform::tex_ao_dither, ShaderUniform::tex_pbr_mask),
+   SHADER_TECHNIQUE(PBR_march, ShaderUniform::layer, ShaderUniform::w_h_height, ShaderUniform::matProj, ShaderUniform::matProjInv, ShaderUniform::tex_fb_filtered, ShaderUniform::tex_depth,
+      ShaderUniform::tex_normals, ShaderUniform::tex_pbr_data, ShaderUniform::tex_ao_dither),
+   SHADER_TECHNIQUE(PBR_resolve, ShaderUniform::layer, ShaderUniform::w_h_height, ShaderUniform::pbrProbeParams, ShaderUniform::matProjInv, ShaderUniform::tex_fb_filtered,
+      ShaderUniform::tex_depth, ShaderUniform::tex_normals, ShaderUniform::tex_pbr_data, ShaderUniform::tex_ssr_lowres, ShaderUniform::tex_pbr_att1, ShaderUniform::tex_pbr_att2),
    SHADER_TECHNIQUE(fb_resolve_depth_msaa, ShaderUniform::layer, ShaderUniform::tex_depth),
 #endif
 
@@ -515,13 +552,22 @@ enum class ShaderUniform : unsigned int
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrMapFlags, 1), // bound map flags (ORM, emission)
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrLightGrid, 1), // xy: cluster grid origin (table pos), z: inverse cell size, w: cell count x
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrLightGrid2, 1), // x: cell count y, y: light count
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrProbes0, 1), // reflection plane of the first bound probe (dot(n,p) + w = 0)
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrProbes1, 1), // reflection plane of the second bound probe
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrProbeParams, 1), // x/y: influence range of probe0/1 (0 = unbound), z: SSR suppression weight mu, w: refraction probe bound
    SHADER_SAMPLER(tex_pbr_orm, 8, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // packed occlusion/roughness/metallic
    SHADER_SAMPLER(tex_pbr_emission, 9, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // emission map
    SHADER_SAMPLER(tex_pbr_ao, 10, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // screenspace ambient occlusion
    SHADER_SAMPLER(tex_pbr_dfg, 11, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // GGX split-sum DFG LUT
    SHADER_SAMPLER(tex_pbr_lights, 12, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // packed light records + cluster grid + index list
+   SHADER_SAMPLER(tex_pbr_probe0, 13, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // first planar reflection probe
+   SHADER_SAMPLER(tex_pbr_probe1, 14, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // second planar reflection probe
+   SHADER_SAMPLER(tex_pbr_refr, 15, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // screen space refraction probe (transparent parts)
    SHADER_SAMPLER(tex_pbr_mask, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP,
       SamplerFilter::SF_BILINEAR), // PBR pixel mask (sideband attachment alpha), masks the tonemap AO application
+   SHADER_SAMPLER(tex_pbr_att1, 8, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // sideband att1: probe radiance + coverage
+   SHADER_SAMPLER(tex_pbr_att2, 9, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // sideband att2: specular weight + mask
+
 
    // Ball Shader
    SHADER_UNIFORM(ShaderUniformType::Float4x3, orientation, 1),
@@ -577,7 +623,9 @@ enum class ShaderUniform : unsigned int
    SHADER_SAMPLER(tex_ao, 3, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // AO Result
    SHADER_SAMPLER(tex_depth, 4, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // Depth
    SHADER_SAMPLER(tex_ao_dither, 5, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_NONE), // AO dither
-   SHADER_SAMPLER(tex_normals, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // Shaded normals from the depth prepass
+   SHADER_SAMPLER(tex_normals, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // Shaded normals from the depth prepass (attachment 0)
+   SHADER_SAMPLER(tex_pbr_data, 10, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // PBR roughness & opaque flag from the depth prepass (attachment 1)
+   SHADER_SAMPLER(tex_ssr_lowres, 3, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // Half resolution raymarched reflections
    //SHADER_SAMPLER(tex_tonemap_lut, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // Tonemap LUT
    SHADER_SAMPLER(edgesTex, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // SMAA
    SHADER_SAMPLER(blendTex, 8, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // SMAA

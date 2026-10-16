@@ -589,7 +589,8 @@ void Decal::Render(const unsigned int renderMask)
 
    m_renderer->m_renderDevice->m_basicShader->SetMaterial(mat);
    // Decals always alpha blend: select the premultiplied transparent PBR variant
-   const Shader::PBRTextureSet pbrMaps = isPBR ? m_renderer->GetPBRTextureSet(m_d, (renderMask & Renderer::REFLECTION_PASS) != 0, true) : Shader::PBRTextureSet();
+   const Shader::PBRTextureSet pbrMaps
+      = isPBR ? m_renderer->GetPBRTextureSet(m_d, m_boundingSphereCenter, -1.f, (renderMask & Renderer::REFLECTION_PASS) != 0, true, renderMask) : Shader::PBRTextureSet();
 
    if (m_d.m_decaltype != DecalImage)
    {

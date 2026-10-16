@@ -375,7 +375,9 @@ void Spinner::Render(const unsigned int renderMask)
       Vertex3Ds pos(m_d.m_vCenter.x, m_d.m_vCenter.y, m_posZ);
       const Material *const mat = m_ptable->GetMaterial(m_d.m_szMaterial);
       const bool isPBR = m_renderer->m_renderDevice->m_pbrActive && mat->m_type == Material::MaterialType::PBR;
-      const Shader::PBRTextureSet pbrMaps = isPBR ? m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive) : Shader::PBRTextureSet();
+      const Shader::PBRTextureSet pbrMaps = isPBR
+         ? m_renderer->GetPBRTextureSet(m_d, Vertex3Ds(m_d.m_vCenter.x, m_d.m_vCenter.y, m_d.m_height), 0.5f * m_d.m_length, isReflectionPass, mat->m_bOpacityActive, renderMask)
+         : Shader::PBRTextureSet();
       m_renderer->m_renderDevice->m_basicShader->SetBasic(mat, m_ptable->GetImage(m_d.m_szImage), isPBR ? &pbrMaps : nullptr);
       m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_plateMeshBuffer, RenderDevice::TRIANGLELIST, 0, spinnerPlateNumFaces);
       m_renderer->UpdateBasicShaderMatrix();
