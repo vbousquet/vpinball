@@ -267,7 +267,8 @@ void Bumper::Render(const unsigned int renderMask)
             material.material = mat;
             material.image = m_baseTexture.get();
             material.hasTextureAlpha = material.image != nullptr && !material.image->IsOpaque();
-            material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
+            material.pbrMaps
+               = m_renderer->GetPBRTextureSet(m_d, Vertex3Ds(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight), m_d.m_radius, isReflectionPass, mat->m_bOpacityActive, renderMask);
          }
          m_renderer->RenderMesh(renderMask, base, material);
       }
@@ -298,7 +299,8 @@ void Bumper::Render(const unsigned int renderMask)
             material.material = mat;
             material.image = m_capTexture.get();
             material.hasTextureAlpha = material.image != nullptr && !material.image->IsOpaque();
-            material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
+            material.pbrMaps
+               = m_renderer->GetPBRTextureSet(m_d, Vertex3Ds(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight), m_d.m_radius, isReflectionPass, mat->m_bOpacityActive, renderMask);
          }
          m_renderer->RenderMesh(renderMask, cap, material);
       }
@@ -339,7 +341,8 @@ void Bumper::Render(const unsigned int renderMask)
          material.material = &ringMaterial;
          material.image = m_ringTexture.get();
          material.hasTextureAlpha = material.image != nullptr && !material.image->IsOpaque();
-         material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, ringMaterial.m_bOpacityActive);
+         material.pbrMaps
+            = m_renderer->GetPBRTextureSet(m_d, Vertex3Ds(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight), m_d.m_radius, isReflectionPass, ringMaterial.m_bOpacityActive, renderMask);
       }
       m_renderer->RenderMesh(renderMask, ring, material);
       m_prevRingMatTrafo = ringMatrix;
@@ -373,7 +376,7 @@ void Bumper::Render(const unsigned int renderMask)
          material.material = mat;
          material.image = m_skirtTexture.get();
          material.hasTextureAlpha = material.image != nullptr && !material.image->IsOpaque();
-         material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
+         material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, Vertex3Ds(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight), m_d.m_radius, isReflectionPass, mat->m_bOpacityActive, renderMask);
       }
       m_renderer->RenderMesh(renderMask, socket, material);
       m_prevSocketMatTrafo = socketMatrix;
