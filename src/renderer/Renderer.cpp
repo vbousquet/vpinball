@@ -42,6 +42,63 @@ extern marker_series series;
 
 #define MAX_BALL_SHADOW 8
 
+#if defined(ENABLE_BGFX)
+// Builds the GGX split-sum DFG LUT (Karis' environment BRDF approximation): x = NoV, y = roughness, stores (scale, bias)
+static std::shared_ptr<BaseTexture> BuildPBRDFGLUT()
+{
+   constexpr unsigned int size = 64;
+   constexpr unsigned int sampleCount = 256;
+   std::shared_ptr<BaseTexture> lut = BaseTexture::Create(size, size, BaseTexture::Format::RGBA_FP32);
+   float* const data = static_cast<float*>(lut->data());
+   for (unsigned int y = 0; y < size; y++)
+   {
+      const float roughness = (y + 0.5f) / size;
+      const float a = roughness * roughness;
+      for (unsigned int x = 0; x < size; x++)
+      {
+         const float NoV = (x + 0.5f) / size;
+         const vec3 V(sqrtf(1.f - NoV * NoV), 0.f, NoV); // Tangent space: N = (0,0,1)
+         float scale = 0.f, bias = 0.f;
+         for (unsigned int i = 0; i < sampleCount; i++)
+         {
+            // Hammersley low discrepancy sequence
+            uint32_t bits = i;
+            bits = (bits << 16u) | (bits >> 16u);
+            bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+            bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+            bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+            bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+            const Vertex2D Xi((float)i / sampleCount, (float)bits * 2.3283064365386963e-10f);
+            // GGX importance sampling of the half vector
+            const float phi = 2.f * (float)M_PI * Xi.x;
+            const float cosT = sqrtf((1.f - Xi.y) / (1.f + (a * a - 1.f) * Xi.y));
+            const float sinT = sqrtf(1.f - cosT * cosT);
+            const vec3 H(sinT * cosf(phi), sinT * sinf(phi), cosT);
+            const float VoH = saturate(V.Dot(H));
+            const vec3 L = 2.f * VoH * H - V;
+            const float NoL = saturate(L.z);
+            if (NoL <= 0.f)
+               continue;
+            const float NoH = H.z;
+            // Smith visibility (Schlick-GGX, k = a/2) * VoH / (NoH * NoV)
+            const float k = a * 0.5f;
+            const float vis = (NoL * NoV) / ((NoL * (1.f - k) + k) * (NoV * (1.f - k) + k));
+            const float Gvis = vis * VoH / NoH;
+            const float Fc = powf(1.f - VoH, 5.f);
+            scale += (1.f - Fc) * Gvis;
+            bias += Fc * Gvis;
+         }
+         float* const texel = data + 4 * (y * size + x);
+         texel[0] = scale / sampleCount;
+         texel[1] = bias / sampleCount;
+         texel[2] = 0.f;
+         texel[3] = 1.f;
+      }
+   }
+   return lut;
+}
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 
 Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncMode, const StereoMode stereo3D)
@@ -153,7 +210,20 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
 #endif
    const SurfaceType rtType = m_stereo3D == STEREO_OFF || !m_renderDevice->SupportLayeredRendering() ? SurfaceType::RT_DEFAULT : SurfaceType::RT_STEREO;
 
+#ifdef ENABLE_BGFX
+   // PBR forward shading is only available on BGFX (requestable through the Player_PBR setting on compute capable GPUs)
+   m_renderDevice->m_pbrActive = m_table->GetSettings().GetPlayer_PBR() && (bgfx::getCaps()->supported & BGFX_CAPS_COMPUTE) != 0;
+#endif
+
    view->SetupTargets(renderWidthAA, renderHeightAA, rtType, renderFormat, nMSAASamples);
+
+#ifdef ENABLE_BGFX
+   if (m_renderDevice->m_pbrActive)
+   {
+      m_renderDevice->m_pbrDFG = std::make_shared<Sampler>(m_renderDevice, "PBR DFG LUT"s, BuildPBRDFGLUT(), true);
+      m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_pbr_dfg, m_renderDevice->m_pbrDFG);
+   }
+#endif
 
    // Initialize shaders
    m_renderDevice->m_basicShader->SetVector(
@@ -1336,6 +1406,17 @@ void Renderer::DrawWireframe(IEditable* const renderable, const vec4& fillColor,
    m_render_mask = prevRenderMask;
 }
 
+Shader::PBRTextureSet Renderer::GetPBRTextureSet(const BaseProperty& partData, const bool inShaderSpecular, const bool transparent) const
+{
+   Shader::PBRTextureSet pbrMaps;
+   pbrMaps.normalMap = m_table->GetImage(partData.m_szNormalMap);
+   pbrMaps.ormMap = m_table->GetImage(partData.m_szORMMap);
+   pbrMaps.emissionMap = m_table->GetImage(partData.m_szEmissionMap);
+   pbrMaps.inShaderSpecular = inShaderSpecular;
+   pbrMaps.transparent = transparent;
+   return pbrMaps;
+}
+
 void Renderer::RenderMesh(const unsigned int renderMask, RenderMeshDesc& draw, const VisualMaterial& mat)
 {
    assert(draw.mesh != nullptr);
@@ -1385,7 +1466,7 @@ void Renderer::RenderMesh(const unsigned int renderMask, RenderMeshDesc& draw, c
          const bool alphaTest = mat.image != nullptr && mat.image->m_alphaTestValue >= 0.f && !mat.image->IsOpaque();
          shader->SetTechniqueMaterial(
             mat.technique != VisualMaterial::AUTO_TECHNIQUE ? mat.technique : (mat.image ? ShaderTechnique::basic_with_texture : ShaderTechnique::basic_without_texture), *mat.material,
-            alphaTest, mat.normalMap != nullptr, mat.doReflection, mat.doRefraction);
+            alphaTest, mat.normalMap != nullptr, mat.doReflection, mat.doRefraction, &mat.pbrMaps);
          if (mat.image != nullptr)
          {
             shader->SetTexture(ShaderUniform::tex_base_color, mat.image, false, mat.filter, mat.clampU, mat.clampV);

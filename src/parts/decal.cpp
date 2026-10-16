@@ -579,18 +579,22 @@ void Decal::Render(const unsigned int renderMask)
 
    //!! should just check if material has no opacity enabled, but this is crucial for HV setup performance like-is
    const Material *const mat = m_ptable->GetMaterial(m_d.m_szMaterial);
-   if (!(   (!isDynamicOnly && (m_desktopBackdrop || !mat->m_bOpacityActive)) // Static prerendering
-         || (!isStaticOnly && (!m_desktopBackdrop && mat->m_bOpacityActive)))) // Not prerendered part pass
+   // PBR materials are always dynamic (and not applied to backdrop decals): their shading state can not be frozen in the static accumulation
+   const bool isPBR = m_renderer->m_renderDevice->m_pbrActive && !m_desktopBackdrop && mat->m_type == Material::MaterialType::PBR;
+   if (!((!isDynamicOnly && (m_desktopBackdrop || (!mat->m_bOpacityActive && !isPBR))) // Static prerendering
+          || (!isStaticOnly && ((!m_desktopBackdrop && mat->m_bOpacityActive) || isPBR)))) // Not prerendered part pass
       return;
 
    m_renderer->m_renderDevice->ResetRenderState();
 
    m_renderer->m_renderDevice->m_basicShader->SetMaterial(mat);
+   // Decals always alpha blend: select the premultiplied transparent PBR variant
+   const Shader::PBRTextureSet pbrMaps = isPBR ? m_renderer->GetPBRTextureSet(m_d, (renderMask & Renderer::REFLECTION_PASS) != 0, true) : Shader::PBRTextureSet();
 
    if (m_d.m_decaltype != DecalImage)
    {
       if (!m_desktopBackdrop)
-         m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(ShaderTechnique::basic_with_texture, *mat, false);
+         m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(ShaderTechnique::basic_with_texture, *mat, false, false, false, false, isPBR ? &pbrMaps : nullptr);
       else
          m_renderer->m_renderDevice->m_basicShader->SetTechnique(ShaderTechnique::bg_decal_with_texture);
       m_renderer->m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_base_color, m_textImg.get());
@@ -602,7 +606,8 @@ void Decal::Render(const unsigned int renderMask)
       if (pin)
       {
          if (!m_desktopBackdrop)
-            m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(ShaderTechnique::basic_with_texture, *mat, pin->m_alphaTestValue >= 0.f && !pin->IsOpaque());
+            m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(
+               ShaderTechnique::basic_with_texture, *mat, pin->m_alphaTestValue >= 0.f && !pin->IsOpaque(), false, false, false, isPBR ? &pbrMaps : nullptr);
          else
             m_renderer->m_renderDevice->m_basicShader->SetTechnique(ShaderTechnique::bg_decal_with_texture);
          // Set texture to mirror, so the alpha state of the texture blends correctly to the outside
@@ -612,7 +617,7 @@ void Decal::Render(const unsigned int renderMask)
       else
       {
          if (!m_desktopBackdrop)
-            m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(ShaderTechnique::basic_without_texture, *mat);
+            m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(ShaderTechnique::basic_without_texture, *mat, false, false, false, false, isPBR ? &pbrMaps : nullptr);
          else
             m_renderer->m_renderDevice->m_basicShader->SetTechnique(ShaderTechnique::bg_decal_without_texture);
       }

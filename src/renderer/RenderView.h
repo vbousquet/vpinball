@@ -214,6 +214,7 @@ public:
 
 private:
    void RenderStatics(); // Render background, then static parts if IsUsingStaticPrepass
+   void PreparePBRPasses(); // Record PBR sideband clear and early AO passes when PBR is active
    void RenderDynamics(); // Render static parts if not IsUsingStaticPrepass, then render dynamic parts
    void DrawBackground();
    void DrawBulbLightBuffer();

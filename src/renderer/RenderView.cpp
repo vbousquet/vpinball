@@ -57,6 +57,13 @@ void RenderView::SetupTargets(const int width, const int height, const SurfaceTy
    // Second render target to swap, allowing to read previous frame render for ball reflection and motion blur
    m_pOffscreenBackBufferTexture2 = m_pOffscreenBackBufferTexture1->Duplicate("BackBuffer2"s, false);
 
+   // PBR parts additionally write their specular resolve inputs to 2 sideband attachments of the scene framebuffer
+   if (rd->m_pbrActive)
+   {
+      m_pOffscreenBackBufferTexture1->CreatePBRSideband();
+      m_pOffscreenBackBufferTexture2->CreatePBRSideband();
+   }
+
    // alloc bloom tex at 1/4 x 1/4 res (allows for simple HQ downscale of clipped input while saving memory)
    m_pBloomBufferTexture = new RenderTarget(rd, m_pOffscreenBackBufferTexture1->m_type, "BloomBuffer1"s, max(1, m_renderWidth / 4), max(1, m_renderHeight / 4),
       m_pOffscreenBackBufferTexture1->GetColorFormat(), false, 1, "Fatal Error: unable to create bloom buffer!");
@@ -205,6 +212,11 @@ void RenderView::ResizeRenderTargets()
    m_pOffscreenBackBufferTexture1
       = new RenderTarget(rd, rtType, "BackBuffer1"s, renderWidthAA, renderHeightAA, renderFormat, true, previous->GetMSAASamples(), "Fatal Error: unable to create offscreen back buffer");
    m_pOffscreenBackBufferTexture2 = m_pOffscreenBackBufferTexture1->Duplicate("BackBuffer2"s, false);
+   if (rd->m_pbrActive)
+   {
+      m_pOffscreenBackBufferTexture1->CreatePBRSideband();
+      m_pOffscreenBackBufferTexture2->CreatePBRSideband();
+   }
    m_pBloomBufferTexture
       = new RenderTarget(rd, rtType, "BloomBuffer1"s, max(1, m_renderWidth / 4), max(1, m_renderHeight / 4), renderFormat, false, 1, "Fatal Error: unable to create bloom buffer!");
    m_pBloomTmpBufferTexture = m_pBloomBufferTexture->Duplicate("BloomBuffer2"s);
@@ -836,6 +848,8 @@ void RenderView::RenderStatics()
    // accumulation under a dynamic camera (they use the 2 free channels of the target which is promoted to RGBA16F)
    rd->m_depthPrepassMotion = rd->m_depthPrepassNormals && m_renderer->IsMotionVectorPrepass();
    rd->m_depthPrepassTarget = useDepthPrepass ? GetDepthPrepassRenderTarget() : nullptr;
+   // PBR parts apply AO inside their shader: it is computed early on the shaded depth prepass instead of post scene
+   rd->m_pbrAOEnabled = rd->m_pbrActive && rd->m_depthPrepassNormals && r->GetAOMode() == 2;
 
    if (!useStaticPrepass)
    {
@@ -849,6 +863,7 @@ void RenderView::RenderStatics()
          // background would otherwise leak the previous frame's normals (and motion vectors)
          rd->Clear(rd->m_depthPrepassNormals ? clearType::TARGET | clearType::ZBUFFER : clearType::ZBUFFER, 0);
       }
+      PreparePBRPasses();
       rd->SetRenderTarget("Render Scene"s, GetMSAABackBufferTexture(), true, true); // Force new pass to avoid sorting background draw calls with 3D rendering draw calls
       rd->GetCurrentPass()->m_emitDepthPrepass = useDepthPrepass;
       if (useDepthPrepass)
@@ -1009,6 +1024,7 @@ void RenderView::RenderStatics()
          rd->BlitRenderTarget(m_staticPrepassRT, GetDepthPrepassRenderTarget(), false, true);
       }
    }
+   PreparePBRPasses();
    rd->SetRenderTarget("PreRender Compose"s, GetMSAABackBufferTexture());
    rd->AddRenderTargetDependency(m_staticPrepassRT);
    if (m_staticPrepassAccumCount >= STATIC_PRERENDER_ITERATIONS)
@@ -1037,6 +1053,31 @@ void RenderView::RenderStatics()
    rd->GetCurrentPass()->m_emitDepthPrepass = useDepthPrepass;
    if (useDepthPrepass)
       rd->AddRenderTargetDependency(GetDepthPrepassRenderTarget());
+}
+
+void RenderView::PreparePBRPasses()
+{
+   Renderer* const r = m_renderer;
+   RenderDevice* const rd = r->m_renderDevice;
+   if (!rd->m_pbrActive)
+      return;
+
+   // PBR parts write their specular resolve inputs to 2 sideband attachments of the scene framebuffer. Clearing them
+   // goes through a dedicated framebuffer referencing only these attachments so the scene color is left untouched.
+   RenderTarget* const sidebandTarget = GetMSAABackBufferTexture()->GetPBRSidebandTarget();
+   if (sidebandTarget != nullptr)
+   {
+      rd->SetRenderTarget("PBR Sideband Clear"s, sidebandTarget);
+      rd->Clear(clearType::TARGET, 0x00000000);
+   }
+
+   // PBR shaders sample the AO texture while shading: compute it early, right after the depth prepass and before the
+   // scene pass (the legacy post scene AO call is then skipped and PBR pixels are masked out of its application)
+   if (rd->m_pbrAOEnabled)
+   {
+      UpdateAmbientOcclusion(GetBackBufferTexture(), g_pplayer->m_overall_frames % 2048, rd->m_depthPrepassNormals);
+      rd->m_basicShader->SetTexture(ShaderUniform::tex_pbr_ao, GetAORenderTarget(1)->GetColorSampler());
+   }
 }
 
 void RenderView::RenderDynamics()
@@ -1382,10 +1423,18 @@ void RenderView::SetupTonemapping(RenderTarget* renderedRT, RenderTarget* tonema
       rd->m_FBShader->SetTexture(ShaderUniform::tex_bloom, GetBloomBufferTexture()->GetColorSampler());
    }
 
+   // PBR parts apply AO inside their shader when the early AO pass ran: their pixels are masked out of the legacy
+   // application through the sideband mask attachment (w flag of bloom_dither_colorgrade)
+   const bool pbrMask = useAO && rd->m_pbrAOEnabled && GetBackBufferTexture()->GetPBRSidebandSampler(1) != nullptr;
    if (useAO)
    {
       rd->m_FBShader->SetTexture(ShaderUniform::tex_ao, GetAORenderTarget(1)->GetColorSampler());
       rd->AddRenderTargetDependency(GetAORenderTarget(1));
+      if (pbrMask)
+      {
+         rd->m_FBShader->SetTexture(ShaderUniform::tex_pbr_mask, GetBackBufferTexture()->GetPBRSidebandSampler(1));
+         rd->AddRenderTargetDependency(GetBackBufferTexture());
+      }
    }
 
    // For information mode, override with the wanted render target instead of the render buffer
@@ -2303,8 +2352,8 @@ void RenderView::Render()
    r->ClearEmbeddedAncillaryWindow(VPXWindowId::VPXWINDOW_ScoreView, g_pplayer->m_scoreViewOutput, renderedRT);
    r->ClearEmbeddedAncillaryWindow(VPXWindowId::VPXWINDOW_Topper, g_pplayer->m_topperOutput, renderedRT);
 
-   // Compute AO contribution (to be applied later, with tonemapping)
-   if (r->GetAOMode() == 2) // Only process for dynamic AO
+   // Compute AO contribution (to be applied later, with tonemapping). Skipped when it ran early for PBR.
+   if (r->GetAOMode() == 2 && !rd->m_pbrAOEnabled) // Only process for dynamic AO
       UpdateAmbientOcclusion(GetBackBufferTexture(), g_pplayer->m_overall_frames % 2048, rd->m_depthPrepassNormals);
 
    // Compute bloom (to be applied later, with tonemapping)
