@@ -4,9 +4,12 @@
 // - base variant only performs alpha testing/discards, as color writes are masked out
 // - OUT_NORMAL variant outputs the view space shaded normal xy (normal mapping applied), with the
 //   z component reconstructed by consumers (normal is flipped to always face the viewer)
-// - OUT_NORMAL+MOTION additionally outputs the camera motion vector in zw: the screen space UV
-//   displacement of the pixel between the previous and the current frame, consumed by the AO
+// - OUT_NORMAL+MOTION additionally outputs the camera/object motion vector in zw: the screen space
+//   UV displacement of the pixel between the previous and the current frame, consumed by the AO
 //   temporal accumulation when the camera is dynamic (VR or headtracking)
+// - PBR variant additionally outputs the material perceptual roughness in x and the opaque
+//   PBR flag in y of color attachment 1 (the PBR specular march is gated by these; non PBR
+//   pixels write 0 through the clear)
 
 // Inputs must exactly match the vertex shader outputs (vs_depth & vs_ball)
 $input v_worldPos, v_normal, v_texcoord0
@@ -25,12 +28,19 @@ $input v_worldPos, v_normal, v_texcoord0
 #if defined(OUT_NORMAL) && defined(TEX)
 SAMPLER2D      (tex_base_normalmap, 4); // normal map
 #endif
+#if defined(OUT_NORMAL) && defined(PBR)
+SAMPLER2D      (tex_pbr_orm, 8); // packed occlusion/roughness/metallic map
+uniform vec4 pbrFactors;
+#define pbrRoughnessFactor (pbrFactors.z)
+uniform vec4 pbrMapFlags; // x: ORM map bound, y: emission map bound
+#define hasORMMap      (pbrMapFlags.x != 0.0)
+#endif
 #ifdef AT
 SAMPLER2D      (tex_base_color, 0); // base color
 uniform vec4 alphaTestValue; // FIXME Actually float but extended to vec4 for BGFX (and we could use the builtin)
 #endif
 
-#if defined(AT) || (defined(OUT_NORMAL) && defined(TEX))
+#if defined(AT) || (defined(OUT_NORMAL) && (defined(TEX) || defined(PBR)))
 uniform vec4 u_basic_shade_mode;
 #define noMipMaps           (u_basic_shade_mode.w != 0.0)
 #endif
@@ -117,8 +127,8 @@ void main() {
       if (N.z < 0.0)
          N = -N;
       #ifdef MOTION
-         // Screen space UV displacement between the previous and the current frame camera transforms,
-         // evaluated per pixel (the interpolated clip positions are divided here)
+         // Screen space UV displacement between the previous and the current frame camera & object
+         // transforms, evaluated per pixel (the interpolated clip positions are divided here)
          vec2 motion = vec2(0.0, 0.0);
          BRANCH if (v_prevClipPos.w > 0.0)
          {
@@ -129,9 +139,21 @@ void main() {
                motion = vec2(0.5 * delta.x, -0.5 * delta.y);
             #endif
          }
-         gl_FragColor = vec4(N.xy, motion);
+         gl_FragData[0] = vec4(N.xy, motion);
       #else
-         gl_FragColor = vec4(N.xy, 0.0, 1.0);
+         gl_FragData[0] = vec4(N.xy, 0.0, 0.0);
+      #endif
+      #ifdef PBR
+         // Same perceptual roughness as the PBR shading path in x, flagging the pixel as opaque PBR in y
+         float roughness = pbrRoughnessFactor;
+         BRANCH if (hasORMMap)
+         {
+            if (noMipMaps)
+               roughness *= texNoLod(tex_pbr_orm, v_texcoord0).y;
+            else
+               roughness *= texture2D(tex_pbr_orm, v_texcoord0).y;
+         }
+         gl_FragData[1] = vec4(clamp(roughness, 0.045, 1.0), 1.0, 0.0, 0.0);
       #endif
    #else
       gl_FragColor = vec4_splat(0.0);

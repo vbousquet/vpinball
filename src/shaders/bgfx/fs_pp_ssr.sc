@@ -1,5 +1,11 @@
 // license:GPLv3+
 
+// Legacy additive screen space reflections: a full scene screen space blur modulated by a
+// fresnel heuristic (material agnostic, kept pixel compatible with the legacy path).
+// NORMAL_TEX variant sources the shaded view space normals from the depth prepass instead
+// of estimating them from depth neighbors. PBR_MASK variant skips pixels shaded through the
+// PBR pipeline (their specular is composited by the PBR specular resolve pass).
+
 #ifdef STEREO
 $input v_texcoord0, v_eye
 #else
@@ -22,10 +28,27 @@ uniform vec4 SSR_bumpHeight_fresnelRefl_scale_FS;
 SAMPLER2DSTEREO(tex_fb_filtered,  0); // Framebuffer (filtered)
 SAMPLER2DSTEREO(tex_depth,        4); // DepthBuffer
 SAMPLER2D(tex_ao_dither,    5);       // AO Dither
+#ifdef NORMAL_TEX
+SAMPLER2DSTEREO(tex_normals,      6); // Shaded view space normals from the depth prepass (xy, viewer facing)
+#endif
+#ifdef PBR_MASK
+SAMPLER2DSTEREO(tex_pbr_mask,     7); // PBR mask (rgb = specular weight W, a = coverage) from the scene sideband
+#endif
 
 #define tex_fb_unfiltered tex_fb_filtered
 
 
+#ifdef NORMAL_TEX
+#ifdef STEREO
+vec3 get_shaded_normal(const vec2 u, const float v_eye)
+#else
+vec3 get_shaded_normal(const vec2 u)
+#endif
+{
+   const vec2 nxy = texStereoNoLod(tex_normals, u).xy;
+   return vec3(nxy, sqrt(saturate(1.0 - dot(nxy, nxy))));
+}
+#endif
 
 #ifdef STEREO
 vec3 get_nonunit_normal(const float depth0, const vec2 u, const float v_eye) // use neighboring pixels // quite some tex access by this
@@ -65,7 +88,6 @@ vec3 approx_bump_normal(const vec2 coords, const vec2 offs, const float scale, c
     const float dpx = texStereoNoLod(tex_depth, vec2(coords.x + offs.x, coords.y)).x;
     const float dmx = texStereoNoLod(tex_depth, vec2(coords.x - offs.x, coords.y)).x;
     #if TEX_V_IS_UP
-        // OpenGL and OpenGL ES have reversed render targets
         const float dpy = texStereoNoLod(tex_depth, vec2(coords.x, coords.y - offs.y)).x;
         const float dmy = texStereoNoLod(tex_depth, vec2(coords.x, coords.y + offs.y)).x;
     #else
@@ -96,11 +118,25 @@ void main()
 		return;
 	}
 
-	#ifdef STEREO
+	#ifdef PBR_MASK
+		BRANCH if(texStereoNoLod(tex_pbr_mask, u).a > 0.5) // PBR pixel: specular comes from the resolve pass, skip
+		{
+			gl_FragColor = vec4(color0, 1.0);
+			return;
+		}
+	#endif
+	#if defined(NORMAL_TEX) && defined(STEREO)
+	const vec3 normal = get_shaded_normal(u, v_eye);
+	#elif defined(NORMAL_TEX)
+	const vec3 normal = get_shaded_normal(u);
+	#elif defined(STEREO)
 	const vec3 normal = normalize(get_nonunit_normal(depth0,u,v_eye));
-	vec3 normal_b = approx_bump_normal(u, 0.01 * w_h_height.xy / depth0, depth0 / (0.05*depth0 + 0.0001), 1000.0,v_eye); //!! magic
 	#else
 	const vec3 normal = normalize(get_nonunit_normal(depth0,u));
+	#endif
+	#ifdef STEREO
+	vec3 normal_b = approx_bump_normal(u, 0.01 * w_h_height.xy / depth0, depth0 / (0.05*depth0 + 0.0001), 1000.0,v_eye); //!! magic
+	#else
 	vec3 normal_b = approx_bump_normal(u, 0.01 * w_h_height.xy / depth0, depth0 / (0.05*depth0 + 0.0001), 1000.0); //!! magic
 	#endif
 	normal_b = normalize(vec3(normal.xy*normal_b.z + normal_b.xy*normal.z, normal.z*normal_b.z));

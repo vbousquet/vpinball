@@ -1324,6 +1324,9 @@
     <None Include="$(SolutionDir)/../../src/shaders/bgfx/fs_light.sc">
       <FileType>Document</FileType>
     </None>
+    <None Include="$(SolutionDir)/../../src/shaders/bgfx/fs_pbr.sc">
+      <FileType>Document</FileType>
+    </None>
     <None Include="$(SolutionDir)/../../src/shaders/bgfx/fs_pp_ao.sc">
       <FileType>Document</FileType>
     </None>
@@ -1369,6 +1372,12 @@
     <None Include="$(SolutionDir)/../../src/shaders/bgfx/fs_pp_nfaa.sc">
       <FileType>Document</FileType>
     </None>
+    <None Include="$(SolutionDir)/../../src/shaders/bgfx/fs_pp_pbr_resolve.sc">
+      <FileType>Document</FileType>
+    </None>
+    <None Include="$(SolutionDir)/../../src/shaders/bgfx/fs_pp_pbr_ssr.sc">
+      <FileType>Document</FileType>
+    </None>
     <None Include="$(SolutionDir)/../../src/shaders/bgfx/fs_pp_prepass_display.sc">
       <FileType>Document</FileType>
     </None>
@@ -1399,6 +1408,9 @@
     <None Include="$(SolutionDir)/../../src/shaders/bgfx/material.sh">
       <FileType>Document</FileType>
     </None>
+    <None Include="$(SolutionDir)/../../src/shaders/bgfx/ssr_common.sh">
+      <FileType>Document</FileType>
+    </None>
     <None Include="$(SolutionDir)/../../src/shaders/bgfx/SMAA.hlsl">
       <FileType>Document</FileType>
     </None>
@@ -1427,6 +1439,9 @@
       <FileType>Document</FileType>
     </None>
     <None Include="$(SolutionDir)/../../src/shaders/bgfx/vs_light.sc">
+      <FileType>Document</FileType>
+    </None>
+    <None Include="$(SolutionDir)/../../src/shaders/bgfx/vs_pbr.sc">
       <FileType>Document</FileType>
     </None>
     <None Include="$(SolutionDir)/../../src/shaders/bgfx/vs_postprocess.sc">

@@ -609,11 +609,12 @@ void Rubber::Render(const unsigned int renderMask)
    if (!isUIPass)
    {
       m_renderer->m_renderDevice->ResetRenderState();
+<<<<<<< HEAD
       Texture *const pin = m_ptable->GetImage(m_d.m_szImage);
       material.material = m_ptable->GetMaterial(m_d.m_szMaterial);
       material.image = pin;
       material.hasTextureAlpha = pin != nullptr && !pin->IsOpaque();
-      material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, isReflectionPass, mat->m_bOpacityActive);
+      material.pbrMaps = m_renderer->GetPBRTextureSet(m_d, m_boundingSphereCenter, -1.f, isReflectionPass, mat->m_bOpacityActive, renderMask);
    }
    m_renderer->RenderMesh(renderMask, body, material);
 }
