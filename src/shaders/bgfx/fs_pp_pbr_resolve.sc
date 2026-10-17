@@ -10,7 +10,9 @@
 // i.e. SSR wins where it hits, probes where SSR misses, with the envmap fallback already
 // folded into L_probe by the scene shader. Non PBR pixels are passed through unchanged.
 // The march inputs (shaded normals, roughness, opaque PBR flag) come from the depth
-// prepass color attachment: xy = normal, z = roughness, w = PBR flag.
+// prepass color attachment: xy = normal, z = roughness, w = PBR flag. The prepass flag is
+// also the resolve mask: unlike the sideband (written only by PBR draws), it is written by
+// every opaque part, so a non PBR surface drawn over a PBR one correctly masks it out.
 
 #ifdef STEREO
 $input v_texcoord0, v_eye
@@ -51,12 +53,13 @@ void main()
 
 	const vec3 color0 = texStereoNoLod(tex_fb_filtered, u).xyz; // original pixel
 
-	const vec4 att2 = texStereoNoLod(tex_pbr_att2, u);
-	BRANCH if(att2.a <= 0.0) // not a PBR pixel: pass the scene color through
+	const vec4 prepass = texStereoNoLod(tex_normals, u);
+	BRANCH if(prepass.w < 0.5) // frontmost opaque surface is not PBR: pass the scene color through
 	{
 		gl_FragColor = vec4(color0, 1.0);
 		return;
 	}
+	const vec4 att2 = texStereoNoLod(tex_pbr_att2, u);
 	const vec3 W = att2.rgb;
 	const vec4 att1 = texStereoNoLod(tex_pbr_att1, u);
 
@@ -77,7 +80,6 @@ void main()
 	#else
 		const vec3 posV = uvDepthToView(u, depth0);
 	#endif
-	const vec4 prepass = texStereoNoLod(tex_normals, u);
 	const vec3 normal = vec3(prepass.xy, sqrt(saturate(1.0 - dot(prepass.xy, prepass.xy))));
 	const float pbrRoughness = prepass.z;
 	const float radius = 1.0 + pbrResolveParams.z * pbrRoughness * pbrRoughness; // lobe footprint in low res texels
