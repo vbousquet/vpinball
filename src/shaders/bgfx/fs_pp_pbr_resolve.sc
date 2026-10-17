@@ -139,5 +139,9 @@ void main()
 	// Coverage fade: very rough lobes resolve no extra detail from SSR — fall back to probe/envmap
 	const float ssrFade = saturate(1.0 - (pbrRoughness - pbrResolveParams.x) / (pbrResolveParams.y - pbrResolveParams.x));
 	const float alphaP = saturate(coverage) * ssrFade * (1.0 - pbrProbeParams.z * Wprobe);
-	gl_FragColor = vec4(color0 + W * mix(Lprobe, Lssr, alphaP), 1.0);
+	// Same soft luminance knee as the direct specular: a marched hit on a hot source (a bulb seen
+	// in reflection) must not strobe an unbounded bloom blob between frames
+	vec3 specInd = W * mix(Lprobe, Lssr, alphaP);
+	specInd /= 1.0 + dot(specInd, vec3(0.176204, 0.812985, 0.0108109)) * (1.0 / 1024.0);
+	gl_FragColor = vec4(color0 + specInd, 1.0);
 }
