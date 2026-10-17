@@ -7,9 +7,11 @@
 #include "math/Mesh.h"
 #include "math/MeshUtils.h"
 #include "parts/flipper.h"
+#include "parts/light.h"
 #include "parts/Material.h"
 #include "parts/PartGroup.h"
 #include "parts/pintable.h"
+#include "parts/primitive.h"
 #include "parts/Sound.h"
 #include "parts/surface.h"
 #include "renderer/RenderProbe.h"
@@ -1450,4 +1452,138 @@ TEST_CASE("Bundled table templates pass hash validation")
       CHECK(SUCCEEDED(table->LoadGameFromFilename(filePath, feedback)));
       table->Release();
    }
+}
+
+
+TEST_CASE("PBR test table generator")
+{
+   CComObject<PinTable> *table;
+   CComObject<PinTable>::CreateInstance(&table);
+   table->AddRef();
+   TestFileFeedback feedback;
+   REQUIRE(SUCCEEDED(table->LoadGameFromFilename(GetAssetPath() / "test000-default-table.vpx", feedback)));
+
+   // Shared unit UV sphere (radius 0.5, scaled per primitive by m_vSize)
+   const int stacks = 24, slices = 32;
+   Mesh sphere;
+   for (int j = 0; j <= stacks; j++)
+   {
+      const float v = (float)j / (float)stacks;
+      const float phi = v * (float)M_PI;
+      const float z = cosf(phi) * 0.5f;
+      const float r = sinf(phi) * 0.5f;
+      for (int i = 0; i <= slices; i++)
+      {
+         const float u = (float)i / (float)slices;
+         const float theta = u * 2.f * (float)M_PI;
+         Vertex3D_NoTex2 vert;
+         vert.x = r * cosf(theta);
+         vert.y = r * sinf(theta);
+         vert.z = z;
+         const float invLen = 1.f / max(1e-6f, sqrtf(vert.x * vert.x + vert.y * vert.y + vert.z * vert.z));
+         vert.nx = vert.x * invLen;
+         vert.ny = vert.y * invLen;
+         vert.nz = vert.z * invLen;
+         vert.tu = u;
+         vert.tv = v;
+         sphere.m_vertices.push_back(vert);
+      }
+   }
+   for (int j = 0; j < stacks; j++)
+      for (int i = 0; i < slices; i++)
+      {
+         const unsigned int a = (unsigned int)(j * (slices + 1) + i);
+         const unsigned int b = a + (unsigned int)slices + 1u;
+         sphere.m_indices.insert(sphere.m_indices.end(), { a, b, a + 1, a + 1, b, b + 1 });
+      }
+   sphere.UpdateBounds();
+
+   // 5x5 grid of spheres: metallic varies along X, roughness along Y
+   const float w = table->m_right - table->m_left;
+   const float h = table->m_bottom - table->m_top;
+   const int gridN = 5;
+   const float marginX = 0.12f, marginY = 0.28f;
+   const float cellW = w * (1.f - 2.f * marginX) / (float)gridN;
+   const float cellH = h * 0.45f / (float)gridN;
+   const float size = min(cellW, cellH) * 0.7f;
+   for (int row = 0; row < gridN; row++)
+      for (int col = 0; col < gridN; col++)
+      {
+         const float roughness = (float)row / (float)(gridN - 1);
+         const float metallic = (float)col / (float)(gridN - 1);
+         Material *const mat = new Material();
+         mat->m_name = "pbr_r" + std::to_string(row) + "_m" + std::to_string(col);
+         mat->m_type = Material::MaterialType::PBR;
+         mat->m_fRoughness = roughness;
+         mat->m_fMetallic = metallic;
+         mat->m_fOcclusion = 1.f;
+         mat->m_fEmissionIntensity = 0.f;
+         mat->m_cBase = RGB(230, 230, 230);
+         mat->m_bOpacityActive = false;
+         table->AddMaterial(mat);
+
+         Primitive *const prim = Primitive::COMCreate();
+         const float x = table->m_left + w * marginX + cellW * (col + 0.5f);
+         const float y = table->m_top + h * marginY + cellH * (row + 0.5f);
+         prim->Init(x, y, false);
+         prim->SetName("pbr_sphere_" + std::to_string(row) + "_" + std::to_string(col));
+         prim->m_d.m_use3DMesh = true;
+         prim->m_d.m_meshFileName = "pbr_sphere";
+         prim->m_mesh = sphere;
+         prim->m_d.m_vSize = Vertex3Ds(size, size, size);
+         prim->m_d.m_vPosition.z = 60.f;
+         prim->m_d.m_szMaterial = mat->m_name;
+         prim->m_d.m_staticRendering = false;
+         prim->m_d.m_hitEvent = false;
+         prim->m_d.m_toy = true;
+         table->AddPart(prim);
+         prim->Release();
+      }
+
+   // Spread of PBR lights across the table (mixed colors)
+   const COLORREF lightColors[] = { RGB(255, 220, 180), RGB(200, 220, 255), RGB(255, 200, 200), RGB(200, 255, 220), RGB(255, 255, 255), RGB(220, 200, 255) };
+   const int lightCount = 6;
+   for (int i = 0; i < lightCount; i++)
+   {
+      Light *const light = Light::COMCreate();
+      const float x = table->m_left + w * (0.15f + 0.7f * ((float)i / (float)(lightCount - 1)));
+      const float y = table->m_top + h * (0.30f + 0.35f * ((i % 2) ? 1.f : 0.f));
+      light->Init(x, y, false);
+      light->SetName("pbr_light_" + std::to_string(i));
+      light->m_d.m_type = LightType::PBR;
+      light->m_d.m_intensity = 0.4f;
+      light->m_d.m_state = 1.f;
+      light->m_d.m_falloff = 400.f;
+      light->m_d.m_falloff_power = 2.f;
+      light->m_d.m_height = 200.f;
+      light->m_d.m_color = lightColors[i];
+      light->m_d.m_color2 = lightColors[i];
+      light->m_d.m_showBulbMesh = false;
+      light->m_d.m_visible = true;
+      light->m_d.m_imageMode = false;
+      table->AddPart(light);
+      light->Release();
+   }
+
+   // Fully metallic PBR playfield: exercises the deferred specular against static prerendering
+   Material *const pfMat = new Material();
+   pfMat->m_name = "pbr_playfield";
+   pfMat->m_type = Material::MaterialType::PBR;
+   pfMat->m_fRoughness = 0.15f;
+   pfMat->m_fMetallic = 1.f;
+   pfMat->m_fOcclusion = 1.f;
+   pfMat->m_fEmissionIntensity = 0.f;
+   pfMat->m_cBase = RGB(230, 230, 230);
+   pfMat->m_bOpacityActive = false;
+   table->AddMaterial(pfMat);
+   table->m_playfieldMaterial = pfMat->m_name;
+
+   const std::filesystem::path out = GetTmpDir() / "pbr-test.vpx";
+   std::error_code ec;
+   std::filesystem::remove(out, ec);
+   table->m_filename = out;
+   TestFileFeedback saveFeedback;
+   CHECK(SUCCEEDED(table->Save(saveFeedback)));
+   CHECK(std::filesystem::exists(out));
+   table->Release();
 }
