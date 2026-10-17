@@ -274,7 +274,10 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wV, const vec3 wPos, const vec3 
    const int start = int(cell.x);
    const int count = min(int(cell.y), 16);
    const float a = roughness * roughness;
-   const float a2 = a * a;
+   // Specular AA: widen the lobe (alpha2) by the screen-space normal variance so a highlight
+   // narrower than a pixel spreads its energy instead of strobing single pixels (no TAA in v1).
+   // Only the direct term is widened: indirect paths mip-filter by the material roughness.
+   const float a2 = min(a * a + 0.15 * max(dot(dFdx(wN), dFdx(wN)), dot(dFdy(wN), dFdy(wN))), 0.25);
    const float NdotV = saturate(dot(wN, wV));
    vec3 acc = vec3_splat(0.0);
    for (int i = 0; i < count; i++)
@@ -283,7 +286,9 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wV, const vec3 wPos, const vec3 
       const vec4 lPos = pbr_light_texel(li * 2);
       const vec3 lCol = pbr_light_texel(li * 2 + 1).rgb;
       const vec3 dl = lPos.xyz - wPos;
-      const float dist2 = dot(dl, dl);
+      // Clamp the distance to ~1 VPU (~0.5mm): a light embedded in geometry would otherwise
+      // produce unbounded inverse-square irradiance
+      const float dist2 = max(dot(dl, dl), 1.0);
       // Windowed inverse square attenuation: (1 - (d/r)^4)^2 / d^2 gives a smooth cutoff at the light range
       const float rangeRatio = dist2 / (lPos.w * lPos.w);
       const float x = saturate(1.0 - rangeRatio * rangeRatio);
@@ -303,7 +308,11 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wV, const vec3 wPos, const vec3 
       const float gv = NdotL * sqrt(NdotV * NdotV * (1.0 - a2) + a2);
       const float gl = NdotV * sqrt(NdotL * NdotL * (1.0 - a2) + a2);
       const float G = 0.5 / max(gv + gl, 1e-6);
-      acc += (diffuse * (vec3_splat(1.0) - F) * (1.0 / PI) + D * F * G) * (lCol * (x * x / dist2)) * NdotL;
+      // Soft luminance bound on the specular term: a sub-pixel GGX spike can still reach extreme
+      // HDR values after specular AA, which would strobe an unbounded bloom blob as the view moves
+      vec3 spec = D * F * G * (lCol * (x * x / dist2)) * NdotL;
+      spec *= 2048.0 / max(2048.0, dot(spec, vec3(0.176204, 0.812985, 0.0108109)));
+      acc += diffuse * (vec3_splat(1.0) - F) * (1.0 / PI) * (lCol * (x * x / dist2)) * NdotL + spec;
    }
    return acc;
 }
