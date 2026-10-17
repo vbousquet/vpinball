@@ -42,5 +42,9 @@ void main()
                       +  texStereoNoLod(tex_fb_filtered, v_texcoord0 + w_h_height.xy).rgb
                       +  texStereoNoLod(tex_fb_filtered, v_texcoord0 + vec2(w_h_height.x,-w_h_height.y)).rgb
                       +  texStereoNoLod(tex_fb_filtered, v_texcoord0 + vec2(-w_h_height.x,w_h_height.y)).rgb)*0.25; //!! offset for useAA?
-    gl_FragColor = vec4(max(bloom_cutoff(FBToneMap(result)), vec3_splat(0.)) * w_h_height.z, 1.0);
+    // Bound the per-pixel bloom input: FBToneMap is ~linear in HDR, so an unbounded single-pixel
+    // spike (e.g. a sub-pixel specular highlight) would strobe an oversized blob when the view moves
+    vec3 c = FBToneMap(result);
+    c *= 32.0 / max(32.0, dot(c, vec3(0.176204, 0.812985, 0.0108109)));
+    gl_FragColor = vec4(max(bloom_cutoff(c), vec3_splat(0.)) * w_h_height.z, 1.0);
 }
