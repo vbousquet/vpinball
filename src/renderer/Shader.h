@@ -146,6 +146,8 @@ enum class ShaderTechnique : unsigned int
    // PBR depth prepass variants additionally writing the camera & object motion vectors in zw of attachment 0
    SHADER_TECHNIQUE(pbr_depth_mv),
    SHADER_TECHNIQUE(pbr_depth_at_mv),
+   SHADER_TECHNIQUE(ball_depth),
+   SHADER_TECHNIQUE(ball_depth_n),
    // Depth prepass variants that additionally write the camera motion vectors to the 2 free channels of the color
    // attachment (BGFX only: they are used by the AO temporal accumulation under a dynamic camera, e.g. in VR)
    SHADER_TECHNIQUE(basic_depth_n_mv),
@@ -253,6 +255,7 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(SSReflection_shaded_masked),
    SHADER_TECHNIQUE(PBR_march),
    SHADER_TECHNIQUE(PBR_resolve),
+   SHADER_TECHNIQUE(fb_resolve_depth_msaa),
 #endif
 
    SHADER_TECHNIQUE(NFAA),
@@ -378,6 +381,7 @@ enum class ShaderUniform : unsigned int
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrProbes0, 1), // reflection plane of the first bound probe (dot(n,p) + w = 0)
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrProbes1, 1), // reflection plane of the second bound probe
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrProbeParams, 1), // x/y: influence range of probe0/1 (0 = unbound), z: SSR suppression weight mu, w: refraction probe bound
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrResolveParams, 1), // x: SSR fade start roughness, y: fade end, z: max pooling radius (low res texels), w: firefly clamp factor
    SHADER_SAMPLER(tex_pbr_orm, 8, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // packed occlusion/roughness/metallic
    SHADER_SAMPLER(tex_pbr_emission, 9, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // emission map
    SHADER_SAMPLER(tex_pbr_ao, 10, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // screenspace ambient occlusion
@@ -390,7 +394,6 @@ enum class ShaderUniform : unsigned int
       SamplerFilter::SF_BILINEAR), // PBR pixel mask (sideband attachment alpha), masks the tonemap AO application
    SHADER_SAMPLER(tex_pbr_att1, 8, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // sideband att1: probe radiance + coverage
    SHADER_SAMPLER(tex_pbr_att2, 9, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // sideband att2: specular weight + mask
-
 
    // Ball Shader
    SHADER_UNIFORM(ShaderUniformType::Float4x3, orientation, 1),
