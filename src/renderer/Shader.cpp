@@ -228,7 +228,7 @@ Shader::TechniqueDef Shader::shaderTechniqueNames[static_cast<unsigned int>(Shad
       ShaderUniform::u_basic_shade_mode, ShaderUniform::pbrFactors, ShaderUniform::pbrEmission, ShaderUniform::pbrMapFlags, ShaderUniform::tex_base_normalmap, ShaderUniform::tex_env,
       ShaderUniform::tex_diffuse_env, ShaderUniform::tex_pbr_orm, ShaderUniform::tex_pbr_emission, ShaderUniform::tex_pbr_ao, ShaderUniform::tex_pbr_dfg, ShaderUniform::tex_pbr_lights,
       ShaderUniform::pbrLightGrid, ShaderUniform::pbrLightGrid2, ShaderUniform::clip_plane),
-   SHADER_TECHNIQUE(pbr_t, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorld, ShaderUniform::matWorldView,
+   SHADER_TECHNIQUE(pbr_t, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorld, ShaderUniform::matView, ShaderUniform::matWorldView,
       ShaderUniform::matWorldViewInverseTranspose, ShaderUniform::staticColor_Alpha, ShaderUniform::w_h_height, ShaderUniform::cBase_Alpha, ShaderUniform::cAmbient_LightRange,
       ShaderUniform::fenvEmissionScale_TexWidth, ShaderUniform::fDisableLighting_top_below, ShaderUniform::lightCenter_doShadow, ShaderUniform::balls, ShaderUniform::u_basic_shade_mode,
       ShaderUniform::pbrFactors, ShaderUniform::pbrEmission, ShaderUniform::pbrMapFlags, ShaderUniform::tex_base_color, ShaderUniform::tex_base_normalmap, ShaderUniform::tex_env,
