@@ -609,7 +609,6 @@ void Rubber::Render(const unsigned int renderMask)
    if (!isUIPass)
    {
       m_renderer->m_renderDevice->ResetRenderState();
-<<<<<<< HEAD
       Texture *const pin = m_ptable->GetImage(m_d.m_szImage);
       material.material = m_ptable->GetMaterial(m_d.m_szMaterial);
       material.image = pin;
