@@ -115,6 +115,14 @@ void RenderCommand::Execute(const int nInstances, const bool log)
       break;
    }
 
+   case RC_MIPGEN:
+   {
+#if defined(ENABLE_BGFX)
+      m_mipgenTarget->GenerateMipmaps();
+#endif
+      break;
+   }
+
    case RC_DRAW_QUAD_PT:
    case RC_DRAW_QUAD_PNT:
    case RC_DRAW_MESH:
@@ -368,6 +376,12 @@ void RenderCommand::SetCopy(RenderTarget* from, RenderTarget* to, bool color, bo
    m_copyDstLayer = dstLayer;
 }
 
+void RenderCommand::SetMipgen(RenderTarget* rt)
+{
+   m_command = Command::RC_MIPGEN;
+   m_mipgenTarget = rt;
+}
+
 void RenderCommand::SetDrawMesh(
    Shader* shader, std::shared_ptr<MeshBuffer> mb, const RenderDevice::PrimitiveTypes type, 
    const uint32_t startIndex, const uint32_t indexCount, const bool isTransparent, const float depth)
@@ -443,6 +457,7 @@ void RenderCommand::CopyFrom(const RenderCommand* src)
    m_copyDstRect = src->m_copyDstRect;
    m_copySrcLayer = src->m_copySrcLayer;
    m_copyDstLayer = src->m_copyDstLayer;
+   m_mipgenTarget = src->m_mipgenTarget;
    memcpy(m_vertices, src->m_vertices, sizeof(m_vertices));
    m_mb = src->m_mb;
    m_primitiveType = src->m_primitiveType;
@@ -470,6 +485,8 @@ string RenderCommand::ToString(bool detailled) const
    case RC_CLEAR: ss << "> Clear"; break;
 
    case RC_COPY: ss << "> Copy " << m_copyFrom->m_name << " => " << m_copyTo->m_name; break;
+
+   case RC_MIPGEN: ss << "> MipGen " << m_mipgenTarget->m_name; break;
 
    case RC_DRAW_QUAD_PT:
    case RC_DRAW_QUAD_PNT:
