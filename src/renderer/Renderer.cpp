@@ -2384,6 +2384,7 @@ Shader::PBRTextureSet Renderer::GetPBRTextureSet(const BaseProperty& partData, c
    m_renderDevice->m_basicShader->SetTextureNull(ShaderUniform::tex_pbr_probe0);
    m_renderDevice->m_basicShader->SetTextureNull(ShaderUniform::tex_pbr_probe1);
    float probeRanges[2] = { 0.f, 0.f };
+   float probeLods[3] = { 0.f, 0.f, 0.f }; // Max mip level of each bound probe (roughness-dependent lod sampling)
    if (!inShaderSpecular)
    {
       // Automated probe assignment: score all planar reflection probes against the part bounds (signed
@@ -2413,6 +2414,7 @@ Shader::PBRTextureSet Renderer::GetPBRTextureSet(const BaseProperty& partData, c
             continue;
          probes[i]->GetReflectionPlane(plane[i]);
          probeRanges[i] = probes[i]->GetInfluenceRange();
+         probeLods[i] = static_cast<float>(probeRT->GetMipCount() - 1);
          m_renderDevice->m_basicShader->SetTexture(i == 0 ? ShaderUniform::tex_pbr_probe0 : ShaderUniform::tex_pbr_probe1, probeRT->GetColorSampler());
          m_renderDevice->AddRenderTargetDependency(probeRT);
       }
@@ -2427,12 +2429,14 @@ Shader::PBRTextureSet Renderer::GetPBRTextureSet(const BaseProperty& partData, c
    m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrProbeParams, probeRanges[0], probeRanges[1], 0.8f, refrProbe != nullptr ? 1.f : 0.f);
    if (refrProbe != nullptr)
    {
+      probeLods[2] = static_cast<float>(refrProbe->GetMipCount() - 1);
       m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_pbr_refr, refrProbe->GetColorSampler());
       // The refraction probe is a copy of the in-progress pass content: the dependency must be tracked on the draw command
       m_renderDevice->AddRenderTargetDependencyOnNextRenderCommand(refrProbe);
    }
    else
       m_renderDevice->m_basicShader->SetTextureNull(ShaderUniform::tex_pbr_refr);
+   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrProbeLods, probeLods[0], probeLods[1], probeLods[2], 0.f);
    return pbrMaps;
 }
 
@@ -2606,13 +2610,13 @@ RenderTarget* Renderer::ApplyAdditiveScreenSpaceReflection(RenderTarget* rendere
    if (!m_ss_refl || !m_table->m_enableSSR || m_table->m_SSRScale <= 0.f)
       return renderedRT;
 
-#ifdef ENABLE_BGFX
+   #ifdef ENABLE_BGFX
    // When the depth prepass is available, source its opaque non-MSAA depth (and its shaded
    // normals) instead of the MSAA resolved backbuffer ones for the legacy screen space blur
    const bool usePrepass = IsUsingDepthPrepass();
-#else
+   #else
    const bool usePrepass = false;
-#endif
+   #endif
    if (!usePrepass && !m_renderDevice->DepthBufferReadBackAvailable())
       return renderedRT;
 

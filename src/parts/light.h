@@ -252,7 +252,6 @@ public:
    STDMETHOD(get_FilamentTemperature)(/*[out, retval]*/ float *pVal);
    STDMETHOD(get_PBR)(/*[out, retval]*/ VARIANT_BOOL *pVal);
    STDMETHOD(put_PBR)(/*[in]*/ VARIANT_BOOL newVal);
-
    STDMETHOD(GetInPlayState)(/*[out, retval]*/ float* pVal);
    STDMETHOD(GetInPlayStateBool)(/*[out, retval]*/ VARIANT_BOOL* pVal);
    STDMETHOD(GetInPlayIntensity)(/*[out, retval]*/ float *pVal);

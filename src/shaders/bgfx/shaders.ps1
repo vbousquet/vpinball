@@ -228,6 +228,8 @@ if ($gen_postprocess)
 	  Process-Shader "fs_pp_ssao.sc" "postprocess.h" ("fs_pp_ssao" + $stOutput[$k]) "fragment" @($stereo[$k])
 	  Process-Shader "fs_pp_ssao.sc" "postprocess.h" ("fs_pp_ssao_shaded" + $stOutput[$k]) "fragment" @($stereo[$k], "NORMAL_TEX")
 	  Process-Shader "fs_pp_ssr.sc" "postprocess.h" ("fs_pp_ssr" + $stOutput[$k]) "fragment" @($stereo[$k])
+	  Process-Shader "fs_pp_ssr.sc" "postprocess.h" ("fs_pp_ssr_prepass" + $stOutput[$k]) "fragment" @($stereo[$k], "RAYMARCH")
+	  Process-Shader "fs_pp_ssr.sc" "postprocess.h" ("fs_pp_ssr_prepass_shaded" + $stOutput[$k]) "fragment" @($stereo[$k], "RAYMARCH", "NORMAL_TEX")
 	  Process-Shader "fs_pp_ao_display.sc" "postprocess.h" ("fs_pp_ao_display" + $stOutput[$k]) "fragment" @($stereo[$k])
 	  foreach ($variant in @("FILTER", "NOFILTER"))
 	  {

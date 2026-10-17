@@ -1412,7 +1412,6 @@ STDMETHODIMP Light::get_FilamentTemperature(float *pVal)
 {
    double T = m_d.m_intensity != 0.f && m_d.m_intensity_scale != 0.f ? bulb_emission_to_filament_temperature(m_currentIntensity / (m_d.m_intensity * m_d.m_intensity_scale)) : 293.f; 
    *pVal = (float)T;
-
    return S_OK;
 }
 

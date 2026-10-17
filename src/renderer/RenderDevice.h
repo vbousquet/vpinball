@@ -120,6 +120,7 @@ public:
    }
    RenderTarget* GetCurrentRenderTarget() const { assert(m_currentPass != nullptr); return m_currentPass->m_rt; }
    void SetRenderTarget(const string& passName, RenderTarget* rt, const bool useRTContent = true, const bool forceNewPass = false);
+   void GenerateMipmaps(RenderTarget* rt); // Record a mip generation pass for the given render target (must have a mipmapped color texture)
    void AddRenderTargetDependency(RenderTarget* rt, const bool needDepth = false);
    void AddRenderTargetDependencyOnNextRenderCommand(RenderTarget* rt);
    void Clear(const DWORD flags, const DWORD colorARGB);
@@ -323,6 +324,8 @@ public:
    std::mutex m_frameMutex; // Mutex to lock acces to retained render frame between logic thread and render thread
 
    bgfx::ProgramHandle m_srgbMipmapProgram = BGFX_INVALID_HANDLE;
+   bgfx::ProgramHandle GetMipgenProgram(bgfx::TextureFormat::Enum format, bool array);
+   bgfx::ProgramHandle m_mipgenPrograms[6] = { BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE };
 
    uint64_t m_lastGPUFrameLength = 0;
 
