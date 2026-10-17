@@ -3,14 +3,24 @@
 #include "bgfx_compute.sh"
 
 #if defined(FMT_rgba32f)
-    IMAGE2D_RO(u_Source, rgba32f, 0);
-    IMAGE2D_WO(u_Destination, rgba32f, 1);
+#   define FMT_IMG rgba32f
 #elif defined(FMT_rgba16f)
-    IMAGE2D_RO(u_Source, rgba16f, 0);
-    IMAGE2D_WO(u_Destination, rgba16f, 1);
+#   define FMT_IMG rgba16f
 #elif defined(FMT_rgba8) || defined(FMT_srgba8)
-    IMAGE2D_RO(u_Source, rgba8, 0);
-    IMAGE2D_WO(u_Destination, rgba8, 1);
+#   define FMT_IMG rgba8
+#endif
+
+#if defined(LAYERED)
+    // Layered variant for layered render targets (stereo): the array slice is the z dispatch coordinate
+    IMAGE2D_ARRAY_RO(u_Source, FMT_IMG, 0);
+    IMAGE2D_ARRAY_WO(u_Destination, FMT_IMG, 1);
+#   define imgCoord(pos) ivec3(pos, int(gl_GlobalInvocationID.z))
+#   define imgSize(tex)  imageSize(tex).xy
+#else
+    IMAGE2D_RO(u_Source, FMT_IMG, 0);
+    IMAGE2D_WO(u_Destination, FMT_IMG, 1);
+#   define imgCoord(pos) pos
+#   define imgSize(tex)  imageSize(tex)
 #endif
 
 #if defined(FMT_srgba8)
@@ -36,12 +46,12 @@ vec4 linearToSrgb(vec4 c) {
     return vec4(linearToSrgb(c.r), linearToSrgb(c.g), linearToSrgb(c.b), c.a);
 }
 
-#   define texLoad(src, pos)       srgbToLinear(imageLoad(src, pos))
-#   define texStore(dst, pos, col) imageStore(dst, pos, linearToSrgb(col))
+#   define texLoad(src, pos)       srgbToLinear(imageLoad(src, imgCoord(pos)))
+#   define texStore(dst, pos, col) imageStore(dst, imgCoord(pos), linearToSrgb(col))
 
 #else
-#   define texLoad(src, pos)       imageLoad(src, pos)
-#   define texStore(dst, pos, col) imageStore(dst, pos, col)
+#   define texLoad(src, pos)       imageLoad(src, imgCoord(pos))
+#   define texStore(dst, pos, col) imageStore(dst, imgCoord(pos), col)
 
 #endif
 
@@ -82,8 +92,8 @@ CONST(float g_kaiserKernel6s[6][6]) = {
 NUM_THREADS(8, 8, 1)
 void main() {
     ivec2 dstCoord = ivec2(gl_GlobalInvocationID.xy);
-    CONST(ivec2 srcSize) = imageSize(u_Source);
-    CONST(ivec2 dstSize) = imageSize(u_Destination);
+    CONST(ivec2 srcSize) = imgSize(u_Source);
+    CONST(ivec2 dstSize) = imgSize(u_Destination);
     if (any(greaterThanEqual(dstCoord, dstSize)))
         return;
 

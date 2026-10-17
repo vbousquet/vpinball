@@ -1552,6 +1552,7 @@ Shader::PBRTextureSet Renderer::GetPBRTextureSet(const BaseProperty& partData, c
    m_renderDevice->m_basicShader->SetTextureNull(ShaderUniform::tex_pbr_probe0);
    m_renderDevice->m_basicShader->SetTextureNull(ShaderUniform::tex_pbr_probe1);
    float probeRanges[2] = { 0.f, 0.f };
+   float probeLods[3] = { 0.f, 0.f, 0.f }; // Max mip level of each bound probe (roughness-dependent lod sampling)
    if (!inShaderSpecular)
    {
       // Automated probe assignment: score all planar reflection probes against the part bounds (signed
@@ -1583,6 +1584,7 @@ Shader::PBRTextureSet Renderer::GetPBRTextureSet(const BaseProperty& partData, c
             continue;
          probes[i]->GetReflectionPlane(plane[i]);
          probeRanges[i] = min(probes[i]->GetInfluenceRange(), 35.f);
+         probeLods[i] = static_cast<float>(probeRT->GetMipCount() - 1);
          m_renderDevice->m_basicShader->SetTexture(i == 0 ? ShaderUniform::tex_pbr_probe0 : ShaderUniform::tex_pbr_probe1, probeRT->GetColorSampler());
          m_renderDevice->AddRenderTargetDependency(probeRT);
       }
@@ -1597,12 +1599,14 @@ Shader::PBRTextureSet Renderer::GetPBRTextureSet(const BaseProperty& partData, c
    m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrProbeParams, probeRanges[0], probeRanges[1], 0.8f, refrProbe != nullptr ? 1.f : 0.f);
    if (refrProbe != nullptr)
    {
+      probeLods[2] = static_cast<float>(refrProbe->GetMipCount() - 1);
       m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_pbr_refr, refrProbe->GetColorSampler());
       // The refraction probe is a copy of the in-progress pass content: the dependency must be tracked on the draw command
       m_renderDevice->AddRenderTargetDependencyOnNextRenderCommand(refrProbe);
    }
    else
       m_renderDevice->m_basicShader->SetTextureNull(ShaderUniform::tex_pbr_refr);
+   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrProbeLods, probeLods[0], probeLods[1], probeLods[2], 0.f);
    return pbrMaps;
 }
 

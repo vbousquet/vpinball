@@ -266,14 +266,16 @@ void RenderProbe::RenderScreenSpaceTransparency()
    {
       const int downscale = GetRoughnessDownscale(m_roughness);
       const int w = renderedPass->m_rt->GetWidth() / downscale, h = renderedPass->m_rt->GetHeight() / downscale;
-      vs.dynamicRT = new RenderTarget(
-         m_renderer->m_renderDevice, renderedPass->m_rt->m_type, m_name, w, h, renderedPass->m_rt->GetColorFormat(), true, 1, "Failed to create refraction render target", nullptr);
+      vs.dynamicRT = new RenderTarget(m_renderer->m_renderDevice, renderedPass->m_rt->m_type, m_name, w, h, renderedPass->m_rt->GetColorFormat(), true, 1,
+         "Failed to create refraction render target", nullptr, m_renderer->m_renderDevice->m_pbrActive);
    }
    m_renderer->m_renderDevice->m_basicShader->SetTextureNull(ShaderUniform::tex_refraction);
    m_renderer->m_renderDevice->SetRenderTarget(m_name, vs.dynamicRT, false);
    m_renderer->m_renderDevice->BlitRenderTarget(renderedPass->m_rt, vs.dynamicRT, true, true);
    vs.copyPass = m_renderer->m_renderDevice->GetCurrentPass();
    ApplyRoughness(vs.dynamicRT, m_roughness);
+   if (vs.dynamicRT->GetMipCount() > 1)
+      m_renderer->m_renderDevice->GenerateMipmaps(vs.dynamicRT);
    const vector<RenderPass*>& framePasses = m_renderer->m_renderDevice->GetRenderFramePasses();
    vs.probePasses.insert(vs.probePasses.end(), framePasses.begin() + firstPass, framePasses.end());
    m_renderer->m_renderDevice->SetRenderTarget(renderedPass->m_name, renderedPass->m_rt, false);
@@ -325,7 +327,7 @@ RenderTarget* RenderProbe::GetRenderTarget(bool isStaticRT)
       m_renderer->GetRenderSizeAA(w, h);
       const int downscale = GetRoughnessDownscale(m_roughness);
       rt = new RenderTarget(m_renderer->m_renderDevice, m_renderer->IsStereo() ? SurfaceType::RT_STEREO : SurfaceType::RT_DEFAULT, m_name + (isStaticRT ? ".Stat" : ".Dyn"), w / downscale,
-         h / downscale, m_renderer->GetRenderFormat(), true, 1, "Failed to create plane reflection render target", nullptr);
+         h / downscale, m_renderer->GetRenderFormat(), true, 1, "Failed to create plane reflection render target", nullptr, !isStaticRT && m_renderer->m_renderDevice->m_pbrActive);
    }
    return rt;
 }
@@ -395,6 +397,8 @@ RenderTarget* RenderProbe::RenderReflectionProbe(const unsigned int renderMask)
       m_renderer->UpdateBasicShaderMatrix();
       m_renderer->DrawStatics();
       ApplyRoughness(dynamicRT, m_roughness);
+      if (dynamicRT->GetMipCount() > 1)
+         m_renderer->m_renderDevice->GenerateMipmaps(dynamicRT);
    }
    else
    { // Dynamic pass or split rendering disabled
@@ -501,6 +505,8 @@ RenderTarget* RenderProbe::RenderReflectionProbe(const unsigned int renderMask)
       }
 
       ApplyRoughness(dynamicRT, m_roughness);
+      if (dynamicRT->GetMipCount() > 1)
+         m_renderer->m_renderDevice->GenerateMipmaps(dynamicRT);
    }
 
    // Restore initial render states and camera
