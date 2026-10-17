@@ -19,6 +19,7 @@ $input v_texcoord0
 
 // w_h_height.xy contains inverse size of the destination (half resolution) texture
 uniform vec4 w_h_height;
+uniform vec4 pbrResolveParams; // y: SSR coverage fade end roughness (march is skipped past it)
 
 SAMPLER2DSTEREO(tex_fb_filtered,  0); // Scene framebuffer
 SAMPLER2DSTEREO(tex_depth,        4); // Depth prepass
@@ -56,14 +57,20 @@ void main()
 		return;
 	}
 	const float pbrRoughness = pbrData.x;
+	BRANCH if(pbrRoughness >= pbrResolveParams.y) // resolve fades SSR fully to probe/envmap here
+	{
+		gl_FragColor = vec4_splat(0.0);
+		return;
+	}
 
 	// View space fragment position & surface normal (shaded normal from the prepass)
 	#ifdef STEREO
 		const vec3 posV = uvDepthToView(u, depth0, v_eye);
+		const vec3 normal = vec3(prepass.xy, sqrt(saturate(1.0 - dot(prepass.xy, prepass.xy))));
 	#else
 		const vec3 posV = uvDepthToView(u, depth0);
+		const vec3 normal = vec3(prepass.xy, sqrt(saturate(1.0 - dot(prepass.xy, prepass.xy))));
 	#endif
-	const vec3 normal = vec3(prepass.xy, sqrt(saturate(1.0 - dot(prepass.xy, prepass.xy))));
 	const vec3 V = -normalize(posV); // toward the camera (view space: camera at origin)
 	const vec3 R = reflect(-V, normal); // reflected incident direction, pointing into the scene
 
@@ -71,14 +78,15 @@ void main()
 	const vec3 dither = texNoLod(tex_ao_dither, u/(64.0*w_h_height.xy)).xyz;
 
 	// Two rays jittered around the mirror direction, with a GGX importance sampled lobe scaled by
-	// the material roughness (the unused blue noise channels provide the per ray offsets): halves
-	// the hit/miss variance between neighbors.
+	// the material roughness. The 64x64 dither tiles in lockstep across neighbors, turning the
+	// 2-sample GGX jitter into a visible dot pattern on rough surfaces: per pixel hash offsets
+	// decorrelate it.
 	const vec3 t1 = normalize(cross(R, abs(R.z) < 0.9 ? vec3(0.,0.,1.) : vec3(1.,0.,0.)));
 	const vec3 t2 = cross(R, t1);
 	vec4 acc = vec4_splat(0.0);
 	UNROLL for(int ray = 0; ray < 2; ++ray)
 	{
-		const vec2 Xi = ray == 0 ? dither.xy : vec2(dither.y, fract(dither.x + 0.5));
+		const vec2 Xi = fract((ray == 0 ? dither.xy : vec2(dither.y, fract(dither.x + 0.5))) + hash22(u / w_h_height.xy));
 		const float a = pbrRoughness * pbrRoughness;
 		const float phi = 2.0 * PI * Xi.x;
 		const float cosTheta = sqrt((1.0 - Xi.y) / (1.0 + (a * a - 1.0) * Xi.y));
