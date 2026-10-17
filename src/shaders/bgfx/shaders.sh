@@ -109,6 +109,7 @@ if [ "$gen_basic" = true ]; then
             process_shader "fs_depth.sc" "basic.h" "fs_depth_tex_at_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT"
             process_shader "fs_depth.sc" "basic.h" "fs_depth_tex_at_n_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT" "OUT_NORMAL"
             process_shader "fs_depth.sc" "basic.h" "fs_depth_tex_at_n_mv_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT" "OUT_NORMAL" "MOTION"
+            # PBR depth prepass variants: shaded normals + perceptual roughness + opaque PBR flag
             process_shader "fs_depth.sc" "basic.h" "fs_depth_pbr_n_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "OUT_NORMAL" "PBR"
             process_shader "fs_depth.sc" "basic.h" "fs_depth_pbr_at_n_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT" "OUT_NORMAL" "PBR"
             process_shader "fs_depth.sc" "basic.h" "fs_depth_pbr_n_mv_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "OUT_NORMAL" "PBR" "MOTION"
@@ -374,5 +375,10 @@ if [ "$gen_mipmap" = true ]; then
     fmts=("srgba8" "rgba8" "rgba16f" "rgba32f")
     for fmt in "${fmts[@]}"; do
         process_shader "cs_mipmap.sc" "mipmap.h" "cs_mipmap_${fmt}_" "compute" "FMT_${fmt}"
+    done
+    # Layered variants (image2DArray, slice = z dispatch coordinate) for render target mip chains (stereo probes)
+    fmts=("rgba8" "rgba16f" "rgba32f")
+    for fmt in "${fmts[@]}"; do
+        process_shader "cs_mipmap.sc" "mipmap.h" "cs_mipmap_${fmt}_array_" "compute" "FMT_${fmt}" "LAYERED"
     done
 fi

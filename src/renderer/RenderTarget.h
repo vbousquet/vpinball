@@ -19,7 +19,8 @@ public:
    RenderTarget(RenderDevice* const rd, const SurfaceType type, bgfx::FrameBufferHandle fbh, bgfx::TextureHandle colorTex, bgfx::TextureFormat::Enum colFormat,
       bgfx::TextureHandle depthTex, bgfx::TextureFormat::Enum depthFormat, const string& name, const int width, const int height, const colorFormat format);
    #endif
-   RenderTarget(RenderDevice* const rd, const SurfaceType type, const string& name, const int width, const int height, const colorFormat format, bool with_depth, int nMSAASamples, const char* failureMessage, RenderTarget* sharedDepth = nullptr);
+   RenderTarget(RenderDevice* const rd, const SurfaceType type, const string& name, const int width, const int height, const colorFormat format, bool with_depth, int nMSAASamples,
+      const char* failureMessage, RenderTarget* sharedDepth = nullptr, bool mipmaps = false);
    ~RenderTarget();
 
    void Activate(const int layer = -1);
@@ -43,12 +44,14 @@ public:
    bool IsMSAA() const { return m_nMSAASamples > 1; }
    int GetMSAASamples() const { return m_nMSAASamples; }
    bool HasDepth() const { return m_has_depth; }
+   int GetMipCount() const { return m_numMips; }
    colorFormat GetColorFormat() const { return m_format; }
    RenderDevice* GetRenderDevice() const { return m_rd; }
 
 #if defined(ENABLE_BGFX)
    bgfx::FrameBufferHandle GetCoreFrameBuffer() const { return m_framebuffer; }
    bgfx::TextureFormat::Enum GetCoreColorFormat() const { return m_colorFormat; }
+   void GenerateMipmaps(); // Generate the color texture mip chain (deferred render command, called during frame execution)
    void ResolveMSAADepth();
    static void OnFrameFlushed() { current_render_target = nullptr; current_render_layer = 0; }
 
@@ -92,6 +95,7 @@ private:
    int m_width;
    int m_height;
    const int m_nMSAASamples;
+   int m_numMips = 1;
    const bool m_has_depth;
    const bool m_shared_depth;
    std::shared_ptr<Sampler> m_color_sampler;
@@ -102,6 +106,7 @@ private:
 
 #if defined(ENABLE_BGFX)
    bgfx::TextureHandle m_color_tex = BGFX_INVALID_HANDLE;
+   bgfx::TextureHandle m_colorTexMips = BGFX_INVALID_HANDLE; // Non-RT mipmapped copy of the color attachment, exposed by the color sampler (refreshed by GenerateMipmaps)
    bgfx::TextureFormat::Enum m_colorFormat = bgfx::TextureFormat::Count;
    bgfx::TextureHandle m_depth_tex = BGFX_INVALID_HANDLE;
    bgfx::TextureFormat::Enum m_depthFormat = bgfx::TextureFormat::Count;

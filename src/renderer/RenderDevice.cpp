@@ -41,6 +41,7 @@
 #include <bx/string.h>
 #include <bgfx/bgfx.h>
 #include <bimg/bimg.h>
+#include "shaders/bgfx_mipmap.h"
 #if defined(__STANDALONE__) && !defined(_MSC_VER)
 #pragma pop_macro("_WIN64")
 #endif
@@ -1977,6 +1978,9 @@ RenderDevice::~RenderDevice()
 
    if (bgfx::isValid(m_srgbMipmapProgram))
       bgfx::destroy(m_srgbMipmapProgram);
+   for (bgfx::ProgramHandle program : m_mipgenPrograms)
+      if (bgfx::isValid(program))
+         bgfx::destroy(program);
 
    // Shutdown BGFX once all native resources have been cleaned up
    m_rendererInitialized.release();
@@ -2319,6 +2323,28 @@ void RenderDevice::ResetActiveView()
 {
    RenderTarget::OnFrameFlushed();
    m_activeViewId = 1; // view 0 & 1 are reserved for mipmap generation (so 1 is before the first available for rendering)
+}
+
+bgfx::ProgramHandle RenderDevice::GetMipgenProgram(bgfx::TextureFormat::Enum format, const bool array)
+{
+   int idx;
+   switch (format)
+   {
+   case bgfx::TextureFormat::RGBA8: idx = 0; break;
+   case bgfx::TextureFormat::RGBA16F: idx = 1; break;
+   case bgfx::TextureFormat::RGBA32F: idx = 2; break;
+   default: return BGFX_INVALID_HANDLE;
+   }
+   if (array)
+      idx += 3;
+   if (!bgfx::isValid(m_mipgenPrograms[idx]))
+   {
+      static const bgfx::EmbeddedShader shaders[] = { BGFX_EMBEDDED_SHADER(cs_mipmap_rgba8), BGFX_EMBEDDED_SHADER(cs_mipmap_rgba16f), BGFX_EMBEDDED_SHADER(cs_mipmap_rgba32f),
+         BGFX_EMBEDDED_SHADER(cs_mipmap_rgba8_array), BGFX_EMBEDDED_SHADER(cs_mipmap_rgba16f_array), BGFX_EMBEDDED_SHADER(cs_mipmap_rgba32f_array), BGFX_EMBEDDED_SHADER_END() };
+      static const char* names[] = { "cs_mipmap_rgba8", "cs_mipmap_rgba16f", "cs_mipmap_rgba32f", "cs_mipmap_rgba8_array", "cs_mipmap_rgba16f_array", "cs_mipmap_rgba32f_array" };
+      m_mipgenPrograms[idx] = bgfx::createProgram(bgfx::createEmbeddedShader(shaders, bgfx::getRendererType(), names[idx]), true);
+   }
+   return m_mipgenPrograms[idx];
 }
 
 void RenderDevice::SubmitAndFlipFrame(bool present)
@@ -2821,6 +2847,18 @@ void RenderDevice::BlitRenderTarget(RenderTarget* source, RenderTarget* destinat
    AddRenderTargetDependency(source);
    RenderCommand* cmd = m_renderFrame->NewCommand();
    cmd->SetCopy(source, destination, copyColor, copyDepth, x1, y1, w1, h1, x2, y2, w2, h2, srcLayer, dstLayer);
+   cmd->m_dependency = m_nextRenderCommandDependency;
+   m_nextRenderCommandDependency = nullptr;
+   m_currentPass->Submit(cmd);
+}
+
+void RenderDevice::GenerateMipmaps(RenderTarget* rt)
+{
+   // The mip generation pass must be a dedicated non mergeable pass since render pass sorting moves non draw commands
+   // to the beginning of a pass, which would run it before the commands actually rendering the target's content
+   SetRenderTarget(rt->m_name + ".MipGen"s, rt, true, true);
+   RenderCommand* cmd = m_renderFrame->NewCommand();
+   cmd->SetMipgen(rt);
    cmd->m_dependency = m_nextRenderCommandDependency;
    m_nextRenderCommandDependency = nullptr;
    m_currentPass->Submit(cmd);
