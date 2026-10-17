@@ -491,6 +491,10 @@ void Light::Render(const unsigned int renderMask)
       return;
    }
 
+   // PBR lights have no directly rendered representation: they only feed the clustered light list
+   if (m_d.m_type == LightType::PBR)
+      return;
+
    if (m_desktopBackdrop && !GetPTable()->GetDecalsEnabled())
       return;
 
