@@ -259,7 +259,7 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wV, const vec3 wPos, const vec3 
    // Specular AA: widen the lobe (alpha2) by the screen-space normal variance so a highlight
    // narrower than a pixel spreads its energy instead of strobing single pixels (no TAA in v1).
    // Only the direct term is widened: indirect paths mip-filter by the material roughness.
-   const float a2 = min(a * a + 0.15 * max(dot(dFdx(wN), dFdx(wN)), dot(dFdy(wN), dFdy(wN))), 0.25);
+   const float a2 = min(a * a + 0.5 * max(dot(dFdx(wN), dFdx(wN)), dot(dFdy(wN), dFdy(wN))), 0.25);
    const float NdotV = saturate(dot(wN, wV));
    vec3 acc = vec3_splat(0.0);
    for (int i = 0; i < count; i++)
@@ -290,10 +290,11 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wV, const vec3 wPos, const vec3 
       const float gv = NdotL * sqrt(NdotV * NdotV * (1.0 - a2) + a2);
       const float gl = NdotV * sqrt(NdotL * NdotL * (1.0 - a2) + a2);
       const float G = 0.5 / max(gv + gl, 1e-6);
-      // Soft luminance bound on the specular term: a sub-pixel GGX spike can still reach extreme
-      // HDR values after specular AA, which would strobe an unbounded bloom blob as the view moves
+      // Soft luminance knee on the specular term: a sub-pixel GGX spike can still reach extreme
+      // HDR values after specular AA. A continuous compressor (no plateau) preserves ordering
+      // inside the clipped region so the bloom blob edge moves smoothly as the view moves
       vec3 spec = D * F * G * (lCol * (x * x / dist2)) * NdotL;
-      spec *= 2048.0 / max(2048.0, dot(spec, vec3(0.176204, 0.812985, 0.0108109)));
+      spec /= 1.0 + dot(spec, vec3(0.176204, 0.812985, 0.0108109)) * (1.0 / 1024.0);
       acc += diffuse * (vec3_splat(1.0) - F) * (1.0 / PI) * (lCol * (x * x / dist2)) * NdotL + spec;
    }
    return acc;
@@ -368,7 +369,11 @@ void main() {
    #else
       const vec4 probe = pbr_probe_specular(v_tablePos, suv, roughness);
    #endif
-   const vec3 specSrc = mix(envSpec, probe.rgb, probe.a);
+   // Same soft luminance knee as the direct specular: bound hot probe/envmap radiance (e.g. a
+   // bulb inside a probe) before it feeds in-shader specular, the sideband and the resolve's
+   // firefly clamp reference
+   vec3 specSrc = mix(envSpec, probe.rgb, probe.a);
+   specSrc /= 1.0 + dot(specSrc, vec3(0.176204, 0.812985, 0.0108109)) * (1.0 / 1024.0);
 
    vec3 color = vec3_splat(0.0);
    vec3 spec = vec3_splat(0.0);
