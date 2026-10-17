@@ -9,8 +9,8 @@
 // - indirect specular from the envmap mip chain (tex_env) weighted by the split-sum approximation
 //   (DFG LUT + multiscattering compensation + Lagarde's specular occlusion)
 // - planar reflection probes blended per pixel by distance to their reflection plane (tex_pbr_probe0/1)
-// - specular sideband output for the resolve pass (attachment 1: L_probe+W_probe, attachment 2: W+mask,
-//   attachment 3: roughness for the half res specular march)
+// - specular sideband output for the resolve pass (attachment 1: L_probe+W_probe, attachment 2: W+mask;
+//   the march's roughness & PBR flag come from the depth prepass)
 // - TRANSPARENT variant outputs premultiplied radiance (ONE/INVSRC_ALPHA blend state)
 //
 // Defines: TEX (base color texture), AT (alpha test), TRANSPARENT (premultiplied blend output),
@@ -104,6 +104,7 @@ uniform vec4 pbrLightGrid2; // x: cell count y, y: light count
 uniform vec4 pbrProbes0; // reflection plane of the first bound probe (dot(n,p) + w = 0)
 uniform vec4 pbrProbes1; // reflection plane of the second bound probe
 uniform vec4 pbrProbeParams; // x/y: influence ranges of probe0/1 (0 = unbound), z: SSR/probe blend factor, w: refraction probe bound
+uniform vec4 pbrProbeLods;   // x/y: max mip level of probe0/1, z: max mip level of the refraction probe (roughness-dependent lod)
 
 #ifdef TRANSPARENT
 uniform vec4 refractionTint_thickness;
@@ -187,11 +188,13 @@ vec3 pbr_specular_weight(const vec3 N, const vec3 V, const vec3 F0, const float 
 // pixel by the fragment's distance to their reflection plane, faded by their influence range.
 // Returns (blended probe radiance, aggregate coverage). No bound probe => coverage 0 => envmap fallback.
 #ifdef STEREO
-vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv, const float v_eye)
+vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv, const float roughness, const float v_eye)
 #else
-vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv)
+vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv, const float roughness)
 #endif
 {
+   // Rough surfaces sample the probe's mip chain: each mip is a Kaiser filtered downscale of the
+   // reflected scene, giving temporally stable blurred reflections under camera/object motion
    vec3 Lp = vec3_splat(0.0);
    float wSum = 0.0;
    BRANCH if (pbrProbeParams.x > 0.0)
@@ -210,7 +213,7 @@ vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv)
       // Fade at the probe frustum border (and behind the mirrored camera): no valid content there
       const float inFrustum = saturate(min(uv.x, min(uv.y, min(1.0 - uv.x, 1.0 - uv.y))) * 16.0);
       const float w = saturate(1.0 - d / pbrProbeParams.x) * inFrustum;
-      Lp += w * texStereo(tex_pbr_probe0, uv).rgb;
+      Lp += w * texStereoLod(tex_pbr_probe0, uv, roughness * pbrProbeLods.x).rgb;
       wSum += w;
    }
    BRANCH if (pbrProbeParams.y > 0.0)
@@ -225,7 +228,7 @@ vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv)
       #endif
       const float inFrustum = saturate(min(uv.x, min(uv.y, min(1.0 - uv.x, 1.0 - uv.y))) * 16.0);
       const float w = saturate(1.0 - d / pbrProbeParams.y) * inFrustum;
-      Lp += w * texStereo(tex_pbr_probe1, uv).rgb;
+      Lp += w * texStereoLod(tex_pbr_probe1, uv, roughness * pbrProbeLods.y).rgb;
       wSum += w;
    }
    return vec4(Lp / max(wSum, 1e-6), saturate(wSum));
@@ -235,9 +238,9 @@ vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv)
 // Transmitted light through a transparent part: refract the view ray by the part thickness, project
 // back to screen space and sample the refraction probe (screen space copy of what's behind the part).
 #ifdef STEREO
-vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV, const float v_eye)
+vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV, const float roughness, const float v_eye)
 #else
-vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV)
+vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV, const float roughness)
 #endif
 {
    const vec3 R = refract(-wV, wN, 1.0 / 1.5); // n1 = 1.0 (air), n2 = 1.5 (plastic), eta = n1 / n2
@@ -248,7 +251,7 @@ vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV)
    #else
    const vec2 uv = vec2(0.5, 0.5) + vec2(proj.x, -proj.y) * (0.5 / proj.w);
    #endif
-   return refractionTint_thickness.rgb * texStereo(tex_pbr_refr, uv).rgb;
+   return refractionTint_thickness.rgb * texStereoLod(tex_pbr_refr, uv, roughness * pbrProbeLods.z).rgb;
 }
 #endif
 
@@ -372,9 +375,9 @@ void main() {
    // contexts (INSHADERSPEC without bound probes) the weights are 0 leaving envmap only.
    const vec2 suv = gl_FragCoord.xy * w_h_height.xy;
    #ifdef STEREO
-      const vec4 probe = pbr_probe_specular(v_tablePos, suv, v_eye);
+      const vec4 probe = pbr_probe_specular(v_tablePos, suv, roughness, v_eye);
    #else
-      const vec4 probe = pbr_probe_specular(v_tablePos, suv);
+      const vec4 probe = pbr_probe_specular(v_tablePos, suv, roughness);
    #endif
    const vec3 specSrc = mix(envSpec, probe.rgb, probe.a);
 
@@ -436,9 +439,9 @@ void main() {
          const vec3 wN = mul(vec4(N, 0.0), mView).xyz; // trafo back to world (orthonormal, no renormalize needed)
          const vec3 wV = normalize(cCameraPosWorld - v_tablePos);
          #ifdef STEREO
-            color = pbr_transmit(v_tablePos, wN, wV, v_eye) * staticColor_Alpha.rgb;
+            color = pbr_transmit(v_tablePos, wN, wV, roughness, v_eye) * staticColor_Alpha.rgb;
          #else
-            color = pbr_transmit(v_tablePos, wN, wV) * staticColor_Alpha.rgb;
+            color = pbr_transmit(v_tablePos, wN, wV, roughness) * staticColor_Alpha.rgb;
          #endif
       }
       // Premultiplied output (used with ONE/INVSRC_ALPHA blending): diffuse & emission (or the
