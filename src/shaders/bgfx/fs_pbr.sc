@@ -167,14 +167,16 @@ vec3 pbr_specular_weight(const vec3 N, const vec3 V, const vec3 F0, const float 
 }
 
 // Forward+ clustered direct lighting. The CPU builds a world-space XY grid over the table bounds each
-// frame and packs it into tex_pbr_lights (RGBA32F, 256 texels wide, texel fetch):
+// frame and packs it into tex_pbr_lights (RGBA32F, 256 texels wide, point sampled texel fetch):
 // [0,512)    light records, 2 texels each: (pos.xyz, range) then (radiance.rgb, mode)
 // [512,1024) grid cells: (start, count) into the index list
 // [1024,+)   light index list
 // World-space evaluation (v_tablePos): view independent, a single grid serves both stereo eyes.
 vec4 pbr_light_texel(const int idx)
 {
-   return texelFetch(tex_pbr_lights, ivec2(idx & 255, idx >> 8), 0);
+   // Point sampled fetch at texel centers (texelFetch would compile to Texture.Load which drops
+   // the sampler uniform on DXBC/DXIL/SPIRV, breaking the technique uniform validation)
+   return texNoLod(tex_pbr_lights, vec2((float(idx & 255) + 0.5) * (1.0 / 256.0), (float(idx >> 8) + 0.5) * (1.0 / 32.0)));
 }
 
 vec3 pbr_direct_light(const vec3 wN, const vec3 wV, const vec3 wPos, const vec3 diffuse, const vec3 F0, const float roughness)
