@@ -9938,6 +9938,7 @@ STDMETHODIMP Light::GetIDsOfNames(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNa
 			{ L"ImageMode", 453 },
 			{ L"Intensity", 12 },
 			{ L"IntensityScale", 434 },
+
 			{ L"Name", DISPID_Name },
 			{ L"ScaleBulbMesh", 425 },
 			{ L"Shadows", 456 },
