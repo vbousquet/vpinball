@@ -3,7 +3,7 @@
 // Shared helpers for the screen space ray marched PBR specular pass (march + resolve).
 // The including shader must declare the samplers these helpers sample:
 //   tex_depth     (prepass depth buffer)
-//   tex_normals   (prepass color attachment: shaded view space normals xy in .xy)
+//   tex_normals   (prepass color attachment 0: shaded view space normals xy in .xy)
 //   tex_fb_filtered (scene color, only needed by ssrRayMarch)
 // and, for the RAYMARCH helpers, the matProj/matProjInv uniforms per eye.
 // Like all helpers in these post process shaders, v_eye is passed explicitly since it
