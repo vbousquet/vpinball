@@ -55,6 +55,7 @@ Shader::TechniqueDef Shader::shaderTechniqueNames[static_cast<unsigned int>(Shad
    SHADER_TECHNIQUE(RenderBallTrail),
    // OpenGL only has the first variant. DX9 needs all of them due to shader compiler limitation
    SHADER_TECHNIQUE(basic_with_texture),
+   // OpenGL only has the first variant. DX9 needs all of them due to shader compiler limitation
    SHADER_TECHNIQUE(basic_with_texture_isMetal),
    SHADER_TECHNIQUE(basic_with_texture_normal),
    SHADER_TECHNIQUE(basic_with_texture_normal_isMetal),
@@ -176,6 +177,10 @@ Shader::TechniqueDef Shader::shaderTechniqueNames[static_cast<unsigned int>(Shad
    SHADER_TECHNIQUE(fb_wcgtonemap_AO),
    SHADER_TECHNIQUE(fb_wcgtonemap_no_filter),
    SHADER_TECHNIQUE(fb_wcgtonemap_AO_no_filter),
+   SHADER_TECHNIQUE(basic_DMD),
+   SHADER_TECHNIQUE(basic_DMD_world),
+   // Lottes-CRT
+   // Same as above but built with the Nuance-CRT filter, the renderer picking between them per display (see Renderer::SetupCRTRender)
 
    SHADER_TECHNIQUE(fb_blur_horiz7x7),
    SHADER_TECHNIQUE(fb_blur_vert7x7),
@@ -212,6 +217,8 @@ Shader::TechniqueDef Shader::shaderTechniqueNames[static_cast<unsigned int>(Shad
    // Same as AO_shaded but also consumes the camera motion vectors written by the depth prepass to reproject the
    // previous frame AO when the camera is dynamic (BGFX only, e.g. VR)
    SHADER_TECHNIQUE(AO_shaded_mv),
+   // Same as AO_shaded but also consumes the camera motion vectors written by the depth prepass to reproject the
+   // previous frame AO when the camera is dynamic (BGFX only, e.g. VR)
 #ifdef ENABLE_BGFX
    SHADER_TECHNIQUE(fb_resolve_depth_msaa),
 #endif
@@ -300,6 +307,8 @@ ShaderUniformDef ShaderUniformDef::coreUniforms[static_cast<unsigned int>(Shader
    SHADER_UNIFORM(ShaderUniformType::Float4v, cameraPosWorld, 2), // BGFX only, camera world position (camera-relative path), +1 for stereo
    SHADER_UNIFORM(ShaderUniformType::Float4x4, matRotViewProjPrev, 2), // BGFX only, previous frame view rotation x proj (depth prepass motion vectors), +1 for stereo
    SHADER_UNIFORM(ShaderUniformType::Float4v, cameraPosWorldPrev, 2), // BGFX only, previous frame camera world position (depth prepass motion vectors), +1 for stereo
+   SHADER_UNIFORM(ShaderUniformType::Float4x4, matWorldPrev, 1), // BGFX only, previous frame object transform (depth prepass motion vectors)
+   SHADER_UNIFORM(ShaderUniformType::Float4x4, orientationPrev, 1), // BGFX only, previous frame ball orientation (depth prepass motion vectors)
    SHADER_UNIFORM(ShaderUniformType::Float4, lightCenter_doShadow, 1), // Basic & Flasher (for ball shadows)
    SHADER_UNIFORM(ShaderUniformType::Float4v, balls, 8), // Basic & Flasher (for ball shadows)
    SHADER_UNIFORM(ShaderUniformType::Float4, staticColor_Alpha, 1), // Basic & Flasher
