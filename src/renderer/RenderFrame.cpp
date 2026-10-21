@@ -244,7 +244,7 @@ bool RenderFrame::Execute(const bool log)
                   continue; // Kicker 'holes' carve the playfield in the shaded render: they must not occlude in the prepass
                RenderCommand* clone = NewCommand();
                clone->CopyFrom(cmd);
-               const ShaderTechnique depthTech = Shader::GetDepthPrepassTechnique(tech, m_rd->m_depthPrepassNormals);
+               const ShaderTechnique depthTech = Shader::GetDepthPrepassTechnique(tech, m_rd->m_depthPrepassNormals, m_rd->m_depthPrepassMotion);
                clone->GetShaderState()->SetTechnique(depthTech);
                if (m_rd->m_depthPrepassNormals)
                {
