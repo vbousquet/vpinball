@@ -346,6 +346,7 @@ void Gate::Render(const unsigned int renderMask)
    wire.indexCount = m_numIndices;
    wire.sortCenter = pos;
    wire.transform = &vertMatrix;
+   wire.prevTransform = m_prevMatTrafoValid ? &m_prevMatTrafo : nullptr;
    wire.uiEdgeMesh = &m_wireEdgeMeshBuffer;
    wire.edgeMode = UIEdgeMode::Outline;
    wire.edgeTriIndices = m_indices;
@@ -374,6 +375,8 @@ void Gate::Render(const unsigned int renderMask)
    if (m_d.m_showBracket)
       m_renderer->RenderMesh(renderMask, bracket, material);
    m_renderer->RenderMesh(renderMask, wire, material);
+   m_prevMatTrafo = vertMatrix;
+   m_prevMatTrafoValid = true;
 }
 
 #pragma endregion
