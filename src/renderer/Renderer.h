@@ -61,6 +61,7 @@ struct RenderMeshDesc
    Vertex3Ds sortCenter; // Center used for transparency sorting
    float depthBias = 0.f;
    const Matrix3D* transform = nullptr; // Optional object transform, applied while drawing
+   const Matrix3D* prevTransform = nullptr; // Optional previous object transform for motion vectors
    bool transparent = false; // True to sort the draw with the transparent commands
 
    std::shared_ptr<MeshBuffer>* uiFillMesh = nullptr; // Optional UI fill mesh (defaults to 'mesh')
@@ -139,7 +140,10 @@ public:
       m_shaderDirty = true;
       MarkStaticsDirty(); // The shader state (lighting, materials) is baked into the static part prerender
    }
-   void UpdateBasicShaderMatrix(const Matrix3D& objectTrafo = Matrix3D::MatrixIdentity()) { m_activeView->UpdateBasicShaderMatrix(objectTrafo); }
+   void UpdateBasicShaderMatrix(const Matrix3D& objectTrafo = Matrix3D::MatrixIdentity(), const Matrix3D* const objectTrafoPrev = nullptr)
+   {
+      m_activeView->UpdateBasicShaderMatrix(objectTrafo, objectTrafoPrev);
+   }
    void UpdateBallShaderMatrix() { m_activeView->UpdateBallShaderMatrix(); }
    void UpdateDesktopBackdropShaderMatrix(bool basic, bool light, bool flasherDMD) { m_activeView->UpdateDesktopBackdropShaderMatrix(basic, light, flasherDMD); }
    void UpdateStereoShaderState();

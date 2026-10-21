@@ -190,7 +190,11 @@ private:
    Vertex3Ds m_boundingSphereCenter;
    float m_boundingSphereRadius = -1.f;
 
-// IPlunger
+   // Previous frame mover position, for the depth prepass motion vectors approximation
+   float m_prevFramePos = 0.f;
+   bool m_prevFramePosValid = false;
+
+   // IPlunger
 public:
    STDMETHOD(get_Surface)(/*[out, retval]*/ BSTR *pVal);
    STDMETHOD(put_Surface)(/*[in]*/ BSTR newVal);

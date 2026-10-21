@@ -42,6 +42,7 @@ uniform mat4 orientation;
     uniform vec4 clip_plane;
 #endif
 #ifdef MOTION
+    uniform mat4 orientationPrev;
     #ifdef STEREO
         uniform mat4 matRotViewProjPrev[2];
         uniform vec4 cameraPosWorldPrev[2];
@@ -81,6 +82,7 @@ void main()
     gl_Position = mul(mRotViewProj, vec4(wpos_rel, 1.0));
     #ifdef MOTION
         v_clipPos = gl_Position;
-        v_prevClipPos = mul(mRotViewProjPrev, vec4(tpos.xyz - cCameraPosWorldPrev, 1.0));
+        const vec3 prevPos = mul(orientationPrev, pos).xyz;
+        v_prevClipPos = mul(mRotViewProjPrev, vec4(prevPos - cCameraPosWorldPrev, 1.0));
     #endif
 }

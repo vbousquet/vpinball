@@ -110,7 +110,7 @@ public:
    Vertex3Ds Unproject(const int width, const int height, const Vertex3Ds& point) const;
    Vertex3Ds Get3DPointFrom2D(const int width, const int height, const Vertex2D& p, float z);
    Vertex2D BackdropToClip(const Vertex2D& pos) const; // Maps a point in desktop backdrop coordinates (0..EDITOR_BG_WIDTH, 0..EDITOR_BG_HEIGHT) to clip space
-   void UpdateBasicShaderMatrix(const Matrix3D& objectTrafo = Matrix3D::MatrixIdentity());
+   void UpdateBasicShaderMatrix(const Matrix3D& objectTrafo = Matrix3D::MatrixIdentity(), const Matrix3D* const objectTrafoPrev = nullptr);
    void UpdateBallShaderMatrix();
    void UpdateDesktopBackdropShaderMatrix(bool basic, bool light, bool flasherDMD);
 

@@ -441,7 +441,7 @@ Vertex2D RenderView::BackdropToClip(const Vertex2D& pos) const
    }
 }
 
-void RenderView::UpdateBasicShaderMatrix(const Matrix3D& objectTrafo)
+void RenderView::UpdateBasicShaderMatrix(const Matrix3D& objectTrafo, const Matrix3D* const objectTrafoPrev)
 {
    RenderDevice* const rd = m_renderer->m_renderDevice;
    m_mvp.SetModel(objectTrafo);
@@ -466,8 +466,9 @@ void RenderView::UpdateBasicShaderMatrix(const Matrix3D& objectTrafo)
    rd->m_DMDShader->SetMatrix(ShaderUniform::matRotViewProj, &m_mvp.GetRotViewProj(0), m_mvp.m_nEyes);
    rd->m_DMDShader->SetVector(ShaderUniform::cameraPosWorld, &m_mvp.GetCameraPos(0), m_mvp.m_nEyes);
 
-   // Previous frame camera transform of the active space reference, consumed by the motion vector
-   // variants of the depth prepass (falls back to the current camera until a history is available)
+   // Previous frame camera transform of the active space reference and previous frame object transform,
+   // consumed by the motion vector variants of the depth prepass (fall back to the current transforms
+   // until a history is available)
    if (m_renderer->IsMotionVectorPrepass())
    {
       const int refIndex = clamp(static_cast<int>(m_mvpSpaceReference), 0, 3);
@@ -483,6 +484,7 @@ void RenderView::UpdateBasicShaderMatrix(const Matrix3D& objectTrafo)
             : hasCur ? m_curFrameCamPos[refIndex]
                      : &m_mvp.GetCameraPos(0),
          m_mvp.m_nEyes);
+      rd->m_basicShader->SetMatrix(ShaderUniform::matWorldPrev, objectTrafoPrev ? objectTrafoPrev : &objectTrafo);
    }
 
 #elif defined(ENABLE_DX9)
