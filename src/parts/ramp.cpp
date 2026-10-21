@@ -734,6 +734,7 @@ void Ramp::Render(const unsigned int renderMask)
    if (IsHabitrail())
    {
       if (!m_meshBuffer || m_dynamicVertexBufferRegenerate)
+         // Shape regeneration is not captured by matWorldPrev and may cause visual glitches in the depth prepass motion vectors
          PrepareHabitrail();
       if (!m_meshBuffer)
          return; // Nothing to draw on a degenerate curve
@@ -774,6 +775,7 @@ void Ramp::Render(const unsigned int renderMask)
    else
    {
       if (!m_meshBuffer || m_dynamicVertexBufferRegenerate)
+         // Shape regeneration is not captured by matWorldPrev and may cause visual glitches in the depth prepass motion vectors
          GenerateVertexBuffer();
 
       if (!m_meshBuffer)

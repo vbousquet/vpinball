@@ -206,13 +206,13 @@ enum class ShaderTechnique : unsigned int
    // Depth prepass variants that additionally write the camera motion vectors to the 2 free channels of the color
    // attachment (BGFX only: they are used by the AO temporal accumulation under a dynamic camera, e.g. in VR)
    SHADER_TECHNIQUE(basic_depth_n_mv, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matRotViewProjPrev,
-      ShaderUniform::cameraPosWorldPrev, ShaderUniform::matWorld, ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverseTranspose, ShaderUniform::u_basic_shade_mode,
-      ShaderUniform::objectSpaceNormalMap, ShaderUniform::tex_base_normalmap, ShaderUniform::clip_plane),
+      ShaderUniform::cameraPosWorldPrev, ShaderUniform::matWorld, ShaderUniform::matWorldPrev, ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverseTranspose,
+      ShaderUniform::u_basic_shade_mode, ShaderUniform::objectSpaceNormalMap, ShaderUniform::tex_base_normalmap, ShaderUniform::clip_plane),
    SHADER_TECHNIQUE(basic_depth_at_n_mv, ShaderUniform::layer, ShaderUniform::alphaTestValue, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matRotViewProjPrev,
-      ShaderUniform::cameraPosWorldPrev, ShaderUniform::matWorld, ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverseTranspose, ShaderUniform::u_basic_shade_mode,
-      ShaderUniform::objectSpaceNormalMap, ShaderUniform::tex_base_color, ShaderUniform::tex_base_normalmap, ShaderUniform::clip_plane),
+      ShaderUniform::cameraPosWorldPrev, ShaderUniform::matWorld, ShaderUniform::matWorldPrev, ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverseTranspose,
+      ShaderUniform::u_basic_shade_mode, ShaderUniform::objectSpaceNormalMap, ShaderUniform::tex_base_color, ShaderUniform::tex_base_normalmap, ShaderUniform::clip_plane),
    SHADER_TECHNIQUE(ball_depth_n_mv, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matRotViewProjPrev, ShaderUniform::cameraPosWorldPrev,
-      ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverse, ShaderUniform::orientation, ShaderUniform::clip_plane),
+      ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverse, ShaderUniform::orientation, ShaderUniform::orientationPrev, ShaderUniform::clip_plane),
 
    SHADER_TECHNIQUE(basic_DMD, ShaderUniform::glassPad, ShaderUniform::glassArea, ShaderUniform::vRes_Alpha_time, ShaderUniform::vColor_Intensity, ShaderUniform::tex_dmd),
    SHADER_TECHNIQUE(basic_DMD_world, ShaderUniform::glassPad, ShaderUniform::glassArea, ShaderUniform::matWorld, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld,
@@ -415,6 +415,8 @@ enum class ShaderUniform : unsigned int
    SHADER_UNIFORM(ShaderUniformType::Float4v, cameraPosWorld, 2), // BGFX only, camera world position (camera-relative path), +1 for stereo
    SHADER_UNIFORM(ShaderUniformType::Float4x4, matRotViewProjPrev, 2), // BGFX only, previous frame view rotation x proj (depth prepass motion vectors), +1 for stereo
    SHADER_UNIFORM(ShaderUniformType::Float4v, cameraPosWorldPrev, 2), // BGFX only, previous frame camera world position (depth prepass motion vectors), +1 for stereo
+   SHADER_UNIFORM(ShaderUniformType::Float4x4, matWorldPrev, 1), // BGFX only, previous frame object transform (depth prepass motion vectors)
+   SHADER_UNIFORM(ShaderUniformType::Float4x4, orientationPrev, 1), // BGFX only, previous frame ball orientation (depth prepass motion vectors)
    SHADER_UNIFORM(ShaderUniformType::Float4, lightCenter_doShadow, 1), // Basic & Flasher (for ball shadows)
    SHADER_UNIFORM(ShaderUniformType::Float4v, balls, 8), // Basic & Flasher (for ball shadows)
    SHADER_UNIFORM(ShaderUniformType::Float4, staticColor_Alpha, 1), // Basic & Flasher

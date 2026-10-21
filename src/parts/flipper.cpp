@@ -602,7 +602,9 @@ void Flipper::Render(const unsigned int renderMask)
    {
       matTrafo = Matrix3D::MatrixRotateZ(m_phitflipper->m_flipperMover.m_angleCur) * matTrafo;
    }
-   m_renderer->UpdateBasicShaderMatrix(matTrafo);
+   m_renderer->UpdateBasicShaderMatrix(matTrafo, m_prevMatTrafoValid ? &m_prevMatTrafo : nullptr);
+   m_prevMatTrafo = matTrafo;
+   m_prevMatTrafoValid = true;
 
    if (isUIPass)
    {

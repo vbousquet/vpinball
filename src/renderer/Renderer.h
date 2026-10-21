@@ -40,7 +40,7 @@ public:
    Vertex2D BackdropToClip(const Vertex2D& pos) const; // Maps a point in desktop backdrop coordinates (0..EDITOR_BG_WIDTH, 0..EDITOR_BG_HEIGHT) to clip space, going through the editor's orthographic camera when editing the backdrop in the live editor, or to the full render target otherwise
 
    void MarkShaderDirty() { m_shaderDirty = true; }
-   void UpdateBasicShaderMatrix(const Matrix3D& objectTrafo = Matrix3D::MatrixIdentity());
+   void UpdateBasicShaderMatrix(const Matrix3D& objectTrafo = Matrix3D::MatrixIdentity(), const Matrix3D* const objectTrafoPrev = nullptr);
    void UpdateBallShaderMatrix();
    void UpdateDesktopBackdropShaderMatrix(bool basic, bool light, bool flasherDMD);
    void UpdateStereoShaderState();

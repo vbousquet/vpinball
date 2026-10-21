@@ -301,7 +301,8 @@ void Bumper::Render(const unsigned int renderMask)
    {
       const float ringAnimOffset = m_pbumperhitcircle->m_bumperanim_ringAnimOffset;
       Vertex3Ds pos(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight + ringAnimOffset);
-      m_renderer->UpdateBasicShaderMatrix(Matrix3D::MatrixTranslate(0.f, 0.f, ringAnimOffset));
+      const Matrix3D ringMatrix = Matrix3D::MatrixTranslate(0.f, 0.f, ringAnimOffset);
+      m_renderer->UpdateBasicShaderMatrix(ringMatrix, m_prevRingMatTrafoValid ? &m_prevRingMatTrafo : nullptr);
       if (isUIPass)
       {
          if (renderMask & Renderer::UI_FILL)
@@ -327,6 +328,8 @@ void Bumper::Render(const unsigned int renderMask)
          m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_ringMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperRingNumIndices);
       }
       m_renderer->UpdateBasicShaderMatrix();
+      m_prevRingMatTrafo = ringMatrix;
+      m_prevRingMatTrafoValid = true;
    }
 
    if (m_d.m_skirtVisible && !isStaticOnly)
@@ -334,7 +337,7 @@ void Bumper::Render(const unsigned int renderMask)
       // Skirt tilt from the last hit is applied through the object transform (see UpdateSkirt)
       const Matrix3D socketMatrix = ((Matrix3D::MatrixRotateZ(ANGTORAD(m_d.m_orientation)) * Matrix3D::MatrixRotateY(ANGTORAD(m_roty))) * Matrix3D::MatrixRotateX(ANGTORAD(m_rotx)))
          * Matrix3D::MatrixScale(m_d.m_radius, m_d.m_radius, m_d.m_heightScale) * Matrix3D::MatrixTranslate(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight + 5.0f);
-      m_renderer->UpdateBasicShaderMatrix(socketMatrix);
+      m_renderer->UpdateBasicShaderMatrix(socketMatrix, m_prevSocketMatTrafoValid ? &m_prevSocketMatTrafo : nullptr);
       Vertex3Ds pos(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight + 5.0f);
       if (isUIPass)
       {
@@ -353,6 +356,8 @@ void Bumper::Render(const unsigned int renderMask)
          m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_socketMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperSocketNumIndices);
       }
       m_renderer->UpdateBasicShaderMatrix();
+      m_prevSocketMatTrafo = socketMatrix;
+      m_prevSocketMatTrafoValid = true;
    }
 }
 

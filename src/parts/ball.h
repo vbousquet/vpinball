@@ -222,6 +222,9 @@ public:
 
    Vertex3Ds m_lastRenderedPos; // position where last render occured
 
+   Matrix3D m_prevOrientation; // Previous frame orientation, for the depth prepass motion vectors
+   bool m_prevOrientationValid = false;
+
    bool m_runtimeBall = false; // Created by the player during a play session (script or automation), not part of the authored table
 
 private:

@@ -356,7 +356,8 @@ void Trigger::Render(const unsigned int renderMask)
    if (m_meshBuffer == nullptr)
       return;
 
-   m_renderer->UpdateBasicShaderMatrix(Matrix3D::MatrixTranslate(0.f, 0.f, m_animHeightOffset));
+   const Matrix3D animMatrix = Matrix3D::MatrixTranslate(0.f, 0.f, m_animHeightOffset);
+   m_renderer->UpdateBasicShaderMatrix(animMatrix, m_prevMatTrafoValid ? &m_prevMatTrafo : nullptr);
 
    m_renderer->m_renderDevice->ResetRenderState();
    if (m_d.m_shape == TriggerWireA || m_d.m_shape == TriggerWireB || m_d.m_shape == TriggerWireC || m_d.m_shape == TriggerWireD || m_d.m_shape == TriggerInder)
@@ -365,6 +366,8 @@ void Trigger::Render(const unsigned int renderMask)
    m_renderer->m_renderDevice->DrawMesh(
       m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_meshBuffer->m_ib->m_count);
    m_renderer->UpdateBasicShaderMatrix();
+   m_prevMatTrafo = animMatrix;
+   m_prevMatTrafoValid = true;
 }
 
 #pragma endregion

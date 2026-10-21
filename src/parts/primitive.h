@@ -313,6 +313,8 @@ private:
    bool m_useAsPlayfield = false;
 
    Matrix3D m_fullMatrix;
+   Matrix3D m_prevFullMatrix; // Previous frame transform, for the depth prepass motion vectors
+   bool m_prevFullMatrixValid = false;
    Matrix3D m_physicMatrix;
    bool m_skipRendering = false;
    bool m_groupdRendering = false;

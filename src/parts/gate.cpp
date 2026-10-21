@@ -347,7 +347,7 @@ void Gate::Render(const unsigned int renderMask)
       {
          if (m_d.m_showBracket)
             m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_bracketMeshBuffer, RenderDevice::TRIANGLELIST, 0, gateBracketNumIndices);
-         m_renderer->UpdateBasicShaderMatrix(vertMatrix);
+         m_renderer->UpdateBasicShaderMatrix(vertMatrix, m_prevMatTrafoValid ? &m_prevMatTrafo : nullptr);
          m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_wireMeshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
          m_renderer->UpdateBasicShaderMatrix();
       }
@@ -363,7 +363,7 @@ void Gate::Render(const unsigned int renderMask)
                vertices.push_back(m_vertices[i]);
             m_wireEdgeMeshBuffer = m_wireMeshBuffer->CreateEdgeMeshBuffer(indices, vertices);
          }
-         m_renderer->UpdateBasicShaderMatrix(vertMatrix);
+         m_renderer->UpdateBasicShaderMatrix(vertMatrix, m_prevMatTrafoValid ? &m_prevMatTrafo : nullptr);
          m_renderer->m_renderDevice->DrawMesh(
             m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_wireEdgeMeshBuffer, RenderDevice::LINELIST, 0, m_wireEdgeMeshBuffer->m_ib->m_count);
          m_renderer->UpdateBasicShaderMatrix();
@@ -390,10 +390,13 @@ void Gate::Render(const unsigned int renderMask)
       m_renderer->m_renderDevice->m_basicShader->SetBasic(m_ptable->GetMaterial(m_d.m_szMaterial), nullptr);
       if (m_d.m_showBracket)
          m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_bracketMeshBuffer, RenderDevice::TRIANGLELIST, 0, gateBracketNumIndices);
-      m_renderer->UpdateBasicShaderMatrix(vertMatrix);
+      m_renderer->UpdateBasicShaderMatrix(vertMatrix, m_prevMatTrafoValid ? &m_prevMatTrafo : nullptr);
       m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_wireMeshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
       m_renderer->UpdateBasicShaderMatrix();
    }
+
+   m_prevMatTrafo = vertMatrix;
+   m_prevMatTrafoValid = true;
 }
 
 #pragma endregion

@@ -368,11 +368,13 @@ void Spinner::Render(const unsigned int renderMask)
       const float angle = m_phitspinner ? m_phitspinner->m_spinnerMover.m_angle : clamp(0.f, ANGTORAD(min(m_d.m_angleMin, m_d.m_angleMax)), ANGTORAD(max(m_d.m_angleMin, m_d.m_angleMax)));
       const Matrix3D vertMatrix = (Matrix3D::MatrixRotateX(-angle) * Matrix3D::MatrixRotateZ(ANGTORAD(m_d.m_rotation))) * Matrix3D::MatrixScale(m_d.m_length, m_d.m_length, m_d.m_length)
          * Matrix3D::MatrixTranslate(m_d.m_vCenter.x, m_d.m_vCenter.y, m_posZ);
-      m_renderer->UpdateBasicShaderMatrix(vertMatrix);
+      m_renderer->UpdateBasicShaderMatrix(vertMatrix, m_prevMatTrafoValid ? &m_prevMatTrafo : nullptr);
       Vertex3Ds pos(m_d.m_vCenter.x, m_d.m_vCenter.y, m_posZ);
       m_renderer->m_renderDevice->m_basicShader->SetBasic(m_ptable->GetMaterial(m_d.m_szMaterial), m_ptable->GetImage(m_d.m_szImage));
       m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_plateMeshBuffer, RenderDevice::TRIANGLELIST, 0, spinnerPlateNumFaces);
       m_renderer->UpdateBasicShaderMatrix();
+      m_prevMatTrafo = vertMatrix;
+      m_prevMatTrafoValid = true;
    }
 }
 

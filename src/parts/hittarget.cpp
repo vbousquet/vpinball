@@ -625,7 +625,7 @@ void HitTarget::Render(const unsigned int renderMask)
          * Matrix3D::MatrixTranslate(m_d.m_vPosition.x, m_d.m_vPosition.y, m_d.m_vPosition.z + m_moveAnimationOffset)
       : (Matrix3D::MatrixScale(m_d.m_vSize.x, m_d.m_vSize.y, m_d.m_vSize.z) * Matrix3D::MatrixRotateX(ANGTORAD(m_moveAnimationOffset)) * Matrix3D::MatrixRotateZ(ANGTORAD(m_d.m_rotZ)))
          * Matrix3D::MatrixTranslate(m_d.m_vPosition.x, m_d.m_vPosition.y, m_d.m_vPosition.z);
-   m_renderer->UpdateBasicShaderMatrix(targetMatrix);
+   m_renderer->UpdateBasicShaderMatrix(targetMatrix, m_prevMatTrafoValid ? &m_prevMatTrafo : nullptr);
 
    if (isUIPass)
    {
@@ -644,6 +644,8 @@ void HitTarget::Render(const unsigned int renderMask)
       m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::fDisableLighting_top_below, 0.f, 0.f, 0.f, 0.f);
    }
    m_renderer->UpdateBasicShaderMatrix();
+   m_prevMatTrafo = targetMatrix;
+   m_prevMatTrafoValid = true;
 }
 
 #pragma endregion

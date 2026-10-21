@@ -808,10 +808,24 @@ void Plunger::Render(const unsigned int renderMask)
    const int frame0 = (int)((pa.m_pos - pa.m_frameStart) / (pa.m_frameEnd - pa.m_frameStart) * (float)(m_cframes - 1) + 0.5f);
    const int frame = (frame0 < 0 ? 0 : frame0 >= m_cframes ? m_cframes - 1 : frame0);
 
+   // Approximate object motion for the depth prepass motion vectors. The baked frames encode a
+   // rigid stroke translation along -Y (the rod/shaft) plus a non rigid spring squash that a
+   // single object matrix cannot represent, so we only model the dominant stroke translation.
+   // Residual error is limited to the spring part, bounded by the squash amplitude.
+   if (m_prevFramePosValid && pa.m_frameEnd != pa.m_frameStart)
+   {
+      const float strokeDy = m_d.m_stroke * (pa.m_pos - m_prevFramePos) / (pa.m_frameEnd - pa.m_frameStart);
+      const Matrix3D matPrev = Matrix3D::MatrixTranslate(0.f, strokeDy, 0.f);
+      m_renderer->UpdateBasicShaderMatrix(Matrix3D::MatrixIdentity(), &matPrev);
+   }
+   m_prevFramePos = pa.m_pos;
+   m_prevFramePosValid = true;
+
    m_renderer->m_renderDevice->ResetRenderState();
    m_renderer->m_renderDevice->m_basicShader->SetBasic(m_ptable->GetMaterial(m_d.m_szMaterial), m_ptable->GetImage(m_d.m_szImage));
-   m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f /*m_boundingSphereRadius*/, m_meshBuffer, 
-      RenderDevice::TRIANGLELIST, frame * m_indicesPerFrame, m_indicesPerFrame);
+   m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f /*m_boundingSphereRadius*/, m_meshBuffer, RenderDevice::TRIANGLELIST,
+      frame * m_indicesPerFrame, m_indicesPerFrame);
+   m_renderer->UpdateBasicShaderMatrix();
 }
 
 #pragma endregion
