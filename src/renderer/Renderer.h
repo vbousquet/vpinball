@@ -248,6 +248,7 @@ public:
 
    RenderProbe::ReflectionMode GetMaxReflectionMode() const;
    int GetAOMode() const; // 0=Off, 1=Static, 2=Dynamic
+   bool IsMotionVectorPrepass() const; // True when the shaded depth prepass also generates camera motion vectors
 
    bool UseAnisoFiltering() const;
    void SetAnisoFiltering(bool enable);

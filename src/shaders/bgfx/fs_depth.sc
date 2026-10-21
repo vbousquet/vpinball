@@ -4,6 +4,9 @@
 // - base variant only performs alpha testing/discards, as color writes are masked out
 // - OUT_NORMAL variant outputs the view space shaded normal xy (normal mapping applied), with the
 //   z component reconstructed by consumers (normal is flipped to always face the viewer)
+// - OUT_NORMAL+MOTION additionally outputs the camera motion vector in zw: the screen space UV
+//   displacement of the pixel between the previous and the current frame, consumed by the AO
+//   temporal accumulation when the camera is dynamic (VR or headtracking)
 
 // Inputs must exactly match the vertex shader outputs (vs_depth & vs_ball)
 $input v_worldPos, v_normal, v_texcoord0
@@ -12,6 +15,9 @@ $input v_worldPos, v_normal, v_texcoord0
 #endif
 #ifdef CLIP
     $input v_clipDistance
+#endif
+#ifdef MOTION
+    $input v_clipPos, v_prevClipPos
 #endif
 
 #include "common.sh"
@@ -110,7 +116,23 @@ void main() {
       // Flip the normal to always face the viewer so that z can be reconstructed from xy
       if (N.z < 0.0)
          N = -N;
-      gl_FragColor = vec4(N.xy, 0.0, 1.0);
+      #ifdef MOTION
+         // Screen space UV displacement between the previous and the current frame camera transforms,
+         // evaluated per pixel (the interpolated clip positions are divided here)
+         vec2 motion = vec2(0.0, 0.0);
+         BRANCH if (v_prevClipPos.w > 0.0)
+         {
+            const vec2 delta = v_clipPos.xy / v_clipPos.w - v_prevClipPos.xy / v_prevClipPos.w;
+            #if TEX_V_IS_UP
+               motion = 0.5 * delta;
+            #else
+               motion = vec2(0.5 * delta.x, -0.5 * delta.y);
+            #endif
+         }
+         gl_FragColor = vec4(N.xy, motion);
+      #else
+         gl_FragColor = vec4(N.xy, 0.0, 1.0);
+      #endif
    #else
       gl_FragColor = vec4_splat(0.0);
    #endif

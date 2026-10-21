@@ -2386,10 +2386,25 @@ int Renderer::GetAOMode() const // 0=Off, 1=Static, 2=Dynamic
    // We must evaluate this dynamically since AO scale and enabled/disable can be changed from script
    if (m_disableAO || !m_table->m_enableAO || !m_renderDevice->DepthBufferReadBackAvailable() || m_table->m_AOScale == 0.f)
       return 0;
-   // The existing implementation suffers from high temporal artefacts that make it unsuitable for dynamic camera situations
-   if (m_stereo3D == STEREO_VR)
+   // Dynamic AO under a moving camera needs the depth prepass motion vectors to reproject its temporal
+   // accumulation (the depth-only path smears): in VR only enable it when the depth prepass is active, the
+   // shaded normals it relies on being then emitted by need without requiring the dedicated setting
+   if (m_stereo3D == STEREO_VR && !IsUsingDepthPrepass())
       return 0;
    if (m_dynamicAO)
       return 2;
    return IsUsingStaticPrepass() ? 1 : 0; // If AO is static prepass only, and we are running without it, disable AO
+}
+
+bool Renderer::IsMotionVectorPrepass() const
+{
+   // Camera motion vectors are written to the 2 free channels of the shaded depth prepass target to feed the AO
+   // temporal reprojection, only when the camera can be dynamic. For the time being this is VR only (headtracking
+   // is not supported yet) and only implemented for the BGFX backend. Being needed by AO, this also activates the
+   // shaded prepass normals even when the prepass setting does not force them.
+#if defined(ENABLE_BGFX)
+   return m_stereo3D == STEREO_VR && GetAOMode() == 2;
+#else
+   return false;
+#endif
 }

@@ -466,6 +466,25 @@ void RenderView::UpdateBasicShaderMatrix(const Matrix3D& objectTrafo)
    rd->m_DMDShader->SetMatrix(ShaderUniform::matRotViewProj, &m_mvp.GetRotViewProj(0), m_mvp.m_nEyes);
    rd->m_DMDShader->SetVector(ShaderUniform::cameraPosWorld, &m_mvp.GetCameraPos(0), m_mvp.m_nEyes);
 
+   // Previous frame camera transform of the active space reference, consumed by the motion vector
+   // variants of the depth prepass (falls back to the current camera until a history is available)
+   if (m_renderer->IsMotionVectorPrepass())
+   {
+      const int refIndex = clamp(static_cast<int>(m_mvpSpaceReference), 0, 3);
+      const bool hasPrev = (m_prevFrameCamViewProjMask & (1u << refIndex)) != 0;
+      const bool hasCur = hasPrev || (m_curFrameCamViewProjMask & (1u << refIndex)) != 0;
+      rd->m_basicShader->SetMatrix(ShaderUniform::matRotViewProjPrev,
+         hasPrev     ? m_prevFrameCamViewProj[refIndex]
+            : hasCur ? m_curFrameCamViewProj[refIndex]
+                     : &m_mvp.GetRotViewProj(0),
+         m_mvp.m_nEyes);
+      rd->m_basicShader->SetVector(ShaderUniform::cameraPosWorldPrev,
+         hasPrev     ? m_prevFrameCamPos[refIndex]
+            : hasCur ? m_curFrameCamPos[refIndex]
+                     : &m_mvp.GetCameraPos(0),
+         m_mvp.m_nEyes);
+   }
+
 #elif defined(ENABLE_DX9)
    rd->m_basicShader->SetMatrix(ShaderUniform::matWorld, &m_mvp.GetModel());
    rd->m_basicShader->SetMatrix(ShaderUniform::matView, &m_mvp.GetView(0), m_mvp.m_nEyes);
@@ -534,6 +553,22 @@ void RenderView::UpdateBallShaderMatrix()
    rd->m_ballShader->SetMatrix(ShaderUniform::matView, &m_mvp.GetView(0), m_mvp.m_nEyes);
    rd->m_ballShader->SetMatrix(ShaderUniform::matRotViewProj, &m_mvp.GetRotViewProj(0), m_mvp.m_nEyes);
    rd->m_ballShader->SetVector(ShaderUniform::cameraPosWorld, &m_mvp.GetCameraPos(0), m_mvp.m_nEyes);
+   if (m_renderer->IsMotionVectorPrepass())
+   {
+      const int refIndex = clamp(static_cast<int>(m_mvpSpaceReference), 0, 3);
+      const bool hasPrev = (m_prevFrameCamViewProjMask & (1u << refIndex)) != 0;
+      const bool hasCur = hasPrev || (m_curFrameCamViewProjMask & (1u << refIndex)) != 0;
+      rd->m_ballShader->SetMatrix(ShaderUniform::matRotViewProjPrev,
+         hasPrev     ? m_prevFrameCamViewProj[refIndex]
+            : hasCur ? m_curFrameCamViewProj[refIndex]
+                     : &m_mvp.GetRotViewProj(0),
+         m_mvp.m_nEyes);
+      rd->m_ballShader->SetVector(ShaderUniform::cameraPosWorldPrev,
+         hasPrev     ? m_prevFrameCamPos[refIndex]
+            : hasCur ? m_curFrameCamPos[refIndex]
+                     : &m_mvp.GetCameraPos(0),
+         m_mvp.m_nEyes);
+   }
 
 #elif defined(ENABLE_DX9)
    rd->m_ballShader->SetMatrix(ShaderUniform::matWorldViewProj, &m_mvp.GetModelViewProj(0), m_mvp.m_nEyes);
@@ -685,6 +720,21 @@ void RenderView::SetSpaceReference(PartGroupData::SpaceReference spaceReference,
    }
 
    m_mvpSpaceReference = spaceReference;
+
+   // Record the camera transform under which this frame's scene is rendered for this space reference, to feed
+   // the depth prepass motion vectors (skipped for passes which do not contribute to the scene prepass, e.g.
+   // the reflected passes whose reflected view would break the recorded camera history)
+   if (m_renderer->IsMotionVectorPrepass() && !r->IsRenderPass(Renderer::REFLECTION_PASS))
+   {
+      const int refIndex = clamp(static_cast<int>(spaceReference), 0, 3);
+      for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
+      {
+         m_curFrameCamViewProj[refIndex][eye] = m_mvp.GetRotViewProj(eye);
+         m_curFrameCamPos[refIndex][eye] = m_mvp.GetCameraPos(eye);
+      }
+      m_curFrameCamViewProjMask |= 1u << refIndex;
+   }
+
    UpdateBasicShaderMatrix();
    UpdateBallShaderMatrix();
 }
@@ -737,9 +787,12 @@ RenderTarget* RenderView::GetDepthPrepassRenderTarget()
    // with the scene since blended parts may write to the depth buffer, and prepopulating them in the scene depth
    // would wrongly cull the parts rendered before them but behind them (besides, MSAA depth can not be shared).
    // In 'Depth & Shaded Normals' mode, its color attachment holds the view space shaded normals (xy, fp16).
+   // When camera motion vectors are generated (dynamic AO under a dynamic camera, e.g. VR), the target is
+   // promoted to RGBA16F, the 2 additional channels holding the screen space motion vector.
    // The scene's render targets ping pong between the two back buffer render targets (previous frame history), so
    // one prepass target is kept per scene render target, recreated on format or surface change.
-   const colorFormat format = m_renderer->m_depthPrepassMode >= 2 ? colorFormat::RG16F : colorFormat::GREY8;
+   const colorFormat format
+      = m_renderer->m_renderDevice->m_depthPrepassMotion ? colorFormat::RGBA16F : m_renderer->m_depthPrepassMode >= 2 ? colorFormat::RG16F : colorFormat::GREY8;
    RenderTarget* const sceneRT = GetMSAABackBufferTexture();
    for (int i = 0; i < 2; i++)
    {
@@ -773,8 +826,13 @@ void RenderView::RenderStatics()
    // commands that write to the depth buffer, into a dedicated non-MSAA depth surface (the scene depth can not be
    // shared since blended parts may write to it, breaking rendering of the parts behind them).
    const bool useDepthPrepass = IsUsingDepthPrepass();
+   // The shaded normals are emitted when the setting forces them, or when they are actually needed: dynamic AO
+   // under a moving camera consumes them and needs the RGBA16F target holding the camera motion vectors
+   rd->m_depthPrepassNormals = useDepthPrepass && (m_renderer->m_depthPrepassMode >= 2 || m_renderer->IsMotionVectorPrepass());
+   // Camera motion vectors are generated when dynamic AO can consume them to reproject its temporal
+   // accumulation under a dynamic camera (they use the 2 free channels of the target which is promoted to RGBA16F)
+   rd->m_depthPrepassMotion = rd->m_depthPrepassNormals && m_renderer->IsMotionVectorPrepass();
    rd->m_depthPrepassTarget = useDepthPrepass ? GetDepthPrepassRenderTarget() : nullptr;
-   rd->m_depthPrepassNormals = useDepthPrepass && m_renderer->m_depthPrepassMode >= 2;
 
    if (!useStaticPrepass)
    {
@@ -1200,7 +1258,9 @@ void RenderView::UpdateAmbientOcclusion(RenderTarget* renderedRT, unsigned int j
       matProjInv[eye].Invert();
    }
    rd->m_FBShader->SetMatrix(ShaderUniform::matProjInv, &matProjInv[0], nEyes);
-   rd->m_FBShader->SetTechnique(useDepthPrepass ? ShaderTechnique::AO_shaded : ShaderTechnique::AO);
+   // When the depth prepass generated camera motion vectors (dynamic AO under a dynamic camera, e.g. VR),
+   // they are sampled along the normals to reproject the previous frame AO history
+   rd->m_FBShader->SetTechnique(useDepthPrepass ? (rd->m_depthPrepassMotion ? ShaderTechnique::AO_shaded_mv : ShaderTechnique::AO_shaded) : ShaderTechnique::AO);
    rd->DrawFullscreenTexturedQuad(rd->m_FBShader);
    rd->m_FBShader->SetTextureNull(ShaderUniform::tex_normals);
 
@@ -1413,9 +1473,9 @@ void RenderView::SetupTonemapping(RenderTarget* renderedRT, RenderTarget* tonema
       rd->AddRenderTargetDependency(prepassRT);
       rd->m_FBShader->SetTexture(ShaderUniform::tex_depth, prepassRT->GetDepthSampler());
    }
-   else if (infoMode == IF_NORMAL)
+   else if (infoMode == IF_NORMAL || infoMode == IF_MOTION_VECTORS)
    {
-      tonemapTechnique = ShaderTechnique::fb_prepass_normal;
+      tonemapTechnique = infoMode == IF_NORMAL ? ShaderTechnique::fb_prepass_normal : ShaderTechnique::fb_prepass_motion;
       RenderTarget* const prepassRT = GetDepthPrepassRenderTarget();
       rd->AddRenderTargetDependency(prepassRT);
       rd->m_FBShader->SetTexture(ShaderUniform::tex_normals, prepassRT->GetColorSampler());
@@ -2133,6 +2193,17 @@ void RenderView::Render()
       for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
          m_playfieldView[eye] = m_mvp.GetView(eye);
    }
+   // Roll the camera transform history consumed by the depth prepass motion vectors
+   m_prevFrameCamViewProjMask = m_curFrameCamViewProjMask;
+   m_curFrameCamViewProjMask = 0;
+   for (int i = 0; i < 4; i++)
+      if (m_prevFrameCamViewProjMask & (1u << i))
+         for (int eye = 0; eye < 2; eye++)
+         {
+            m_prevFrameCamViewProj[i][eye] = m_curFrameCamViewProj[i][eye];
+            m_prevFrameCamPos[i][eye] = m_curFrameCamPos[i][eye];
+         }
+
    // For VR, the headset pose is updated in SetSpaceReference (through VRDevice::UpdateVRPosition)
    SetSpaceReference(PartGroupData::SpaceReference::SR_PLAYFIELD, true);
 
