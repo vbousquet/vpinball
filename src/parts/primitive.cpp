@@ -950,13 +950,16 @@ void Primitive::Render(const unsigned int renderMask)
       RecalculateMatrices();
       if (m_vertexBufferRegenerate)
       {
+         // Vertex (keyframe/regen) motion is not captured by matWorldPrev and may cause visual glitches in the depth prepass motion vectors
          m_mesh.UploadToVB(m_meshBuffer->m_vb, m_currentFrame);
          m_vertexBufferRegenerate = false;
       }
    }
 
    // set transform
-   m_renderer->UpdateBasicShaderMatrix(m_fullMatrix);
+   m_renderer->UpdateBasicShaderMatrix(m_fullMatrix, m_prevFullMatrixValid ? &m_prevFullMatrix : nullptr);
+   m_prevFullMatrix = m_fullMatrix;
+   m_prevFullMatrixValid = true;
 
    if (isUIPass)
    {

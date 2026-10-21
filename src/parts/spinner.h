@@ -102,6 +102,8 @@ private:
    std::shared_ptr<MeshBuffer> m_bracketEdgeMeshBuffer; // Editor wireframes, built on demand
    std::shared_ptr<MeshBuffer> m_plateEdgeMeshBuffer;
    Matrix3D m_fullMatrix;
+   Matrix3D m_prevMatTrafo; // Previous frame plate transform, for the depth prepass motion vectors
+   bool m_prevMatTrafoValid = false;
 
    float m_posZ;
 

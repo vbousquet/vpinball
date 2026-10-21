@@ -626,7 +626,6 @@ void HitTarget::Render(const unsigned int renderMask)
          * Matrix3D::MatrixTranslate(m_d.m_vPosition.x, m_d.m_vPosition.y, m_d.m_vPosition.z + m_moveAnimationOffset)
       : (Matrix3D::MatrixScale(m_d.m_vSize.x, m_d.m_vSize.y, m_d.m_vSize.z) * Matrix3D::MatrixRotateX(ANGTORAD(m_moveAnimationOffset)) * Matrix3D::MatrixRotateZ(ANGTORAD(m_d.m_rotZ)))
          * Matrix3D::MatrixTranslate(m_d.m_vPosition.x, m_d.m_vPosition.y, m_d.m_vPosition.z);
-
    RenderMeshDesc body;
    body.mesh = m_meshBuffer;
    body.indexCount = m_numIndices;
@@ -639,6 +638,7 @@ void HitTarget::Render(const unsigned int renderMask)
    body.edgeTriCount = m_numIndices;
    body.edgeTriIndices16 = true;
    body.edgeVertices = m_vertices;
+   body.prevTransform = m_prevMatTrafoValid ? &m_prevMatTrafo : nullptr;
 
    VisualMaterial material;
    if (!isUIPass)
@@ -654,6 +654,8 @@ void HitTarget::Render(const unsigned int renderMask)
    m_renderer->RenderMesh(renderMask, body, material);
    if (!isUIPass)
       m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::fDisableLighting_top_below, 0.f, 0.f, 0.f, 0.f);
+   m_prevMatTrafo = targetMatrix;
+   m_prevMatTrafoValid = true;
 }
 
 #pragma endregion

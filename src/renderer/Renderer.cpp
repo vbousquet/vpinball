@@ -1335,7 +1335,7 @@ void Renderer::SetupShaders()
 #endif
 }
 
-void Renderer::UpdateBasicShaderMatrix(const Matrix3D& objectTrafo)
+void Renderer::UpdateBasicShaderMatrix(const Matrix3D& objectTrafo, const Matrix3D* const objectTrafoPrev)
 {
    m_mvp.SetModel(objectTrafo);
 
@@ -1359,8 +1359,9 @@ void Renderer::UpdateBasicShaderMatrix(const Matrix3D& objectTrafo)
    m_renderDevice->m_DMDShader->SetMatrix(ShaderUniform::matRotViewProj, &m_mvp.GetRotViewProj(0), m_mvp.m_nEyes);
    m_renderDevice->m_DMDShader->SetVector(ShaderUniform::cameraPosWorld, &m_mvp.GetCameraPos(0), m_mvp.m_nEyes);
 
-   // Previous frame camera transform of the active space reference, consumed by the motion vector
-   // variants of the depth prepass (falls back to the current camera until a history is available)
+   // Previous frame camera transform of the active space reference and previous frame object transform,
+   // consumed by the motion vector variants of the depth prepass (fall back to the current transforms
+   // until a history is available)
    if (IsMotionVectorPrepass())
    {
       const int refIndex = clamp(static_cast<int>(m_mvpSpaceReference), 0, 3);
@@ -1376,6 +1377,7 @@ void Renderer::UpdateBasicShaderMatrix(const Matrix3D& objectTrafo)
             : hasCur ? m_curFrameCamPos[refIndex]
                      : &m_mvp.GetCameraPos(0),
          m_mvp.m_nEyes);
+      m_renderDevice->m_basicShader->SetMatrix(ShaderUniform::matWorldPrev, objectTrafoPrev ? objectTrafoPrev : &objectTrafo);
    }
 
 #elif defined(ENABLE_DX9)
@@ -2052,7 +2054,7 @@ void Renderer::RenderMesh(const unsigned int renderMask, RenderMeshDesc& draw, c
 {
    assert(draw.mesh != nullptr);
    if (draw.transform != nullptr)
-      UpdateBasicShaderMatrix(*draw.transform);
+      UpdateBasicShaderMatrix(*draw.transform, draw.prevTransform);
 
    if (renderMask & UI_FILL)
    {

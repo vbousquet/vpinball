@@ -589,6 +589,7 @@ void Rubber::Render(const unsigned int renderMask)
       return;
 
    if (m_dynamicVertexBufferRegenerate && !m_d.m_staticRendering)
+      // Shape regeneration is not captured by matWorldPrev and may cause visual glitches in the depth prepass motion vectors
       UpdateRubber(true, m_d.m_height);
 
    RenderMeshDesc body;

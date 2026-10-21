@@ -614,12 +614,15 @@ void Flipper::Render(const unsigned int renderMask)
    base.indexCount = flipperBaseNumIndices;
    base.sortCenter = m_boundingSphereCenter;
    base.transform = &matTrafo;
+   base.prevTransform = m_prevMatTrafoValid ? &m_prevMatTrafo : nullptr;
    base.uiEdgeMesh = &m_meshEdgeBuffer;
    base.edgeMode = UIEdgeMode::Outline;
    base.edgeTriIndices = flipperBaseIndices;
    base.edgeTriCount = flipperBaseNumIndices;
    base.edgeTriIndices16 = true;
    base.edgeVertices = flipperBaseMesh;
+   m_prevMatTrafo = matTrafo;
+   m_prevMatTrafoValid = true;
 
    RenderMeshDesc rubber = base;
    rubber.startIndex = flipperBaseNumIndices;

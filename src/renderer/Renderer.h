@@ -60,6 +60,7 @@ struct RenderMeshDesc
    Vertex3Ds sortCenter; // Center used for transparency sorting
    float depthBias = 0.f;
    const Matrix3D* transform = nullptr; // Optional object transform, applied while drawing
+   const Matrix3D* prevTransform = nullptr; // Optional previous object transform for motion vectors
    bool transparent = false; // True to sort the draw with the transparent commands
 
    std::shared_ptr<MeshBuffer>* uiFillMesh = nullptr; // Optional UI fill mesh (defaults to 'mesh')
@@ -96,7 +97,7 @@ public:
    Vertex2D BackdropToClip(const Vertex2D& pos) const; // Maps a point in desktop backdrop coordinates (0..EDITOR_BG_WIDTH, 0..EDITOR_BG_HEIGHT) to clip space, going through the editor's orthographic camera when editing the backdrop in the live editor, or to the full render target otherwise
 
    void MarkShaderDirty() { m_shaderDirty = true; }
-   void UpdateBasicShaderMatrix(const Matrix3D& objectTrafo = Matrix3D::MatrixIdentity());
+   void UpdateBasicShaderMatrix(const Matrix3D& objectTrafo = Matrix3D::MatrixIdentity(), const Matrix3D* const objectTrafoPrev = nullptr);
    void UpdateBallShaderMatrix();
    void UpdateDesktopBackdropShaderMatrix(bool basic, bool light, bool flasherDMD);
    void UpdateStereoShaderState();

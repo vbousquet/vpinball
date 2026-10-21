@@ -814,6 +814,20 @@ void Plunger::Render(const unsigned int renderMask)
    body.indexCount = m_indicesPerFrame;
    body.sortCenter = m_boundingSphereCenter;
 
+   // Approximate object motion for the depth prepass motion vectors. The baked frames encode a
+   // rigid stroke translation along -Y (the rod/shaft) plus a non rigid spring squash that a
+   // single object matrix cannot represent, so we only model the dominant stroke translation.
+   // Residual error is limited to the spring part, bounded by the squash amplitude.
+   Matrix3D matPrev = Matrix3D::MatrixIdentity();
+   if (m_prevFramePosValid && pa.m_frameEnd != pa.m_frameStart)
+   {
+      const float strokeDy = m_d.m_stroke * (pa.m_pos - m_prevFramePos) / (pa.m_frameEnd - pa.m_frameStart);
+      matPrev = Matrix3D::MatrixTranslate(0.f, strokeDy, 0.f);
+      body.prevTransform = &matPrev;
+   }
+   m_prevFramePos = pa.m_pos;
+   m_prevFramePosValid = true;
+
    VisualMaterial material;
    if (!(renderMask & (Renderer::UI_EDGES | Renderer::UI_FILL)))
    {

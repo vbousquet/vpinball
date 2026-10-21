@@ -114,6 +114,9 @@ private:
    std::shared_ptr<MeshBuffer> m_wireEdgeMeshBuffer;
    std::shared_ptr<MeshBuffer> m_bracketEdgeMeshBuffer;
 
+   Matrix3D m_prevMatTrafo; // Previous frame wire transform, for the depth prepass motion vectors
+   bool m_prevMatTrafoValid = false;
+
    const Vertex3D_NoTex2 *m_vertices = nullptr;
    const WORD            *m_indices = nullptr;
    unsigned int m_numVertices = 0;

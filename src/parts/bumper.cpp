@@ -306,6 +306,7 @@ void Bumper::Render(const unsigned int renderMask)
       ring.indexCount = bumperRingNumIndices;
       ring.sortCenter.Set(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight + ringAnimOffset);
       ring.transform = &ringMatrix;
+      ring.prevTransform = m_prevRingMatTrafoValid ? &m_prevRingMatTrafo : nullptr;
       ring.uiEdgeMesh = &m_ringEdgeBuffer;
       ring.edgeMode = UIEdgeMode::TriWire;
       ring.edgeTriIndices = bumperRingIndices;
@@ -332,6 +333,8 @@ void Bumper::Render(const unsigned int renderMask)
          material.hasTextureAlpha = material.image != nullptr && !material.image->IsOpaque();
       }
       m_renderer->RenderMesh(renderMask, ring, material);
+      m_prevRingMatTrafo = ringMatrix;
+      m_prevRingMatTrafoValid = true;
    }
 
    if (m_d.m_skirtVisible && !isStaticOnly)
@@ -339,12 +342,12 @@ void Bumper::Render(const unsigned int renderMask)
       // Skirt tilt from the last hit is applied through the object transform (see UpdateSkirt)
       const Matrix3D socketMatrix = ((Matrix3D::MatrixRotateZ(ANGTORAD(m_d.m_orientation)) * Matrix3D::MatrixRotateY(ANGTORAD(m_roty))) * Matrix3D::MatrixRotateX(ANGTORAD(m_rotx)))
          * Matrix3D::MatrixScale(m_d.m_radius, m_d.m_radius, m_d.m_heightScale) * Matrix3D::MatrixTranslate(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight + 5.0f);
-
       RenderMeshDesc socket;
       socket.mesh = m_socketMeshBuffer;
       socket.indexCount = bumperSocketNumIndices;
       socket.sortCenter.Set(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight + 5.0f);
       socket.transform = &socketMatrix;
+      socket.prevTransform = m_prevSocketMatTrafoValid ? &m_prevSocketMatTrafo : nullptr;
       socket.uiEdgeMesh = &m_socketEdgeBuffer;
       socket.edgeMode = UIEdgeMode::TriWire;
       socket.edgeTriIndices = bumperSocketIndices;
@@ -363,6 +366,8 @@ void Bumper::Render(const unsigned int renderMask)
          material.hasTextureAlpha = material.image != nullptr && !material.image->IsOpaque();
       }
       m_renderer->RenderMesh(renderMask, socket, material);
+      m_prevSocketMatTrafo = socketMatrix;
+      m_prevSocketMatTrafoValid = true;
    }
 }
 
