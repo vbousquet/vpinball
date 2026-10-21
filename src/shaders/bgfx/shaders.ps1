@@ -93,10 +93,13 @@ if ($gen_basic)
 		  # Depth prepass variants
 		  Process-Shader "fs_depth.sc"         "basic.h" ("fs_depth_" + $variant.ToLower() + "_" + $variant2.ToLower() + $stOutput[$k]) "fragment" @($stereo[$k], $variant, $variant2)
 		  Process-Shader "fs_depth.sc"         "basic.h" ("fs_depth_" + $variant.ToLower() + "_n_" + $variant2.ToLower() + $stOutput[$k]) "fragment" @($stereo[$k], $variant, $variant2, "OUT_NORMAL")
+		  Process-Shader "fs_depth.sc"         "basic.h" ("fs_depth_" + $variant.ToLower() + "_n_mv_" + $variant2.ToLower() + $stOutput[$k]) "fragment" @($stereo[$k], $variant, $variant2, "OUT_NORMAL", "MOTION")
 		}
 		Process-Shader "fs_depth.sc" "basic.h" ("fs_depth_tex_at_" + $variant2.ToLower() + $stOutput[$k]) "fragment" @($stereo[$k], "TEX", $variant2, "AT")
 		Process-Shader "fs_depth.sc" "basic.h" ("fs_depth_tex_at_n_" + $variant2.ToLower() + $stOutput[$k]) "fragment" @($stereo[$k], "TEX", $variant2, "AT", "OUT_NORMAL")
+		Process-Shader "fs_depth.sc" "basic.h" ("fs_depth_tex_at_n_mv_" + $variant2.ToLower() + $stOutput[$k]) "fragment" @($stereo[$k], "TEX", $variant2, "AT", "OUT_NORMAL", "MOTION")
 		Process-Shader "vs_depth.sc" "basic.h" ("vs_depth_" + $variant2.ToLower() + $stOutput[$k]) "vertex" @($stereo[$k], $variant2)
+		Process-Shader "vs_depth.sc" "basic.h" ("vs_depth_mv_" + $variant2.ToLower() + $stOutput[$k]) "vertex" @($stereo[$k], $variant2, "MOTION")
 	  }
 	}
 }
@@ -113,6 +116,7 @@ if ($gen_ball)
 	  foreach ($variant3 in @("CLIP", "NOCLIP"))
 	  {
 		Process-Shader "vs_ball.sc" "ball.h" ("vs_ball_" + $variant3.ToLower() + $stOutput[$k]) "vertex" @($stereo[$k], $variant3)
+		Process-Shader "vs_ball.sc" "ball.h" ("vs_ball_mv_" + $variant3.ToLower() + $stOutput[$k]) "vertex" @($stereo[$k], "MOTION", $variant3)
 		Process-Shader "vs_ball_trail.sc" "ball.h" ("vs_ball_trail_" + $variant3.ToLower() + $stOutput[$k]) "vertex" @($stereo[$k], $variant3)
 		Process-Shader "fs_ball_trail.sc" "ball.h" ("fs_ball_trail_" + $variant3.ToLower() + $stOutput[$k]) "fragment" @($stereo[$k], $variant3)
 		Process-Shader "fs_ball_debug.sc" "ball.h" ("fs_ball_debug_" + $variant3.ToLower() + $stOutput[$k]) "fragment" @($stereo[$k], $variant3)
@@ -227,6 +231,7 @@ if ($gen_postprocess)
 	  Process-Shader "fs_pp_irradiance.sc" "postprocess.h" ("fs_pp_irradiance" + $stOutput[$k]) "fragment" @($stereo[$k])
 	  Process-Shader "fs_pp_ssao.sc" "postprocess.h" ("fs_pp_ssao" + $stOutput[$k]) "fragment" @($stereo[$k])
 	  Process-Shader "fs_pp_ssao.sc" "postprocess.h" ("fs_pp_ssao_shaded" + $stOutput[$k]) "fragment" @($stereo[$k], "NORMAL_TEX")
+	  Process-Shader "fs_pp_ssao.sc" "postprocess.h" ("fs_pp_ssao_shaded_mv" + $stOutput[$k]) "fragment" @($stereo[$k], "NORMAL_TEX", "MOTION")
 	  Process-Shader "fs_pp_ssr.sc" "postprocess.h" ("fs_pp_ssr" + $stOutput[$k]) "fragment" @($stereo[$k])
 	  Process-Shader "fs_pp_ao_display.sc" "postprocess.h" ("fs_pp_ao_display" + $stOutput[$k]) "fragment" @($stereo[$k])
 	  foreach ($variant in @("FILTER", "NOFILTER"))

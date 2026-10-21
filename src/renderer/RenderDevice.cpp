@@ -2883,7 +2883,7 @@ void RenderDevice::DrawMesh(Shader* shader, const bool isTranparentPass, const V
       if (cmd->GetRenderState().GetRenderState(RenderState::ZWRITEENABLE) != RenderState::RS_TRUE || cmd->GetRenderState().GetRenderState(RenderState::ZENABLE) != RenderState::RS_TRUE)
          return;
       const ShaderTechnique tech = cmd->GetShaderState()->GetTechnique();
-      const ShaderTechnique depthTech = Shader::GetDepthPrepassTechnique(tech, m_depthPrepassNormals);
+      const ShaderTechnique depthTech = Shader::GetDepthPrepassTechnique(tech, m_depthPrepassNormals, m_depthPrepassMotion);
       cmd->GetShaderState()->SetTechnique(depthTech);
       if (m_depthPrepassNormals)
       {

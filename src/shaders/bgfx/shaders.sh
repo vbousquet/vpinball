@@ -103,10 +103,13 @@ if [ "$gen_basic" = true ]; then
                 # Depth prepass variants
                 process_shader "fs_depth.sc" "basic.h" "fs_depth_${variant_lower}_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "$variant" "$variant2"
                 process_shader "fs_depth.sc" "basic.h" "fs_depth_${variant_lower}_n_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "$variant" "$variant2" "OUT_NORMAL"
+                process_shader "fs_depth.sc" "basic.h" "fs_depth_${variant_lower}_n_mv_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "$variant" "$variant2" "OUT_NORMAL" "MOTION"
             done
             process_shader "fs_depth.sc" "basic.h" "fs_depth_tex_at_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT"
             process_shader "fs_depth.sc" "basic.h" "fs_depth_tex_at_n_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT" "OUT_NORMAL"
+            process_shader "fs_depth.sc" "basic.h" "fs_depth_tex_at_n_mv_${variant2_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "TEX" "$variant2" "AT" "OUT_NORMAL" "MOTION"
             process_shader "vs_depth.sc" "basic.h" "vs_depth_${variant2_lower}${st_output[$k]}" "vertex" "${stereo[$k]}" "$variant2"
+            process_shader "vs_depth.sc" "basic.h" "vs_depth_mv_${variant2_lower}${st_output[$k]}" "vertex" "${stereo[$k]}" "$variant2" "MOTION"
         done
     done
 fi
@@ -120,6 +123,7 @@ if [ "$gen_ball" = true ]; then
         for variant3 in "CLIP" "NOCLIP"; do
             variant3_lower=$(echo "$variant3" | tr '[:upper:]' '[:lower:]')
             process_shader "vs_ball.sc" "ball.h" "vs_ball_${variant3_lower}${st_output[$k]}" "vertex" "${stereo[$k]}" "$variant3"
+            process_shader "vs_ball.sc" "ball.h" "vs_ball_mv_${variant3_lower}${st_output[$k]}" "vertex" "${stereo[$k]}" "MOTION" "$variant3"
             process_shader "vs_ball_trail.sc" "ball.h" "vs_ball_trail_${variant3_lower}${st_output[$k]}" "vertex" "${stereo[$k]}" "$variant3"
             process_shader "fs_ball_trail.sc" "ball.h" "fs_ball_trail_${variant3_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "$variant3"
             process_shader "fs_ball_debug.sc" "ball.h" "fs_ball_debug_${variant3_lower}${st_output[$k]}" "fragment" "${stereo[$k]}" "$variant3"
@@ -223,6 +227,7 @@ if [ "$gen_postprocess" = true ]; then
         process_shader "fs_pp_irradiance.sc" "postprocess.h" "fs_pp_irradiance${st_output[$k]}" "fragment" "${stereo[$k]}"
         process_shader "fs_pp_ssao.sc" "postprocess.h" "fs_pp_ssao${st_output[$k]}" "fragment" "${stereo[$k]}"
         process_shader "fs_pp_ssao.sc" "postprocess.h" "fs_pp_ssao_shaded${st_output[$k]}" "fragment" "${stereo[$k]}" "NORMAL_TEX"
+        process_shader "fs_pp_ssao.sc" "postprocess.h" "fs_pp_ssao_shaded_mv${st_output[$k]}" "fragment" "${stereo[$k]}" "NORMAL_TEX" "MOTION"
         process_shader "fs_pp_ssr.sc" "postprocess.h" "fs_pp_ssr${st_output[$k]}" "fragment" "${stereo[$k]}"
         process_shader "fs_pp_ao_display.sc" "postprocess.h" "fs_pp_ao_display${st_output[$k]}" "fragment" "${stereo[$k]}"
         for variant in "FILTER" "NOFILTER"; do

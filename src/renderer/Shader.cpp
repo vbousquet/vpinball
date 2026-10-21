@@ -197,6 +197,16 @@ Shader::TechniqueDef Shader::shaderTechniqueNames[static_cast<unsigned int>(Shad
       ShaderUniform::orientation, ShaderUniform::clip_plane),
    SHADER_TECHNIQUE(ball_depth_n, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverse,
       ShaderUniform::orientation, ShaderUniform::clip_plane),
+   // Depth prepass variants that additionally write the camera motion vectors to the 2 free channels of the color
+   // attachment (BGFX only: they are used by the AO temporal accumulation under a dynamic camera, e.g. in VR)
+   SHADER_TECHNIQUE(basic_depth_n_mv, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matRotViewProjPrev,
+      ShaderUniform::cameraPosWorldPrev, ShaderUniform::matWorld, ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverseTranspose, ShaderUniform::u_basic_shade_mode,
+      ShaderUniform::objectSpaceNormalMap, ShaderUniform::tex_base_normalmap, ShaderUniform::clip_plane),
+   SHADER_TECHNIQUE(basic_depth_at_n_mv, ShaderUniform::layer, ShaderUniform::alphaTestValue, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matRotViewProjPrev,
+      ShaderUniform::cameraPosWorldPrev, ShaderUniform::matWorld, ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverseTranspose, ShaderUniform::u_basic_shade_mode,
+      ShaderUniform::objectSpaceNormalMap, ShaderUniform::tex_base_color, ShaderUniform::tex_base_normalmap, ShaderUniform::clip_plane),
+   SHADER_TECHNIQUE(ball_depth_n_mv, ShaderUniform::layer, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld, ShaderUniform::matRotViewProjPrev, ShaderUniform::cameraPosWorldPrev,
+      ShaderUniform::matWorldView, ShaderUniform::matWorldViewInverse, ShaderUniform::orientation, ShaderUniform::clip_plane),
 
    SHADER_TECHNIQUE(basic_DMD, ShaderUniform::glassPad, ShaderUniform::glassArea, ShaderUniform::vRes_Alpha_time, ShaderUniform::vColor_Intensity, ShaderUniform::tex_dmd),
    SHADER_TECHNIQUE(basic_DMD_world, ShaderUniform::glassPad, ShaderUniform::glassArea, ShaderUniform::matWorld, ShaderUniform::matRotViewProj, ShaderUniform::cameraPosWorld,
@@ -302,6 +312,10 @@ Shader::TechniqueDef Shader::shaderTechniqueNames[static_cast<unsigned int>(Shad
       AO, ShaderUniform::layer, ShaderUniform::w_h_height, ShaderUniform::AO_scale_timeblur, ShaderUniform::tex_fb_filtered, ShaderUniform::tex_depth, ShaderUniform::tex_ao_dither),
    SHADER_TECHNIQUE(AO_shaded, ShaderUniform::layer, ShaderUniform::w_h_height, ShaderUniform::AO_scale_timeblur, ShaderUniform::tex_fb_filtered, ShaderUniform::tex_depth,
       ShaderUniform::tex_normals, ShaderUniform::tex_ao_dither),
+   // Same as AO_shaded but also consumes the camera motion vectors written by the depth prepass to reproject the
+   // previous frame AO when the camera is dynamic (BGFX only, e.g. VR)
+   SHADER_TECHNIQUE(AO_shaded_mv, ShaderUniform::layer, ShaderUniform::w_h_height, ShaderUniform::AO_scale_timeblur, ShaderUniform::tex_fb_filtered, ShaderUniform::tex_depth,
+      ShaderUniform::tex_normals, ShaderUniform::tex_ao_dither),
    SHADER_TECHNIQUE(fb_AO, ShaderUniform::layer, ShaderUniform::w_h_height, ShaderUniform::tex_ao), // Display debug AO
    SHADER_TECHNIQUE(
       fb_AO_static, ShaderUniform::layer, ShaderUniform::w_h_height, ShaderUniform::tex_fb_filtered, ShaderUniform::tex_ao), // Apply AO during static prerender pass (no tonemapping)
@@ -403,6 +417,8 @@ ShaderUniformDef ShaderUniformDef::coreUniforms[static_cast<unsigned int>(Shader
    SHADER_UNIFORM(ShaderUniformType::Float3x4, matWorldViewInverseTranspose, 2), // DX9 & BGFX only, +1 Matrix for stereo
    SHADER_UNIFORM(ShaderUniformType::Float4x4, matRotViewProj, 2), // BGFX only, view rotation x proj (camera-relative path), +1 for stereo
    SHADER_UNIFORM(ShaderUniformType::Float4v, cameraPosWorld, 2), // BGFX only, camera world position (camera-relative path), +1 for stereo
+   SHADER_UNIFORM(ShaderUniformType::Float4x4, matRotViewProjPrev, 2), // BGFX only, previous frame view rotation x proj (depth prepass motion vectors), +1 for stereo
+   SHADER_UNIFORM(ShaderUniformType::Float4v, cameraPosWorldPrev, 2), // BGFX only, previous frame camera world position (depth prepass motion vectors), +1 for stereo
    SHADER_UNIFORM(ShaderUniformType::Float4, lightCenter_doShadow, 1), // Basic & Flasher (for ball shadows)
    SHADER_UNIFORM(ShaderUniformType::Float4v, balls, 8), // Basic & Flasher (for ball shadows)
    SHADER_UNIFORM(ShaderUniformType::Float4, staticColor_Alpha, 1), // Basic & Flasher
@@ -1002,7 +1018,7 @@ void Shader::SetTechniqueMaterial(ShaderTechnique technique, const Material& mat
    SetTechnique(tech);
 }
 
-ShaderTechnique Shader::GetDepthPrepassTechnique(const ShaderTechnique technique, const bool withNormals)
+ShaderTechnique Shader::GetDepthPrepassTechnique(const ShaderTechnique technique, const bool withNormals, const bool withMotion)
 {
    switch (technique)
    {
@@ -1012,7 +1028,7 @@ ShaderTechnique Shader::GetDepthPrepassTechnique(const ShaderTechnique technique
    case ShaderTechnique::RenderBall_SphericalMap:
    case ShaderTechnique::RenderBall_SphericalMap_DecalMode:
    case ShaderTechnique::RenderBall_Debug:
-   case ShaderTechnique::RenderBallTrail: return withNormals ? ShaderTechnique::ball_depth_n : ShaderTechnique::ball_depth;
+   case ShaderTechnique::RenderBallTrail: return withNormals ? (withMotion ? ShaderTechnique::ball_depth_n_mv : ShaderTechnique::ball_depth_n) : ShaderTechnique::ball_depth;
 
    // Alpha tested material variants (DX9 only bakes normal mapping in the technique, other backends use the u_basic_shade_mode/doNormalMapping uniforms)
    case ShaderTechnique::basic_with_texture_at_normal:
@@ -1042,10 +1058,11 @@ ShaderTechnique Shader::GetDepthPrepassTechnique(const ShaderTechnique technique
    case ShaderTechnique::basic_with_texture_at_refr_isMetal:
    case ShaderTechnique::basic_with_texture_at_refr_refl:
    case ShaderTechnique::basic_with_texture_at_refr_refl_isMetal:
-   case ShaderTechnique::bg_decal_with_texture: return withNormals ? ShaderTechnique::basic_depth_at_n : ShaderTechnique::basic_depth_at;
+   case ShaderTechnique::bg_decal_with_texture:
+      return withNormals ? (withMotion ? ShaderTechnique::basic_depth_at_n_mv : ShaderTechnique::basic_depth_at_n) : ShaderTechnique::basic_depth_at;
 
    // Everything else drawn with the basic shader (untextured or non alpha tested materials, unshaded, decals and light inserts)
-   default: return withNormals ? ShaderTechnique::basic_depth_n : ShaderTechnique::basic_depth;
+   default: return withNormals ? (withMotion ? ShaderTechnique::basic_depth_n_mv : ShaderTechnique::basic_depth_n) : ShaderTechnique::basic_depth;
    }
 }
 
@@ -1569,12 +1586,14 @@ void Shader::Load()
       BGFX_EMBEDDED_SHADER_ST_CLIP(fs_unshaded_notex), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_unshaded_notex_ballshadow), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_unshaded_tex),
       BGFX_EMBEDDED_SHADER_ST_CLIP(fs_unshaded_tex_ballshadow),
       // Depth prepass variants
-      BGFX_EMBEDDED_SHADER_ST_CLIP(vs_depth), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_notex), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_tex), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_notex_n),
-      BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_tex_n), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_tex_at), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_tex_at_n), BGFX_EMBEDDED_SHADER(vs_vr_mask),
+      BGFX_EMBEDDED_SHADER_ST_CLIP(vs_depth), BGFX_EMBEDDED_SHADER_ST_CLIP(vs_depth_mv), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_notex), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_tex),
+      BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_notex_n), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_tex_n), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_tex_at),
+      BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_tex_at_n), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_notex_n_mv), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_tex_n_mv),
+      BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_tex_at_n_mv), BGFX_EMBEDDED_SHADER(vs_vr_mask),
       // Ball shaders
-      BGFX_EMBEDDED_SHADER_ST_CLIP(vs_ball), BGFX_EMBEDDED_SHADER_ST_CLIP(vs_ball_trail), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_equirectangular_nodecal),
-      BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_equirectangular_decal), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_spherical_nodecal), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_spherical_decal),
-      BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_trail), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_debug),
+      BGFX_EMBEDDED_SHADER_ST_CLIP(vs_ball), BGFX_EMBEDDED_SHADER_ST_CLIP(vs_ball_mv), BGFX_EMBEDDED_SHADER_ST_CLIP(vs_ball_trail),
+      BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_equirectangular_nodecal), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_equirectangular_decal), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_spherical_nodecal),
+      BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_spherical_decal), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_trail), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_debug),
       // DMD, Display & Sprite shaders
       BGFX_EMBEDDED_SHADER_ST(vs_dmd_noworld), BGFX_EMBEDDED_SHADER_ST_CLIP(vs_dmd_world), BGFX_EMBEDDED_SHADER_CLIP(fs_dmd), BGFX_EMBEDDED_SHADER_CLIP(fs_display_dmd),
       BGFX_EMBEDDED_SHADER_CLIP(fs_display_seg), BGFX_EMBEDDED_SHADER_CLIP(fs_display_crt), BGFX_EMBEDDED_SHADER_CLIP(fs_display_crtnuance), BGFX_EMBEDDED_SHADER_CLIP(fs_sprite_tex),
@@ -1598,8 +1617,9 @@ void Shader::Load()
       BGFX_EMBEDDED_SHADER_ST(fs_pp_tonemap_wcg_ao_nofilter),
       // Screen Space post-processes
       BGFX_EMBEDDED_SHADER_ST(fs_pp_ao_filter), BGFX_EMBEDDED_SHADER_ST(fs_pp_ao_nofilter), BGFX_EMBEDDED_SHADER_ST(fs_pp_ao_display), BGFX_EMBEDDED_SHADER_ST(fs_pp_ssao),
-      BGFX_EMBEDDED_SHADER_ST(fs_pp_ssao_shaded), BGFX_EMBEDDED_SHADER_ST(fs_pp_bloom), BGFX_EMBEDDED_SHADER_ST(fs_pp_mirror), BGFX_EMBEDDED_SHADER_ST(fs_pp_copy),
-      BGFX_EMBEDDED_SHADER_ST(fs_pp_ssr), BGFX_EMBEDDED_SHADER_ST(fs_pp_irradiance), BGFX_EMBEDDED_SHADER_ST(fs_pp_msaa_depth), BGFX_EMBEDDED_SHADER(fs_pp_passthrough),
+      BGFX_EMBEDDED_SHADER_ST(fs_pp_ssao_shaded), BGFX_EMBEDDED_SHADER_ST(fs_pp_ssao_shaded_mv), BGFX_EMBEDDED_SHADER_ST(fs_pp_bloom), BGFX_EMBEDDED_SHADER_ST(fs_pp_mirror),
+      BGFX_EMBEDDED_SHADER_ST(fs_pp_copy), BGFX_EMBEDDED_SHADER_ST(fs_pp_ssr), BGFX_EMBEDDED_SHADER_ST(fs_pp_irradiance), BGFX_EMBEDDED_SHADER_ST(fs_pp_msaa_depth),
+      BGFX_EMBEDDED_SHADER(fs_pp_passthrough),
       // Motion Blur as post-processes
       BGFX_EMBEDDED_SHADER_ST(fs_pp_motionblur),
       // Anti-Aliasing as post-processes
@@ -1644,6 +1664,8 @@ void Shader::Load()
       loadProgram(embeddedShaders, ShaderTechnique::basic_depth_at, STEREO(vs_depth_noclip), STEREO(fs_depth_tex_at_noclip));
       loadProgram(embeddedShaders, ShaderTechnique::basic_depth_n, STEREO(vs_depth_noclip), STEREO(fs_depth_tex_n_noclip));
       loadProgram(embeddedShaders, ShaderTechnique::basic_depth_at_n, STEREO(vs_depth_noclip), STEREO(fs_depth_tex_at_n_noclip));
+      loadProgram(embeddedShaders, ShaderTechnique::basic_depth_n_mv, STEREO(vs_depth_mv_noclip), STEREO(fs_depth_tex_n_mv_noclip));
+      loadProgram(embeddedShaders, ShaderTechnique::basic_depth_at_n_mv, STEREO(vs_depth_mv_noclip), STEREO(fs_depth_tex_at_n_mv_noclip));
       // Variants with a clipping plane
       loadProgram(embeddedShaders, ShaderTechnique::basic_with_texture,       STEREO(vs_basic_tex_clip),           STEREO(fs_basic_tex_noat_clip), true);
       loadProgram(embeddedShaders, ShaderTechnique::basic_with_texture_at,    STEREO(vs_basic_tex_clip),           STEREO(fs_basic_tex_at_clip), true);
@@ -1663,6 +1685,8 @@ void Shader::Load()
       loadProgram(embeddedShaders, ShaderTechnique::basic_depth_at, STEREO(vs_depth_clip), STEREO(fs_depth_tex_at_clip), true);
       loadProgram(embeddedShaders, ShaderTechnique::basic_depth_n, STEREO(vs_depth_clip), STEREO(fs_depth_tex_n_clip), true);
       loadProgram(embeddedShaders, ShaderTechnique::basic_depth_at_n, STEREO(vs_depth_clip), STEREO(fs_depth_tex_at_n_clip), true);
+      loadProgram(embeddedShaders, ShaderTechnique::basic_depth_n_mv, STEREO(vs_depth_mv_clip), STEREO(fs_depth_tex_n_mv_clip), true);
+      loadProgram(embeddedShaders, ShaderTechnique::basic_depth_at_n_mv, STEREO(vs_depth_mv_clip), STEREO(fs_depth_tex_at_n_mv_clip), true);
       // VR masking
       if (m_isStereo)
          loadProgram(embeddedShaders, ShaderTechnique::vr_mask, "vs_vr_mask", "fs_unshaded_notex_noclip");
@@ -1677,6 +1701,7 @@ void Shader::Load()
       // Depth prepass variants (reusing the basic shader depth pass fragment shaders)
       loadProgram(embeddedShaders, ShaderTechnique::ball_depth, STEREO(vs_ball_noclip), STEREO(fs_depth_notex_noclip));
       loadProgram(embeddedShaders, ShaderTechnique::ball_depth_n, STEREO(vs_ball_noclip), STEREO(fs_depth_notex_n_noclip));
+      loadProgram(embeddedShaders, ShaderTechnique::ball_depth_n_mv, STEREO(vs_ball_mv_noclip), STEREO(fs_depth_notex_n_mv_noclip));
       // Variants with a clipping plane
       loadProgram(embeddedShaders, ShaderTechnique::RenderBall,                        STEREO(vs_ball_clip), STEREO(fs_ball_equirectangular_nodecal_clip), true);
       loadProgram(embeddedShaders, ShaderTechnique::RenderBall_DecalMode,              STEREO(vs_ball_clip), STEREO(fs_ball_equirectangular_decal_clip), true);
@@ -1686,6 +1711,7 @@ void Shader::Load()
       loadProgram(embeddedShaders, ShaderTechnique::RenderBallTrail,                   STEREO(vs_ball_trail_clip), STEREO(fs_ball_trail_clip), true);
       loadProgram(embeddedShaders, ShaderTechnique::ball_depth, STEREO(vs_ball_clip), STEREO(fs_depth_notex_clip), true);
       loadProgram(embeddedShaders, ShaderTechnique::ball_depth_n, STEREO(vs_ball_clip), STEREO(fs_depth_notex_n_clip), true);
+      loadProgram(embeddedShaders, ShaderTechnique::ball_depth_n_mv, STEREO(vs_ball_mv_clip), STEREO(fs_depth_notex_n_mv_clip), true);
       break;
    case DMD_SHADER:
       loadProgram(embeddedShaders, ShaderTechnique::basic_DMD,         STEREO(vs_dmd_noworld),      "fs_dmd_noclip");
@@ -1758,6 +1784,7 @@ void Shader::Load()
       // Ambient Occlusion and misc post process (SSR, Bloom, mirror, ...)
       loadProgram(embeddedShaders, ShaderTechnique::AO, STEREO(vs_postprocess), STEREO(fs_pp_ssao));
       loadProgram(embeddedShaders, ShaderTechnique::AO_shaded, STEREO(vs_postprocess), STEREO(fs_pp_ssao_shaded));
+      loadProgram(embeddedShaders, ShaderTechnique::AO_shaded_mv, STEREO(vs_postprocess), STEREO(fs_pp_ssao_shaded_mv));
       loadProgram(embeddedShaders, ShaderTechnique::fb_AO, STEREO(vs_postprocess), STEREO(fs_pp_ao_display));
       loadProgram(embeddedShaders, ShaderTechnique::fb_AO_static, STEREO(vs_postprocess), STEREO(fs_pp_ao_filter));
       loadProgram(embeddedShaders, ShaderTechnique::fb_AO_no_filter_static, STEREO(vs_postprocess), STEREO(fs_pp_ao_nofilter));

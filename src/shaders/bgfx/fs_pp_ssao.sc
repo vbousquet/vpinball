@@ -118,9 +118,16 @@ void main()
 	}
 	// weight with result(s) from previous frames
 	const float ao = 1.0 - total_strength * occlusion;
-	gl_FragColor = vec4((texStereoNoLod(tex_fb_filtered, uv0).x //abuse bilerp for filtering (by using half texel/pixel shift)
-	                    +texStereoNoLod(tex_fb_filtered, uv1).x
-	                    +texStereoNoLod(tex_fb_filtered, vec2(uv0.x,uv1.y)).x
-	                    +texStereoNoLod(tex_fb_filtered, vec2(uv1.x,uv0.y)).x)
+	#if defined(NORMAL_TEX) && defined(MOTION)
+		// Reproject the previous frame AO using the camera motion vectors stored in the prepass (avoids
+		// smearing the temporal accumulation when the camera is dynamic, e.g. VR or headtracking)
+		const vec2 mv = texStereoNoLod(tex_normals, u).zw;
+	#else
+		const vec2 mv = vec2_splat(0.0);
+	#endif
+	gl_FragColor = vec4((texStereoNoLod(tex_fb_filtered, uv0 - mv).x //abuse bilerp for filtering (by using half texel/pixel shift)
+	                    +texStereoNoLod(tex_fb_filtered, uv1 - mv).x
+	                    +texStereoNoLod(tex_fb_filtered, vec2(uv0.x,uv1.y) - mv).x
+	                    +texStereoNoLod(tex_fb_filtered, vec2(uv1.x,uv0.y) - mv).x)
 		*(0.25*(1.0-AO_scale_timeblur.y))+saturate(ao /*+base*/)*AO_scale_timeblur.y, 0.,0.,0.);
 }

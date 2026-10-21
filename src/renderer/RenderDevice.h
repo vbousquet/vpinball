@@ -246,6 +246,7 @@ public:
 
    RenderTarget* m_depthPrepassTarget = nullptr; // When set, draw commands of passes flagged with RenderPass::m_emitDepthPrepass that write to the depth buffer are cloned into the pass targeting it
    bool m_depthPrepassNormals = false; // When set, the depth prepass also writes view space shaded normals to its color attachment
+   bool m_depthPrepassMotion = false; // When set, the shaded normals depth prepass target is promoted to RGBA16F and also writes the camera motion vectors to its 2 free channels
 
 private:
    const bool m_isAnaglyph;
