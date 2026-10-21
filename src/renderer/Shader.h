@@ -61,6 +61,7 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(RenderBallTrail),
    // OpenGL only has the first variant. DX9 needs all of them due to shader compiler limitation
    SHADER_TECHNIQUE(basic_with_texture),
+   // OpenGL only has the first variant. DX9 needs all of them due to shader compiler limitation
    SHADER_TECHNIQUE(basic_with_texture_isMetal),
    SHADER_TECHNIQUE(basic_with_texture_normal),
    SHADER_TECHNIQUE(basic_with_texture_normal_isMetal),
@@ -138,6 +139,11 @@ enum class ShaderTechnique : unsigned int
 
    SHADER_TECHNIQUE(basic_DMD),
    SHADER_TECHNIQUE(basic_DMD_world),
+   // Depth prepass variants that additionally write the camera motion vectors to the 2 free channels of the color
+   // attachment (BGFX only: they are used by the AO temporal accumulation under a dynamic camera, e.g. in VR)
+   SHADER_TECHNIQUE(basic_depth_n_mv),
+   SHADER_TECHNIQUE(basic_depth_at_n_mv),
+   SHADER_TECHNIQUE(ball_depth_n_mv),
 
    SHADER_TECHNIQUE(display_DMD),
    SHADER_TECHNIQUE(display_DMD_world),
@@ -178,6 +184,7 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(fb_wcgtonemap_AO),
    SHADER_TECHNIQUE(fb_wcgtonemap_no_filter),
    SHADER_TECHNIQUE(fb_wcgtonemap_AO_no_filter),
+   // Same as above but built with the Nuance-CRT filter, the renderer picking between them per display (see Renderer::SetupCRTRender)
 
    SHADER_TECHNIQUE(fb_blur_horiz7x7),
    SHADER_TECHNIQUE(fb_blur_vert7x7),
@@ -203,6 +210,7 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(fb_AO), // Display debug AO
    SHADER_TECHNIQUE(fb_prepass_depth), // Display debug depth prepass depth attachment
    SHADER_TECHNIQUE(fb_prepass_normal), // Display debug depth prepass shaded normals
+   SHADER_TECHNIQUE(fb_prepass_motion), // Display debug depth prepass motion vectors
    SHADER_TECHNIQUE(fb_AO_static), // Apply AO during static prerender pass (no tonemapping)
    SHADER_TECHNIQUE(fb_AO_no_filter_static), // Apply AO during static prerender pass (no tonemapping)
    SHADER_TECHNIQUE(fb_motionblur),
@@ -210,6 +218,9 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(fb_mirror),
    SHADER_TECHNIQUE(fb_copy),
    SHADER_TECHNIQUE(SSReflection),
+   // Same as AO_shaded but also consumes the camera motion vectors written by the depth prepass to reproject the
+   // previous frame AO when the camera is dynamic (BGFX only, e.g. VR)
+   SHADER_TECHNIQUE(AO_shaded_mv),
 #ifdef ENABLE_BGFX
    SHADER_TECHNIQUE(fb_resolve_depth_msaa),
 #endif
@@ -286,6 +297,8 @@ enum class ShaderUniform : unsigned int
    SHADER_UNIFORM(ShaderUniformType::Float3x4, matWorldViewInverseTranspose, 2), // DX9 & BGFX only, +1 Matrix for stereo
    SHADER_UNIFORM(ShaderUniformType::Float4x4, matRotViewProj, 2), // BGFX only, view rotation x proj (camera-relative path), +1 for stereo
    SHADER_UNIFORM(ShaderUniformType::Float4v, cameraPosWorld, 2), // BGFX only, camera world position (camera-relative path), +1 for stereo
+   SHADER_UNIFORM(ShaderUniformType::Float4x4, matRotViewProjPrev, 2), // BGFX only, previous frame view rotation x proj (depth prepass motion vectors), +1 for stereo
+   SHADER_UNIFORM(ShaderUniformType::Float4v, cameraPosWorldPrev, 2), // BGFX only, previous frame camera world position (depth prepass motion vectors), +1 for stereo
    SHADER_UNIFORM(ShaderUniformType::Float4, lightCenter_doShadow, 1), // Basic & Flasher (for ball shadows)
    SHADER_UNIFORM(ShaderUniformType::Float4v, balls, 8), // Basic & Flasher (for ball shadows)
    SHADER_UNIFORM(ShaderUniformType::Float4, staticColor_Alpha, 1), // Basic & Flasher
@@ -445,7 +458,7 @@ public:
    static Shader* GetCurrentShader();
    static string GetTechniqueName(ShaderTechnique technique);
    // Selects the depth prepass variant of a (basic or ball shader) material technique
-   static ShaderTechnique GetDepthPrepassTechnique(const ShaderTechnique technique, const bool withNormals);
+   static ShaderTechnique GetDepthPrepassTechnique(const ShaderTechnique technique, const bool withNormals, const bool withMotion = false);
    // Disables the normal mapping flag of a depth prepass state whose source is not a material technique (unshaded, decals, ... holding a stale flag). No-op on DX9 which bakes it in the technique.
    static void DisableDepthPrepassNormalMapping(ShaderState* const state);
    void SetTechnique(const ShaderTechnique technique);

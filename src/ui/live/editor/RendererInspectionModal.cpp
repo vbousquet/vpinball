@@ -52,6 +52,8 @@ void RendererInspectionModal::Render()
          ImGui::RadioButton("Depth prepass depth", &m_passSelection, IF_DEPTH);
          if (m_editor.m_player->m_renderer->m_renderDevice->m_depthPrepassNormals)
             ImGui::RadioButton("Depth prepass normals", &m_passSelection, IF_NORMAL);
+         if (m_editor.m_player->m_renderer->IsMotionVectorPrepass())
+            ImGui::RadioButton("Depth prepass motion vectors", &m_passSelection, IF_MOTION_VECTORS);
       }
       for (size_t i = 0; i < m_editor.m_table->m_vrenderprobe.size(); i++)
       {
