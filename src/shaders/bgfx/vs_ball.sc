@@ -8,6 +8,12 @@ $output v_worldPos, v_normal, v_texcoord0
 #ifdef CLIP
     $output v_clipDistance
 #endif
+#ifdef MOTION
+    // Clip position under the current and previous frame camera transforms, evaluated per pixel to
+    // derive the screen space motion vector written to the 2 free channels of the prepass target
+    $output v_clipPos
+    $output v_prevClipPos
+#endif
 
 #include "common.sh"
 
@@ -35,6 +41,19 @@ uniform mat4 orientation;
 #ifdef CLIP
     uniform vec4 clip_plane;
 #endif
+#ifdef MOTION
+    #ifdef STEREO
+        uniform mat4 matRotViewProjPrev[2];
+        uniform vec4 cameraPosWorldPrev[2];
+        #define mRotViewProjPrev    matRotViewProjPrev[gl_InstanceID]
+        #define cCameraPosWorldPrev cameraPosWorldPrev[gl_InstanceID].xyz
+    #else
+        uniform mat4 matRotViewProjPrev;
+        uniform vec4 cameraPosWorldPrev;
+        #define mRotViewProjPrev    matRotViewProjPrev
+        #define cCameraPosWorldPrev cameraPosWorldPrev.xyz
+    #endif
+#endif
 
 void main()
 {
@@ -60,4 +79,8 @@ void main()
     // Camera-relative clip transform: subtract camera world pos on the GPU to keep magnitudes small.
     vec3 wpos_rel = tpos.xyz - cCameraPosWorld;
     gl_Position = mul(mRotViewProj, vec4(wpos_rel, 1.0));
+    #ifdef MOTION
+        v_clipPos = gl_Position;
+        v_prevClipPos = mul(mRotViewProjPrev, vec4(tpos.xyz - cCameraPosWorldPrev, 1.0));
+    #endif
 }
