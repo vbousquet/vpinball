@@ -372,6 +372,7 @@ void Gate::Render(const unsigned int renderMask)
    wire.indexCount = m_numIndices;
    wire.sortCenter = pos;
    wire.transform = &vertMatrix;
+   wire.prevTransform = m_prevMatTrafo.Update(vertMatrix, g_pplayer->m_overall_frames);
    wire.uiEdgeMesh = &m_wireEdgeMeshBuffer;
    wire.edgeMode = UIEdgeMode::Outline;
    wire.edgeTriIndices = m_indices;

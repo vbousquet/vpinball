@@ -622,6 +622,7 @@ void Flipper::Render(const unsigned int renderMask)
    base.indexCount = flipperBaseNumIndices;
    base.sortCenter = m_boundingSphereCenter;
    base.transform = &matTrafo;
+   base.prevTransform = m_prevMatTrafo.Update(matTrafo, g_pplayer->m_overall_frames);
    base.uiEdgeMesh = &m_meshEdgeBuffer;
    base.edgeMode = UIEdgeMode::Outline;
    base.edgeTriIndices = flipperBaseIndices;

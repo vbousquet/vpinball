@@ -375,6 +375,7 @@ void Spinner::Render(const unsigned int renderMask)
    plate.edgeTriCount = spinnerPlateNumFaces;
    plate.edgeTriIndices16 = true;
    plate.edgeVertices = spinnerPlate;
+   plate.prevTransform = m_prevMatTrafo.Update(vertMatrix, g_pplayer->m_overall_frames);
 
    Material bracketMat;
    VisualMaterial bracketMaterial;
@@ -404,7 +405,9 @@ void Spinner::Render(const unsigned int renderMask)
 
    const bool plateVisible = m_phitspinner ? m_phitspinner->m_spinnerMover.m_visible : m_d.m_visible;
    if (plateVisible && !isStaticOnly)
+   {
       m_renderer->RenderMesh(renderMask, plate, plateMaterial);
+   }
 }
 
 // Used by the OBJ mesh exporter only; rendering applies the same transform through the object matrix

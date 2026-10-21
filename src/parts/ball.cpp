@@ -457,6 +457,18 @@ void Ball::Render(const unsigned int renderMask)
    //const Matrix3D m3D_full = rot * scale * trans;
    //m_renderer->m_renderDevice->m_ballShader->SetMatrix(ShaderUniform::orientation, &m3D_full);
 
+   // Object transform at record time: bound to the shader's global state so that the scene draw and
+   // its depth prepass clone both get it (the scene draw's orientation is still refined at frame
+   // submission by the begin of frame command below), and kept as the previous frame orientation for
+   // the depth prepass motion vectors
+   vec3 posr = m_hitBall.m_d.m_pos;
+   if (m_hitBall.m_d.m_lockedInKicker)
+      posr.z -= m_hitBall.m_d.m_radius;
+   const Matrix3D fullTrafo = rot * scale * Matrix3D::MatrixTranslate(posr);
+   m_renderer->m_renderDevice->m_ballShader->SetMatrix(ShaderUniform::orientation, &fullTrafo);
+   const Matrix3D *const prevTrafo = m_prevOrientation.Update(fullTrafo, g_pplayer->m_overall_frames);
+   m_renderer->m_renderDevice->m_ballShader->SetMatrix(ShaderUniform::orientationPrev, prevTrafo ? prevTrafo : &fullTrafo);
+
    m_renderer->m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_TRUE);
    bool sphericalMapping;
    if (!m_pinballEnv)

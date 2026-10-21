@@ -239,7 +239,13 @@ bool RenderFrame::Execute(const bool log)
          const bool prepassMotion = prepassFormat == colorFormat::RGBA16F;
          for (RenderCommand* cmd : pass->m_commands)
          {
-            if (!cmd->IsDrawMeshCommand())
+            // Only the basic and ball shaders have a depth prepass variant: other scene draws (DMD, displays, flashers, ...) are skipped
+            const bool isBallShader = cmd->GetShader() == m_rd->m_ballShader;
+            if (!isBallShader && cmd->GetShader() != m_rd->m_basicShader)
+               continue;
+            // The ball is drawn as an analytic raytraced impostor quad, everything else as a mesh (ball
+            // mesh draws, debug points and trails, do not have the vertex layout of the depth variants)
+            if (isBallShader ? !cmd->IsDrawQuadCommand() : !cmd->IsDrawMeshCommand())
                continue;
             // Draws that do not write to the depth buffer (e.g. classic light inserts) can not contribute to the prepass
             if (cmd->GetRenderState().GetRenderState(RenderState::ZWRITEENABLE) != RenderState::RS_TRUE || cmd->GetRenderState().GetRenderState(RenderState::ZENABLE) != RenderState::RS_TRUE)
@@ -247,9 +253,6 @@ bool RenderFrame::Execute(const bool log)
             // Alpha blended draws are see-through even when they write depth (a table's ball shadow quads, decals): in
             // the prepass their whole quad would occlude, with its own motion and depth, unless nearly opaque
             if (cmd->IsSeeThroughBlend())
-               continue;
-            // Only the basic and ball shaders have a depth prepass variant: other scene draws (DMD, displays, flashers, ...) are skipped
-            if (cmd->GetShader() != m_rd->m_basicShader && cmd->GetShader() != m_rd->m_ballShader)
                continue;
             const ShaderTechnique tech = cmd->GetShaderState()->GetTechnique();
             if (tech == ShaderTechnique::kickerBoolean || tech == ShaderTechnique::kickerBoolean_isMetal)

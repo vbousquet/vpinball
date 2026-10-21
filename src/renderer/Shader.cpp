@@ -55,6 +55,7 @@ Shader::TechniqueDef Shader::shaderTechniqueNames[static_cast<unsigned int>(Shad
    SHADER_TECHNIQUE(RenderBallTrail),
    // OpenGL only has the first variant. DX9 needs all of them due to shader compiler limitation
    SHADER_TECHNIQUE(basic_with_texture),
+   // OpenGL only has the first variant. DX9 needs all of them due to shader compiler limitation
    SHADER_TECHNIQUE(basic_with_texture_isMetal),
    SHADER_TECHNIQUE(basic_with_texture_normal),
    SHADER_TECHNIQUE(basic_with_texture_normal_isMetal),
@@ -308,6 +309,8 @@ ShaderUniformDef ShaderUniformDef::coreUniforms[static_cast<unsigned int>(Shader
    SHADER_UNIFORM(ShaderUniformType::Float4v, cameraPosWorld, 2), // BGFX only, camera world position (camera-relative path), +1 for stereo
    SHADER_UNIFORM(ShaderUniformType::Float4x4, matRotViewProjPrev, 2), // BGFX only, previous frame view rotation x proj (depth prepass motion vectors), +1 for stereo
    SHADER_UNIFORM(ShaderUniformType::Float4v, cameraPosWorldPrev, 2), // BGFX only, previous frame camera world position (depth prepass motion vectors), +1 for stereo
+   SHADER_UNIFORM(ShaderUniformType::Float4x4, matWorldPrev, 1), // BGFX only, previous frame object transform (depth prepass motion vectors)
+   SHADER_UNIFORM(ShaderUniformType::Float4x4, orientationPrev, 1), // BGFX only, previous frame ball orientation (depth prepass motion vectors)
    SHADER_UNIFORM(ShaderUniformType::Float4, lightCenter_doShadow, 1), // Basic & Flasher (for ball shadows)
    SHADER_UNIFORM(ShaderUniformType::Float4v, balls, 8), // Basic & Flasher (for ball shadows)
    SHADER_UNIFORM(ShaderUniformType::Float4, staticColor_Alpha, 1), // Basic & Flasher
@@ -1490,8 +1493,8 @@ void Shader::Load()
       BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_tex_at_n), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_notex_n_mv), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_tex_n_mv),
       BGFX_EMBEDDED_SHADER_ST_CLIP(fs_depth_tex_at_n_mv), BGFX_EMBEDDED_SHADER(vs_vr_mask),
       // Ball shaders
-      BGFX_EMBEDDED_SHADER_ST_CLIP(vs_ball), BGFX_EMBEDDED_SHADER_ST_CLIP(vs_ball_raycast), BGFX_EMBEDDED_SHADER_ST_CLIP(vs_ball_mv),
-      BGFX_EMBEDDED_SHADER_ST_CLIP(vs_ball_trail),
+      BGFX_EMBEDDED_SHADER_ST_CLIP(vs_ball), BGFX_EMBEDDED_SHADER_ST_CLIP(vs_ball_raycast), BGFX_EMBEDDED_SHADER_ST_CLIP(vs_ball_trail),
+      BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_depth), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_depth_n), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_depth_n_mv),
       BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_equirectangular_nodecal), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_equirectangular_decal), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_spherical_nodecal),
       BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_spherical_decal), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_trail), BGFX_EMBEDDED_SHADER_ST_CLIP(fs_ball_debug),
       // DMD, Display & Sprite shaders
@@ -1599,10 +1602,10 @@ void Shader::Load()
       loadProgram(embeddedShaders, ShaderTechnique::RenderBall_SphericalMap_DecalMode, STEREO(vs_ball_raycast_noclip), STEREO(fs_ball_spherical_decal_noclip));
       loadProgram(embeddedShaders, ShaderTechnique::RenderBall_Debug,                  STEREO(vs_ball_noclip), STEREO(fs_ball_debug_noclip));
       loadProgram(embeddedShaders, ShaderTechnique::RenderBallTrail,                   STEREO(vs_ball_trail_noclip), STEREO(fs_ball_trail_noclip));
-      // Depth prepass variants (reusing the basic shader depth pass fragment shaders)
-      loadProgram(embeddedShaders, ShaderTechnique::ball_depth, STEREO(vs_ball_noclip), STEREO(fs_depth_notex_noclip));
-      loadProgram(embeddedShaders, ShaderTechnique::ball_depth_n, STEREO(vs_ball_noclip), STEREO(fs_depth_notex_n_noclip));
-      loadProgram(embeddedShaders, ShaderTechnique::ball_depth_n_mv, STEREO(vs_ball_mv_noclip), STEREO(fs_depth_notex_n_mv_noclip));
+      // Depth prepass variants (analytic raycast of the ball impostor, writing its exact depth and shaded normal)
+      loadProgram(embeddedShaders, ShaderTechnique::ball_depth, STEREO(vs_ball_raycast_noclip), STEREO(fs_ball_depth_noclip));
+      loadProgram(embeddedShaders, ShaderTechnique::ball_depth_n, STEREO(vs_ball_raycast_noclip), STEREO(fs_ball_depth_n_noclip));
+      loadProgram(embeddedShaders, ShaderTechnique::ball_depth_n_mv, STEREO(vs_ball_raycast_noclip), STEREO(fs_ball_depth_n_mv_noclip));
       // Variants with a clipping plane
       loadProgram(embeddedShaders, ShaderTechnique::RenderBall, STEREO(vs_ball_raycast_clip), STEREO(fs_ball_equirectangular_nodecal_clip), true);
       loadProgram(embeddedShaders, ShaderTechnique::RenderBall_DecalMode, STEREO(vs_ball_raycast_clip), STEREO(fs_ball_equirectangular_decal_clip), true);
@@ -1610,9 +1613,9 @@ void Shader::Load()
       loadProgram(embeddedShaders, ShaderTechnique::RenderBall_SphericalMap_DecalMode, STEREO(vs_ball_raycast_clip), STEREO(fs_ball_spherical_decal_clip), true);
       loadProgram(embeddedShaders, ShaderTechnique::RenderBall_Debug,                  STEREO(vs_ball_clip), STEREO(fs_ball_debug_clip), true);
       loadProgram(embeddedShaders, ShaderTechnique::RenderBallTrail,                   STEREO(vs_ball_trail_clip), STEREO(fs_ball_trail_clip), true);
-      loadProgram(embeddedShaders, ShaderTechnique::ball_depth, STEREO(vs_ball_clip), STEREO(fs_depth_notex_clip), true);
-      loadProgram(embeddedShaders, ShaderTechnique::ball_depth_n, STEREO(vs_ball_clip), STEREO(fs_depth_notex_n_clip), true);
-      loadProgram(embeddedShaders, ShaderTechnique::ball_depth_n_mv, STEREO(vs_ball_mv_clip), STEREO(fs_depth_notex_n_mv_clip), true);
+      loadProgram(embeddedShaders, ShaderTechnique::ball_depth, STEREO(vs_ball_raycast_clip), STEREO(fs_ball_depth_clip), true);
+      loadProgram(embeddedShaders, ShaderTechnique::ball_depth_n, STEREO(vs_ball_raycast_clip), STEREO(fs_ball_depth_n_clip), true);
+      loadProgram(embeddedShaders, ShaderTechnique::ball_depth_n_mv, STEREO(vs_ball_raycast_clip), STEREO(fs_ball_depth_n_mv_clip), true);
       break;
    case DMD_SHADER:
       loadProgram(embeddedShaders, ShaderTechnique::basic_DMD,         STEREO(vs_dmd_noworld),      "fs_dmd_noclip");

@@ -375,6 +375,7 @@ void Trigger::Render(const unsigned int renderMask)
    body.edgeTriCount = meshData.indices.size();
    body.edgeTriIndices16 = true;
    body.edgeVertices = m_triggerVertices->data();
+   body.prevTransform = m_prevMatTrafo.Update(translate, g_pplayer->m_overall_frames);
 
    const bool isUIPass = renderMask & (Renderer::UI_EDGES | Renderer::UI_FILL);
    VisualMaterial material;

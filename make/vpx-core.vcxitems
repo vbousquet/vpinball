@@ -1321,6 +1321,9 @@
     <None Include="$(SolutionDir)/../../src/shaders/bgfx/fs_ball_debug.sc">
       <FileType>Document</FileType>
     </None>
+    <None Include="$(SolutionDir)/../../src/shaders/bgfx/fs_ball_depth.sc">
+      <FileType>Document</FileType>
+    </None>
     <None Include="$(SolutionDir)/../../src/shaders/bgfx/fs_ball_trail.sc">
       <FileType>Document</FileType>
     </None>

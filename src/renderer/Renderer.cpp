@@ -1284,7 +1284,7 @@ void Renderer::RenderMesh(const unsigned int renderMask, RenderMeshDesc& draw, c
 {
    assert(draw.mesh != nullptr);
    if (draw.transform != nullptr)
-      UpdateBasicShaderMatrix(*draw.transform);
+      UpdateBasicShaderMatrix(*draw.transform, draw.prevTransform);
 
    if (renderMask & UI_FILL)
    {

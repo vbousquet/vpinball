@@ -148,7 +148,9 @@ private:
    bool m_doAnimation = false;
    bool m_moveDown = false;
 
-// ITrigger
+   PrevFrameValue<Matrix3D> m_prevMatTrafo; // Previous frame transform, for the depth prepass motion vectors
+
+   // ITrigger
 public:
    STDMETHOD(get_TriggerShape)(/*[out, retval]*/ TriggerShape *pVal);
    STDMETHOD(put_TriggerShape)(/*[in]*/ TriggerShape newVal);

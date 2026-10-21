@@ -3520,6 +3520,9 @@
     <None Include="$(SolutionDir)/../../src/shaders/bgfx/fs_ball_debug.sc">
       <Filter>shaders\bgfx</Filter>
     </None>
+    <None Include="$(SolutionDir)/../../src/shaders/bgfx/fs_ball_depth.sc">
+      <Filter>shaders\bgfx</Filter>
+    </None>
     <None Include="$(SolutionDir)/../../src/shaders/bgfx/fs_ball_trail.sc">
       <Filter>shaders\bgfx</Filter>
     </None>

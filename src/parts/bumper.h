@@ -183,4 +183,8 @@ private:
 
    float   m_rotx = 0.0f; // only for reading through script
    float   m_roty = 0.0f;
+
+   // Previous frame ring/skirt transforms, for the depth prepass motion vectors
+   PrevFrameValue<Matrix3D> m_prevRingMatTrafo;
+   PrevFrameValue<Matrix3D> m_prevSocketMatTrafo;
 };

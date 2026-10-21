@@ -903,3 +903,34 @@ public:
 #pragma endregion VectorOperations
 
 };
+
+// Previous rendered frame value of a part's transform, for the depth prepass motion vectors. A part's transform is invariant
+// within a render session: it can be recorded several times (all RenderViews, reflection / refraction probes, then the main
+// view), but every record of a session samples the same scene state, so there is a single current and a single previous value.
+// The history only rolls on the first record of a new frame, so every record of a frame sees the previous frame's value (not
+// the one recorded a moment before in the same frame).
+template <class T> struct PrevFrameValue
+{
+   T prev {}, cur {};
+   unsigned int frame = ~0u; // frame for which cur is valid
+   bool hasPrev = false;
+   // Records the session's value and returns the previous session's value (nullptr until there is one)
+   const T* Update(const T& v, const unsigned int frameIndex)
+   {
+      if (frameIndex != frame)
+      {
+         hasPrev = frame != ~0u;
+         if (hasPrev)
+         {
+            prev = cur;
+         }
+         cur = v;
+         frame = frameIndex;
+      }
+      else
+      {
+         assert(memcmp(&cur, &v, sizeof(T)) == 0); // a part's transform may not change within a render session
+      }
+      return hasPrev ? &prev : nullptr;
+   }
+};

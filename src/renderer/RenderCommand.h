@@ -42,6 +42,7 @@ public:
    bool IsSeeThroughBlend() const;
    bool IsDrawCommand() const { return m_command == RC_DRAW_MESH || m_command == RC_DRAW_TRANSIENT || m_command == RC_DRAW_QUAD_PT || m_command == RC_DRAW_QUAD_PNT; }
    bool IsDrawMeshCommand() const { return m_command == RC_DRAW_MESH; }
+   bool IsDrawQuadCommand() const { return m_command == RC_DRAW_QUAD_PT || m_command == RC_DRAW_QUAD_PNT; }
    RenderState GetRenderState() const { return m_renderState; }
    ShaderState* GetShaderState() const { return m_shaderState; }
    void* GetQuadVertices() { return m_vertices; }

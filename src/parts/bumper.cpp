@@ -311,6 +311,7 @@ void Bumper::Render(const unsigned int renderMask)
       ring.indexCount = bumperRingNumIndices;
       ring.sortCenter.Set(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight + ringAnimOffset);
       ring.transform = &ringMatrix;
+      ring.prevTransform = m_prevRingMatTrafo.Update(ringMatrix, g_pplayer->m_overall_frames);
       ring.uiEdgeMesh = &m_ringEdgeBuffer;
       ring.edgeMode = UIEdgeMode::TriWire;
       ring.edgeTriIndices = bumperRingIndices;
@@ -344,12 +345,12 @@ void Bumper::Render(const unsigned int renderMask)
       // Skirt tilt from the last hit is applied through the object transform (see UpdateSkirt)
       const Matrix3D socketMatrix = ((Matrix3D::MatrixRotateZ(ANGTORAD(m_d.m_orientation)) * Matrix3D::MatrixRotateY(ANGTORAD(m_roty))) * Matrix3D::MatrixRotateX(ANGTORAD(m_rotx)))
          * Matrix3D::MatrixScale(m_d.m_radius, m_d.m_radius, m_d.m_heightScale) * Matrix3D::MatrixTranslate(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight + 5.0f);
-
       RenderMeshDesc socket;
       socket.mesh = m_socketMeshBuffer;
       socket.indexCount = bumperSocketNumIndices;
       socket.sortCenter.Set(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight + 5.0f);
       socket.transform = &socketMatrix;
+      socket.prevTransform = m_prevSocketMatTrafo.Update(socketMatrix, g_pplayer->m_overall_frames);
       socket.uiEdgeMesh = &m_socketEdgeBuffer;
       socket.edgeMode = UIEdgeMode::TriWire;
       socket.edgeTriIndices = bumperSocketIndices;
