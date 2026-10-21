@@ -371,6 +371,7 @@ void Trigger::Render(const unsigned int renderMask)
    body.edgeTriCount = meshData.indices.size();
    body.edgeTriIndices16 = true;
    body.edgeVertices = m_triggerVertices->data();
+   body.prevTransform = m_prevMatTrafoValid ? &m_prevMatTrafo : nullptr;
 
    const bool isUIPass = renderMask & (Renderer::UI_EDGES | Renderer::UI_FILL);
    VisualMaterial material;
@@ -382,6 +383,8 @@ void Trigger::Render(const unsigned int renderMask)
       material.material = m_ptable->GetMaterial(m_d.m_szMaterial);
    }
    m_renderer->RenderMesh(renderMask, body, material);
+   m_prevMatTrafo = translate;
+   m_prevMatTrafoValid = true;
 }
 
 #pragma endregion

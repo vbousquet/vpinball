@@ -150,6 +150,8 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(display_Seg),
    SHADER_TECHNIQUE(display_Seg_world),
    SHADER_TECHNIQUE(display_CRT),
+   SHADER_TECHNIQUE(basic_DMD),
+   SHADER_TECHNIQUE(basic_DMD_world),
    // Lottes-CRT
    SHADER_TECHNIQUE(display_CRT_world),
    // Same as above but built with the Nuance-CRT filter, the renderer picking between them per display (see Renderer::SetupCRTRender)
@@ -296,6 +298,8 @@ enum class ShaderUniform : unsigned int
    SHADER_UNIFORM(ShaderUniformType::Float4v, cameraPosWorld, 2), // BGFX only, camera world position (camera-relative path), +1 for stereo
    SHADER_UNIFORM(ShaderUniformType::Float4x4, matRotViewProjPrev, 2), // BGFX only, previous frame view rotation x proj (depth prepass motion vectors), +1 for stereo
    SHADER_UNIFORM(ShaderUniformType::Float4v, cameraPosWorldPrev, 2), // BGFX only, previous frame camera world position (depth prepass motion vectors), +1 for stereo
+   SHADER_UNIFORM(ShaderUniformType::Float4x4, matWorldPrev, 1), // BGFX only, previous frame object transform (depth prepass motion vectors)
+   SHADER_UNIFORM(ShaderUniformType::Float4x4, orientationPrev, 1), // BGFX only, previous frame ball orientation (depth prepass motion vectors)
    SHADER_UNIFORM(ShaderUniformType::Float4, lightCenter_doShadow, 1), // Basic & Flasher (for ball shadows)
    SHADER_UNIFORM(ShaderUniformType::Float4v, balls, 8), // Basic & Flasher (for ball shadows)
    SHADER_UNIFORM(ShaderUniformType::Float4, staticColor_Alpha, 1), // Basic & Flasher
