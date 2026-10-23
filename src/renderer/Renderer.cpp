@@ -685,8 +685,9 @@ RenderTarget* Renderer::GetDepthPrepassRenderTarget()
    // with the scene since blended parts may write to the depth buffer, and prepopulating them in the scene depth
    // would wrongly cull the parts rendered before them but behind them (besides, MSAA depth can not be shared).
    // In 'Depth & Shaded Normals' mode, its color attachment holds the view space shaded normals (xy, fp16).
-   // When camera motion vectors are generated (dynamic AO under a dynamic camera, e.g. VR), the target is
-   // promoted to RGBA16F, the 2 additional channels holding the screen space motion vector.
+   // When camera motion vectors are generated (dynamic AO while the static prepass is disabled, e.g. VR,
+   // headtracking or the editor), the target is promoted to RGBA16F, the 2 additional channels holding the
+   // screen space motion vector.
    // The scene's render targets ping pong between the two back buffer render targets (previous frame history), so
    // one prepass target is kept per scene render target, recreated on format or surface change.
    const colorFormat format = m_renderDevice->m_depthPrepassMotion ? colorFormat::RGBA16F : m_depthPrepassMode >= 2 ? colorFormat::RG16F : colorFormat::GREY8;
@@ -2555,8 +2556,18 @@ void Renderer::UpdateAmbientOcclusion(RenderTarget* renderedRT, unsigned int jit
       /*sobol*/ radical_inverse<3>(jitterIndex) * (float)(1. / 8.0)); // jitter within (64/8)x(64/8) neighborhood of 64x64 tex, good compromise between blotches and noise
    m_renderDevice->m_FBShader->SetVector(ShaderUniform::AO_scale_timeblur, m_table->m_AOScale, 0.4f, 0.f,
       0.f); //!! 0.4f: fake global option in video pref? or time dependent? //!! commonly used is 0.1, but would require to clear history for moving stuff
-   // When the depth prepass generated camera motion vectors (dynamic AO under a dynamic camera, e.g. VR),
-   // they are sampled along the normals to reproject the previous frame AO history
+   // The AO kernel works in view space (linearized depth) so the inverse projection is needed
+   Matrix3D matProjInv[2];
+   const int nEyes = m_renderDevice->m_nEyes;
+   for (int eye = 0; eye < nEyes; eye++)
+   {
+      matProjInv[eye] = GetMVP().GetProj(eye);
+      matProjInv[eye].Invert();
+   }
+   m_renderDevice->m_FBShader->SetMatrix(ShaderUniform::matProjInv, &matProjInv[0], nEyes);
+   // When the depth prepass generated camera motion vectors (dynamic AO while the static prepass is disabled,
+   // e.g. VR, headtracking or the editor), they are sampled along the normals to reproject the previous frame AO
+   // history
    m_renderDevice->m_FBShader->SetTechnique(useDepthPrepass ? (m_renderDevice->m_depthPrepassMotion ? ShaderTechnique::AO_shaded_mv : ShaderTechnique::AO_shaded) : ShaderTechnique::AO);
    m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
    m_renderDevice->m_FBShader->SetTextureNull(ShaderUniform::tex_normals);
@@ -4528,11 +4539,13 @@ int Renderer::GetAOMode() const // 0=Off, 1=Static, 2=Dynamic
 bool Renderer::IsMotionVectorPrepass() const
 {
    // Camera motion vectors are written to the 2 free channels of the shaded depth prepass target to feed the AO
-   // temporal reprojection, only when the camera can be dynamic. For the time being this is VR only (headtracking
-   // is not supported yet) and only implemented for the BGFX backend. Being needed by AO, this also activates the
-   // shaded prepass normals even when the prepass setting does not force them.
+   // temporal reprojection, only when AO is dynamic and the camera can be moving. This is always the case in VR
+   // (which disables the static prepass), and more generally whenever the static prepass is disabled, covering
+   // the editor, headtracking and plugin driven dynamic cameras. Only implemented for the BGFX backend for the
+   // time being. Being needed by AO, this also activates the shaded prepass normals even when the prepass
+   // setting does not force them.
 #if defined(ENABLE_BGFX)
-   return m_stereo3D == STEREO_VR && GetAOMode() == 2;
+   return GetAOMode() == 2 && !IsUsingStaticPrepass();
 #else
    return false;
 #endif
