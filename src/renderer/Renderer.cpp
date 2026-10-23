@@ -2399,11 +2399,13 @@ int Renderer::GetAOMode() const // 0=Off, 1=Static, 2=Dynamic
 bool Renderer::IsMotionVectorPrepass() const
 {
    // Camera motion vectors are written to the 2 free channels of the shaded depth prepass target to feed the AO
-   // temporal reprojection, only when the camera can be dynamic. For the time being this is VR only (headtracking
-   // is not supported yet) and only implemented for the BGFX backend. Being needed by AO, this also activates the
-   // shaded prepass normals even when the prepass setting does not force them.
+   // temporal reprojection, only when AO is dynamic and the camera can be moving. This is always the case in VR
+   // (which disables the static prepass), and more generally whenever the static prepass is disabled, covering
+   // the editor, headtracking and plugin driven dynamic cameras. Only implemented for the BGFX backend for the
+   // time being. Being needed by AO, this also activates the shaded prepass normals even when the prepass
+   // setting does not force them.
 #if defined(ENABLE_BGFX)
-   return m_stereo3D == STEREO_VR && GetAOMode() == 2;
+   return GetAOMode() == 2 && !IsUsingStaticPrepass();
 #else
    return false;
 #endif

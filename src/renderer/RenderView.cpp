@@ -787,8 +787,9 @@ RenderTarget* RenderView::GetDepthPrepassRenderTarget()
    // with the scene since blended parts may write to the depth buffer, and prepopulating them in the scene depth
    // would wrongly cull the parts rendered before them but behind them (besides, MSAA depth can not be shared).
    // In 'Depth & Shaded Normals' mode, its color attachment holds the view space shaded normals (xy, fp16).
-   // When camera motion vectors are generated (dynamic AO under a dynamic camera, e.g. VR), the target is
-   // promoted to RGBA16F, the 2 additional channels holding the screen space motion vector.
+   // When camera motion vectors are generated (dynamic AO while the static prepass is disabled, e.g. VR,
+   // headtracking or the editor), the target is promoted to RGBA16F, the 2 additional channels holding the
+   // screen space motion vector.
    // The scene's render targets ping pong between the two back buffer render targets (previous frame history), so
    // one prepass target is kept per scene render target, recreated on format or surface change.
    const colorFormat format
@@ -1258,8 +1259,9 @@ void RenderView::UpdateAmbientOcclusion(RenderTarget* renderedRT, unsigned int j
       matProjInv[eye].Invert();
    }
    rd->m_FBShader->SetMatrix(ShaderUniform::matProjInv, &matProjInv[0], nEyes);
-   // When the depth prepass generated camera motion vectors (dynamic AO under a dynamic camera, e.g. VR),
-   // they are sampled along the normals to reproject the previous frame AO history
+   // When the depth prepass generated camera motion vectors (dynamic AO while the static prepass is disabled,
+   // e.g. VR, headtracking or the editor), they are sampled along the normals to reproject the previous frame AO
+   // history
    rd->m_FBShader->SetTechnique(useDepthPrepass ? (rd->m_depthPrepassMotion ? ShaderTechnique::AO_shaded_mv : ShaderTechnique::AO_shaded) : ShaderTechnique::AO);
    rd->DrawFullscreenTexturedQuad(rd->m_FBShader);
    rd->m_FBShader->SetTextureNull(ShaderUniform::tex_normals);
