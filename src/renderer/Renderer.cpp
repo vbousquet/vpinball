@@ -478,6 +478,11 @@ Renderer::~Renderer()
    m_pbrShadowMapSampler = nullptr;
    if (bgfx::isValid(m_pbrShadowMapTex))
       bgfx::destroy(m_pbrShadowMapTex);
+   for (int i = 0; i < MAX_PBR_SHADOW_NEAR_LAYERS; i++)
+      delete m_pbrShadowNearLayerRT[i];
+   m_pbrShadowNearMapSampler = nullptr;
+   if (bgfx::isValid(m_pbrShadowNearTex))
+      bgfx::destroy(m_pbrShadowNearTex);
 #endif
    delete m_depthPrepassRT[0];
    delete m_depthPrepassRT[1];
@@ -2617,6 +2622,8 @@ void Renderer::AddPBRShadowDependencies()
 #if defined(ENABLE_BGFX)
    for (int i = 0; i < m_pbrShadowSlotCount; i++)
       m_renderDevice->AddRenderTargetDependency(m_pbrShadowLayerRT[i]);
+   for (int i = 0; i < m_pbrShadowNearCount * 6; i++)
+      m_renderDevice->AddRenderTargetDependency(m_pbrShadowNearLayerRT[i]);
 #endif
 }
 
@@ -2642,6 +2649,22 @@ void Renderer::CreatePBRShadowMapTargets()
    }
    m_pbrShadowMapSampler = m_pbrShadowLayerRT[0]->GetDepthSampler();
    m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_shadowmaps, m_pbrShadowMapSampler);
+
+   // Near-light array: each shadowed near light consumes 6 consecutive layers rendered as cube faces
+   constexpr int nearMapSize = 256;
+   m_pbrShadowNearTex = bgfx::createTexture2D(nearMapSize, nearMapSize, false, MAX_PBR_SHADOW_NEAR_LAYERS, bgfx::TextureFormat::D32F, BGFX_TEXTURE_RT);
+   bgfx::setName(m_pbrShadowNearTex, "PBRShadowMapsNear");
+   for (int i = 0; i < MAX_PBR_SHADOW_NEAR_LAYERS; i++)
+   {
+      bgfx::Attachment attachment;
+      attachment.init(m_pbrShadowNearTex, bgfx::Access::Write, static_cast<uint16_t>(i), 1, 0, BGFX_ATTACHMENT_NONE);
+      const bgfx::FrameBufferHandle fbh = bgfx::createFrameBuffer(1, &attachment);
+      assert(bgfx::isValid(fbh));
+      m_pbrShadowNearLayerRT[i] = new RenderTarget(m_renderDevice, GetBackBufferTexture()->m_type, fbh, BGFX_INVALID_HANDLE, bgfx::TextureFormat::Count, m_pbrShadowNearTex,
+         bgfx::TextureFormat::D32F, "PBRShadowMapNear"s + std::to_string(i), nearMapSize, nearMapSize, colorFormat::RGBA8);
+   }
+   m_pbrShadowNearMapSampler = m_pbrShadowNearLayerRT[0]->GetDepthSampler();
+   m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_shadowmaps_near, m_pbrShadowNearMapSampler);
 }
 
 
@@ -2655,6 +2678,7 @@ void Renderer::RenderPBRShadowMaps()
 
    const Vertex3Ds tableCenter((m_table->m_left + m_table->m_right) * 0.5f, (m_table->m_top + m_table->m_bottom) * 0.5f, 0.f);
    m_pbrShadowSlotCount = 0;
+   m_pbrShadowNearCount = 0;
    for (Matrix3D& vp : m_pbrShadowVP)
       vp.SetIdentity();
 
@@ -2664,62 +2688,11 @@ void Renderer::RenderPBRShadowMaps()
    const Matrix3D savedView[2] = { m_playfieldView[0], m_playfieldView[1] };
    const Matrix3D savedProj[2] = { m_mvp.GetProj(0), m_mvp.GetProj(m_mvp.m_nEyes - 1) };
 
-   for (IEditable* const part : m_table->GetParts())
+   // Emits one depth-only caster pass: whitelisted caster parts drawn under the given light view-projection
+   const auto emitCasterPass = [this](const string& name, RenderTarget* rt, const Matrix3D& view, const Matrix3D& proj, const bool dynamicTier)
    {
-      if (part->GetItemType() != eItemLight)
-         continue;
-      Light* const light = static_cast<Light*>(part);
-      light->m_pbrShadowSlot = -1;
-      const bool eligible = light->m_d.m_type == LightType::PBR && light->m_d.m_visible && light->m_currentIntensity > 0.f && !light->m_desktopBackdrop
-         && light->m_d.m_shadows >= ShadowMode::PBR_STATIC_SHADOWS;
-      if (!eligible)
-         light->m_pbrShadowBakedSlot = -1; // a light that is off loses its layer claim: re-bake when it turns back on
-      if (!eligible || m_pbrShadowSlotCount >= MAX_PBR_SHADOW_SLOTS)
-         continue;
 
-      const Vertex3Ds lPos(light->m_d.m_vCenter.x, light->m_d.m_vCenter.y, light->GetCurrentHeight());
-      // Ortho (scene) layout: the light must sit above the glass top — ortho approximates a directional
-      // source, so a light embedded in the scene below the glass would project near-horizontally (its
-      // direction swinging with any move); those near lights need a direction-sampled layout (skipped here)
-      if (lPos.z <= m_table->m_glassTopHeight)
-      {
-         light->m_pbrShadowBakedSlot = -1;
-         continue;
-      }
-      light->m_pbrShadowLayout = 0;
-      light->m_pbrShadowSlot = m_pbrShadowSlotCount;
-
-      // Light view-projection: look at the table center, ortho box fitted on the table bounds in light view space
-      const Matrix3D view = Matrix3D::MatrixLookAtRH(lPos, tableCenter, Vertex3Ds(0.f, -1.f, 0.f));
-      float l = FLT_MAX, r = -FLT_MAX, b = FLT_MAX, t = -FLT_MAX, zn = FLT_MAX, zf = -FLT_MAX;
-      for (int c = 0; c < 8; c++)
-      {
-         const Vertex3Ds corner(c & 1 ? m_table->m_right : m_table->m_left, c & 2 ? m_table->m_bottom : m_table->m_top, c & 4 ? m_table->m_glassTopHeight : 0.f);
-         const Vertex3Ds v = view.MultiplyVectorNoPerspective(corner);
-         l = std::min(l, v.x);
-         r = std::max(r, v.x);
-         b = std::min(b, v.y);
-         t = std::max(t, v.y);
-         zn = std::min(zn, -v.z);
-         zf = std::max(zf, -v.z);
-      }
-      const float m = 25.f; // margin around the table bounds (global lights sit far away: keep coverage generous)
-      const Matrix3D proj = Matrix3D::MatrixOrthoOffCenterRH(l - m, r + m, b - m, t + m, std::max(0.1f, zn - m), zf + m);
-      m_pbrShadowVP[m_pbrShadowSlotCount] = view * proj;
-      const int slot = m_pbrShadowSlotCount;
-      m_pbrShadowSlotCount++;
-
-      // Emit the caster pass for this slot: static-tier lights only render when the statics are baked or the light
-      // moved since its map was rendered, dynamic-tier lights clear and re-render all casters every frame
-      const bool dynamicTier = light->m_d.m_shadows == ShadowMode::PBR_STATIC_N_DYNAMIC_SHADOWS;
-      const bool needsRebake = light->m_pbrShadowBakedSlot != slot || light->m_pbrShadowBakedPos.x != lPos.x || light->m_pbrShadowBakedPos.y != lPos.y
-         || light->m_pbrShadowBakedPos.z != lPos.z || light->m_pbrShadowBakedFalloff != light->m_d.m_falloff;
-      if (!dynamicTier && !bakeStatics && !needsRebake)
-         continue;
-      light->m_pbrShadowBakedPos = lPos;
-      light->m_pbrShadowBakedFalloff = light->m_d.m_falloff;
-      light->m_pbrShadowBakedSlot = slot;
-      m_renderDevice->SetRenderTarget("PBR Shadow "s + std::to_string(slot), m_pbrShadowLayerRT[slot], false);
+      m_renderDevice->SetRenderTarget(name, rt, false);
       m_renderDevice->Clear(clearType::ZBUFFER, 0x00000000);
       m_renderDevice->ResetRenderState();
       m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_TRUE);
@@ -2752,9 +2725,102 @@ void Renderer::RenderPBRShadowMaps()
          default: break;
          }
       }
+   };
+
+   for (IEditable* const part : m_table->GetParts())
+   {
+      if (part->GetItemType() != eItemLight)
+         continue;
+      Light* const light = static_cast<Light*>(part);
+      light->m_pbrShadowSlot = -1;
+      const bool eligible = light->m_d.m_type == LightType::PBR && light->m_d.m_visible && light->m_currentIntensity > 0.f && !light->m_desktopBackdrop
+         && light->m_d.m_shadows >= ShadowMode::PBR_STATIC_SHADOWS;
+      if (!eligible)
+         light->m_pbrShadowBakedSlot = -1; // a light that is off loses its layer claim: re-bake when it turns back on
+      if (!eligible)
+         continue;
+
+      const Vertex3Ds lPos(light->m_d.m_vCenter.x, light->m_d.m_vCenter.y, light->GetCurrentHeight());
+      // Ortho (scene) layout requires the light to sit above the glass top — ortho approximates a directional
+      // source, so a light embedded in the scene below the glass would project near-horizontally (its direction
+      // swinging with any move). Near lights take the cube layout (6 face layers in the near array) instead.
+      const bool dynamicTier = light->m_d.m_shadows == ShadowMode::PBR_STATIC_N_DYNAMIC_SHADOWS;
+
+      if (lPos.z <= m_table->m_glassTopHeight)
+      {
+         if (m_pbrShadowNearCount >= MAX_PBR_SHADOW_NEAR_LAYERS / 6)
+         {
+            light->m_pbrShadowBakedSlot = -1;
+            continue;
+         }
+         light->m_pbrShadowLayout = 2; // CUBE
+         light->m_pbrShadowSlot = m_pbrShadowNearCount * 6;
+         const int baseLayer = light->m_pbrShadowSlot;
+         m_pbrShadowNearCount++;
+         const bool needsRebake = light->m_pbrShadowBakedSlot != baseLayer || light->m_pbrShadowBakedPos.x != lPos.x || light->m_pbrShadowBakedPos.y != lPos.y
+            || light->m_pbrShadowBakedPos.z != lPos.z || light->m_pbrShadowBakedFalloff != light->m_d.m_falloff;
+         if (!dynamicTier && !bakeStatics && !needsRebake)
+            continue;
+         light->m_pbrShadowBakedPos = lPos;
+         light->m_pbrShadowBakedFalloff = light->m_d.m_falloff;
+         light->m_pbrShadowBakedSlot = baseLayer;
+         // 6 cube face passes, each a 90 deg perspective map rasterized as regular NDC depth
+         static const Vertex3Ds faceFwd[6] = { { 1.f, 0.f, 0.f }, { -1.f, 0.f, 0.f }, { 0.f, 1.f, 0.f }, { 0.f, -1.f, 0.f }, { 0.f, 0.f, 1.f }, { 0.f, 0.f, -1.f } };
+         static const Vertex3Ds faceUp[6] = { { 0.f, 0.f, 1.f }, { 0.f, 0.f, 1.f }, { 0.f, 0.f, 1.f }, { 0.f, 0.f, 1.f }, { 0.f, -1.f, 0.f }, { 0.f, -1.f, 0.f } };
+         const float zNear = 2.f; // must match PBR_SHADOW_NEAR_ZN in fs_pbr.sc
+         const float zFar = std::max(light->m_d.m_falloff, 60.f);
+         for (int f = 0; f < 6; f++)
+         {
+            const Matrix3D view = Matrix3D::MatrixLookAtRH(lPos, lPos + faceFwd[f], faceUp[f]);
+            const Matrix3D proj = Matrix3D::MatrixPerspectiveFovRH(90.f, 1.f, zNear, zFar);
+            emitCasterPass("PBR Shadow "s + std::to_string(baseLayer / 6) + "."s + std::to_string(f), m_pbrShadowNearLayerRT[baseLayer + f], view, proj, dynamicTier);
+         }
+         continue;
+      }
+
+      if (m_pbrShadowSlotCount >= MAX_PBR_SHADOW_SLOTS)
+      {
+         light->m_pbrShadowBakedSlot = -1;
+         continue;
+      }
+      light->m_pbrShadowLayout = 0;
+      light->m_pbrShadowSlot = m_pbrShadowSlotCount;
+
+      // Light view-projection: look at the table center, ortho box fitted on the table bounds in light view space
+      const Matrix3D view = Matrix3D::MatrixLookAtRH(lPos, tableCenter, Vertex3Ds(0.f, -1.f, 0.f));
+      float l = FLT_MAX, r = -FLT_MAX, b = FLT_MAX, t = -FLT_MAX, zn = FLT_MAX, zf = -FLT_MAX;
+      for (int c = 0; c < 8; c++)
+      {
+         const Vertex3Ds corner(c & 1 ? m_table->m_right : m_table->m_left, c & 2 ? m_table->m_bottom : m_table->m_top, c & 4 ? m_table->m_glassTopHeight : 0.f);
+         const Vertex3Ds v = view.MultiplyVectorNoPerspective(corner);
+         l = std::min(l, v.x);
+         r = std::max(r, v.x);
+         b = std::min(b, v.y);
+         t = std::max(t, v.y);
+         zn = std::min(zn, -v.z);
+         zf = std::max(zf, -v.z);
+      }
+      const float m = 25.f; // margin around the table bounds (global lights sit far away: keep coverage generous)
+      const Matrix3D proj = Matrix3D::MatrixOrthoOffCenterRH(l - m, r + m, b - m, t + m, std::max(0.1f, zn - m), zf + m);
+      m_pbrShadowVP[m_pbrShadowSlotCount] = view * proj;
+      (&m_pbrShadowRange.x)[m_pbrShadowSlotCount] = (zf + m) - std::max(0.1f, zn - m);
+      const int slot = m_pbrShadowSlotCount;
+      m_pbrShadowSlotCount++;
+
+      // Emit the caster pass for this slot: static-tier lights only render when the statics are baked or the light
+      // moved since its map was rendered, dynamic-tier lights clear and re-render all casters every frame
+      const bool needsRebake = light->m_pbrShadowBakedSlot != slot || light->m_pbrShadowBakedPos.x != lPos.x || light->m_pbrShadowBakedPos.y != lPos.y
+         || light->m_pbrShadowBakedPos.z != lPos.z || light->m_pbrShadowBakedFalloff != light->m_d.m_falloff;
+      if (dynamicTier || bakeStatics || needsRebake)
+      {
+         light->m_pbrShadowBakedPos = lPos;
+         light->m_pbrShadowBakedFalloff = light->m_d.m_falloff;
+         light->m_pbrShadowBakedSlot = slot;
+         emitCasterPass("PBR Shadow "s + std::to_string(slot), m_pbrShadowLayerRT[slot], view, proj, dynamicTier);
+      }
    }
 
-   if (m_pbrShadowSlotCount > 0)
+   if (m_pbrShadowSlotCount > 0 || m_pbrShadowNearCount > 0)
    {
       // Restore the camera matrices (the parts' RenderItem calls re-applied the space reference during the passes)
       for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
@@ -2767,7 +2833,7 @@ void Renderer::RenderPBRShadowMaps()
       m_render_mask = prevMask;
       constexpr float invMapSize = 1.f / 2048.f;
       m_renderDevice->m_basicShader->SetMatrix(ShaderUniform::matShadowVP, m_pbrShadowVP, MAX_PBR_SHADOW_SLOTS);
-      m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrShadowParams, invMapSize, 0.002f, 0.f, 0.f);
+      m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrShadowParams, invMapSize, 0.002f, 0.f, 1.f / 256.f);
       m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrShadowRanges, m_pbrShadowRange.x, m_pbrShadowRange.y, m_pbrShadowRange.z, m_pbrShadowRange.w);
       m_pbrShadowsDirty = false;
    }

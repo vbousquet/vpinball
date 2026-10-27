@@ -323,6 +323,11 @@ private:
    Matrix3D m_pbrShadowVP[MAX_PBR_SHADOW_SLOTS]; // Light view-projection per slot
    vec4 m_pbrShadowRange = vec4(0.f, 0.f, 0.f, 0.f); // Ortho depth range (zf - zn, VPU) per slot
    int m_pbrShadowSlotCount = 0;
+   static constexpr int MAX_PBR_SHADOW_NEAR_LAYERS = 120; // 20 near lights x 6 cube faces
+   RenderTarget* m_pbrShadowNearLayerRT[MAX_PBR_SHADOW_NEAR_LAYERS] = {}; // Per-face-layer render targets into the near shadow map array
+   bgfx::TextureHandle m_pbrShadowNearTex = BGFX_INVALID_HANDLE; // Depth texture array, 6 layers (cube faces) per shadowed near light
+   std::shared_ptr<Sampler> m_pbrShadowNearMapSampler;
+   int m_pbrShadowNearCount = 0; // Assigned near-light slots (each consumes 6 layers)
 #endif
    void RenderDynamics(); // Render static parts if not IsUsingStaticPrepass, then render dynamic parts
    void DrawBackground();

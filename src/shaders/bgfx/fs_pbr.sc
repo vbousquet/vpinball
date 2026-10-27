@@ -107,6 +107,7 @@ uniform vec4 pbrProbeParams; // x/y: influence ranges of probe0/1 (0 = unbound),
 uniform vec4 pbrProbeLods;   // x/y: max mip level of probe0/1, z: max mip level of the refraction probe (roughness-dependent lod)
 
 SAMPLER2DARRAY(tex_shadowmaps, 3); // layered depth shadow maps (one layer per shadowed ortho/spot light)
+SAMPLER2DARRAY(tex_shadowmaps_near, 5); // layered depth shadow maps for near lights (6 cube face layers per light)
 
 uniform mat4 matShadowVP[4];   // light view-projection per shadow map layer
 uniform vec4 pbrShadowParams; // x: 1/map size, y: slope-scaled depth bias, z: unused, w: unused
@@ -117,6 +118,32 @@ uniform vec4 refractionTint_thickness;
 #endif
 
 #include "ball_shadows.sh"
+
+// Near-light cube face lookup: the light->fragment direction selects one of the 6 consecutive face
+// layers (major axis), uv comes from the face's axis projection. Faces match the rasterization lookAt
+// in RenderPBRShadowMaps (+X,-X,+Y,-Y,+Z,-Z with the same up vectors). Returns (u, v, face, dir.F)
+// where dir.F is the direction component along the face's forward axis (positive in front).
+vec4 pbr_shadow_cube_lookup(const vec3 dir)
+{
+   const vec3 ad = abs(dir);
+   float fw; vec2 fuv; float face;
+   if (ad.x >= ad.y && ad.x >= ad.z)
+   {
+      if (dir.x > 0.0) { fw = dir.x; fuv = vec2(-dir.y, dir.z) / fw; face = 0.0; }
+      else { fw = -dir.x; fuv = vec2(dir.y, dir.z) / fw; face = 1.0; }
+   }
+   else if (ad.y >= ad.z)
+   {
+      if (dir.y > 0.0) { fw = dir.y; fuv = vec2(dir.x, dir.z) / fw; face = 2.0; }
+      else { fw = -dir.y; fuv = vec2(-dir.x, dir.z) / fw; face = 3.0; }
+   }
+   else
+   {
+      if (dir.z > 0.0) { fw = dir.z; fuv = vec2(dir.x, -dir.y) / fw; face = 4.0; }
+      else { fw = -dir.z; fuv = vec2(-dir.x, -dir.y) / fw; face = 5.0; }
+   }
+   return vec4(fuv * vec2(0.5, -0.5) + 0.5, face, fw);
+}
 
 mat3 TBN_trafo(const vec3 N, const vec3 V, const vec2 uv)
 {
@@ -356,6 +383,45 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wV, const vec3 wPos, const vec3 
             }
             shadow = shadowAcc * (1.0 / 9.0);
          }
+      }
+      BRANCH if (shadowLayer >= 0 && shadowLayout == 2)
+      {
+         // Cube layout: 6 consecutive face layers per light. The map stores regular 90 deg perspective
+         // depth, reconstructed to the projected distance along the face's forward axis (world units).
+         // PCF taps offset the lookup direction so they can cross face edges cleanly.
+         // Contact-shadow fix: offset the shading point along the surface normal before computing
+         // the light->fragment direction, so the cube lookup samples deeper inside the caster
+         // silhouette instead of grazing its edge (removes light leaks at caster contact points)
+         const vec3 shadowPos = wPos + wN * (0.5 + 0.04 * sqrt(dist2));
+         const vec3 sdl = lPos.xyz - shadowPos;
+         const float sdist = inversesqrt(dot(sdl, sdl));
+         const vec3 ldir = -sdl * sdist; // normalized light -> fragment direction
+         const float dist = 1.0 / sdist;
+         const float zN = 2.0; // near plane, must match RenderPBRShadowMaps
+         const float zF = max(lPos.w, 60.0);
+         const vec4 cl = pbr_shadow_cube_lookup(ldir);
+         const float blockerNdc = texture2DArrayLod(tex_shadowmaps_near, vec3(cl.xy, float(shadowLayer) + cl.z), 0.0).x;
+         const float blocker = zN * zF / (zF - blockerNdc * (zF - zN));
+         const float worldGap = dist * cl.w - blocker;
+         // PCSS-lite penumbra in direction space (a uv offset of 1.0 maps to ~2 direction units)
+         const float filterRadius = clamp(lightRadius * worldGap / max(blocker, 1.0) * pbrShadowParams.w * 2.0, pbrShadowParams.w, 8.0 * pbrShadowParams.w);
+         const float bias = min(0.5 + 2.0 * (1.0 - NdotL) / max(NdotL, 0.05), 8.0);
+         const vec3 upRef = abs(ldir.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+         const vec3 tX = normalize(cross(upRef, ldir));
+         const vec3 tY = cross(ldir, tX);
+         float shadowAcc = 0.0;
+         UNROLL for (int py = -1; py <= 1; py++)
+         {
+            UNROLL for (int px = -1; px <= 1; px++)
+            {
+               const vec3 tdir = normalize(ldir + (float(px) * tX + float(py) * tY) * filterRadius);
+               const vec4 tl = pbr_shadow_cube_lookup(tdir);
+               const float tapNdc = texture2DArrayLod(tex_shadowmaps_near, vec3(tl.xy, float(shadowLayer) + tl.z), 0.0).x;
+               const float tapBlocker = zN * zF / (zF - tapNdc * (zF - zN));
+               shadowAcc += step(dist * tl.w - bias, tapBlocker);
+            }
+         }
+         shadow = shadowAcc * (1.0 / 9.0);
       }
       BRANCH if (shadowMode == 1 || shadowMode >= 3) // RAYTRACED_BALL_SHADOWS or PBR ball shadow tiers
          shadow *= get_light_ball_shadow(lPos.xyz, -dl, sqrt(dist2));

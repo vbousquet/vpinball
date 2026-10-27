@@ -146,8 +146,6 @@ enum class ShaderTechnique : unsigned int
    // PBR depth prepass variants additionally writing the camera & object motion vectors in zw of attachment 0
    SHADER_TECHNIQUE(pbr_depth_mv),
    SHADER_TECHNIQUE(pbr_depth_at_mv),
-   SHADER_TECHNIQUE(ball_depth),
-   SHADER_TECHNIQUE(ball_depth_n),
    // Depth prepass variants that additionally write the camera motion vectors to the 2 free channels of the color
    // attachment (BGFX only: they are used by the AO temporal accumulation under a dynamic camera, e.g. in VR)
    SHADER_TECHNIQUE(basic_depth_n_mv),
@@ -159,8 +157,6 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(display_Seg),
    SHADER_TECHNIQUE(display_Seg_world),
    SHADER_TECHNIQUE(display_CRT),
-   SHADER_TECHNIQUE(basic_DMD),
-   SHADER_TECHNIQUE(basic_DMD_world),
    // PBR materials (BGFX only): opaque, opaque alpha-tested, opaque untextured, transparent, transparent untextured,
    // and the 3 'is' variants used when rendering inside probes (in-shader envmap specular, no sideband output)
    SHADER_TECHNIQUE(pbr),
@@ -171,13 +167,6 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(pbr_is),
    SHADER_TECHNIQUE(pbr_is_at),
    SHADER_TECHNIQUE(pbr_is_notex),
-   SHADER_TECHNIQUE(basic_DMD),
-   SHADER_TECHNIQUE(basic_DMD_world),
-   SHADER_TECHNIQUE(display_DMD),
-   SHADER_TECHNIQUE(display_DMD_world),
-   SHADER_TECHNIQUE(display_Seg),
-   SHADER_TECHNIQUE(display_Seg_world),
-   SHADER_TECHNIQUE(display_CRT),
    // Lottes-CRT
    SHADER_TECHNIQUE(display_CRT_world),
    // Same as above but built with the Nuance-CRT filter, the renderer picking between them per display (see Renderer::SetupCRTRender)
@@ -255,7 +244,6 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(SSReflection_shaded_masked),
    SHADER_TECHNIQUE(PBR_march),
    SHADER_TECHNIQUE(PBR_resolve),
-   SHADER_TECHNIQUE(fb_resolve_depth_msaa),
 #endif
 
    SHADER_TECHNIQUE(NFAA),
@@ -395,6 +383,7 @@ enum class ShaderUniform : unsigned int
    SHADER_SAMPLER(tex_pbr_probe1, 14, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // second planar reflection probe
    SHADER_SAMPLER(tex_pbr_refr, 15, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // screen space refraction probe (transparent parts)
    SHADER_SAMPLER(tex_shadowmaps, 16, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // layered depth shadow maps (ortho/spot)
+   SHADER_SAMPLER(tex_shadowmaps_near, 5, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // layered depth shadow maps (near light cube faces)
    SHADER_SAMPLER(tex_pbr_mask, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP,
       SamplerFilter::SF_BILINEAR), // PBR pixel mask (sideband attachment alpha), masks the tonemap AO application
    SHADER_SAMPLER(tex_pbr_att1, 8, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // sideband att1: probe radiance + coverage
