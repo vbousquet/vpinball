@@ -192,6 +192,12 @@ private:
    void UpdateBounds();
 
 public:
+   // PBR shadow map slot state, assigned by the renderer when shadow passes are emitted
+   mutable int m_pbrShadowSlot = -1; // layer index in the shadow map array (-1 = no map)
+   mutable int m_pbrShadowLayout = 0; // 0 = ortho (other layouts reserved)
+   mutable Vertex3Ds m_pbrShadowBakedPos { FLT_MAX, FLT_MAX, FLT_MAX }; // Light position the shadow map was last rendered for (invalid = needs bake)
+   mutable float m_pbrShadowBakedFalloff = 0.f; // Falloff the shadow map was last rendered for
+   mutable int m_pbrShadowBakedSlot = -1; // Layer the shadow map was last rendered into (invalid = needs bake)
    STDMETHOD(get_Surface)(/*[out, retval]*/ BSTR *pVal);
    STDMETHOD(put_Surface)(/*[in]*/ BSTR newVal);
    STDMETHOD(get_Intensity)(/*[out, retval]*/ float *pVal);

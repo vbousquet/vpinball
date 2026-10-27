@@ -239,7 +239,28 @@ void Bumper::Render(const unsigned int renderMask)
    if (isReflectionPass && !m_d.m_reflectionEnabled)
       return;
 
-   const Vertex3Ds pos(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight);
+   const Vertex3Ds pos(
+      m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight); // PBR shadow map pass: draw only the caster geometry with the light's view-projection (the ring follows its animation)
+   if (renderMask & Renderer::SHADOW_MAP)
+   {
+      const float ringAnimOffset = m_pbumperhitcircle->m_bumperanim_ringAnimOffset;
+      if (m_d.m_baseVisible && m_baseMeshBuffer != nullptr)
+      {
+         m_renderer->UpdateBasicShaderMatrix();
+         m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_baseMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperBaseNumIndices);
+         if (m_d.m_skirtVisible && m_socketMeshBuffer != nullptr)
+            m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_socketMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperSocketNumIndices);
+         if (m_d.m_capVisible && m_capMeshBuffer != nullptr)
+            m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_capMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperCapNumIndices);
+      }
+      if (m_d.m_ringVisible && m_ringMeshBuffer != nullptr)
+      {
+         m_renderer->UpdateBasicShaderMatrix(Matrix3D::MatrixTranslate(0.f, 0.f, ringAnimOffset));
+         m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_ringMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperRingNumIndices);
+         m_renderer->UpdateBasicShaderMatrix();
+      }
+      return;
+   }
 
    if (m_d.m_baseVisible)
    {

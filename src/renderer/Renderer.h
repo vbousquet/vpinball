@@ -258,14 +258,15 @@ public:
 
    enum RenderMask : unsigned int
    {
-      DEFAULT = 0,                // No flag, just render everything
-      STATIC_ONLY = 1 << 0,       // Static part prerendering
-      DYNAMIC_ONLY = 1 << 1,      // Dynamic part rendering (after a static part prerendering)
-      LIGHT_BUFFER = 1 << 2,      // Transmitted light rendering
-      REFLECTION_PASS = 1 << 3,   // Reflection pass, only render reflected elements
+      DEFAULT = 0, // No flag, just render everything
+      STATIC_ONLY = 1 << 0, // Static part prerendering
+      DYNAMIC_ONLY = 1 << 1, // Dynamic part rendering (after a static part prerendering)
+      LIGHT_BUFFER = 1 << 2, // Transmitted light rendering
+      REFLECTION_PASS = 1 << 3, // Reflection pass, only render reflected elements
       DISABLE_LIGHTMAPS = 1 << 4, // Disable lightmaps, useful for reflection probe parallel to lightmap ot avoid doubling them
-      UI_EDGES = 1 << 5,          // Render as wireframe
-      UI_FILL = 1 << 6,           // Render filled interior
+      UI_EDGES = 1 << 5, // Render as wireframe
+      UI_FILL = 1 << 6, // Render filled interior
+      SHADOW_MAP = 1 << 7, // PBR shadow map pass, only render shadow casting geometry
    };
    unsigned int m_render_mask = DEFAULT; // Active pass render bit mask
    bool IsRenderPass(const RenderMask pass_mask) const { return (m_render_mask & pass_mask) != 0; }
@@ -307,8 +308,21 @@ private:
    void RenderItem(IEditable* const renderable, bool isNoBackdrop);
    void RenderStatics(); // Render background, then static parts if IsUsingStaticPrepass
    void PreparePBRPasses(); // Record PBR sideband clear and early AO passes when PBR is active
+   void AddPBRShadowDependencies(); // Order the shadow map passes before the (just created) scene pass (no-op without BGFX)
+   bool m_pbrShadowsDirty = true; // Re-bake static shadow casters (written on all renderers, read under ENABLE_BGFX)
+   bool m_staticPrepassContentDirty = false; // Set when static content (not the view) invalidates the prepass
 #if defined(ENABLE_BGFX)
    void BuildPBRLightList(); // Rebuild the Forward+ clustered light list (CPU world-space XY grid, per frame)
+   void RenderPBRShadowMaps(); // Record the PBR shadow map passes (static bake + per-frame dynamic casters)
+   void CreatePBRShadowMapTargets(); // Lazily create the layered depth texture array and its per-layer render targets
+
+   static constexpr int MAX_PBR_SHADOW_SLOTS = 4;
+   RenderTarget* m_pbrShadowLayerRT[MAX_PBR_SHADOW_SLOTS] = {}; // Per-layer render targets into the shadow map depth array
+   bgfx::TextureHandle m_pbrShadowMapTex = BGFX_INVALID_HANDLE; // Depth texture array, one layer per shadowed light slot
+   std::shared_ptr<Sampler> m_pbrShadowMapSampler;
+   Matrix3D m_pbrShadowVP[MAX_PBR_SHADOW_SLOTS]; // Light view-projection per slot
+   vec4 m_pbrShadowRange = vec4(0.f, 0.f, 0.f, 0.f); // Ortho depth range (zf - zn, VPU) per slot
+   int m_pbrShadowSlotCount = 0;
 #endif
    void RenderDynamics(); // Render static parts if not IsUsingStaticPrepass, then render dynamic parts
    void DrawBackground();

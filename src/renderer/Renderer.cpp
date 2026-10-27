@@ -453,6 +453,7 @@ void Renderer::SetTable(PinTable *const table)
 
    // Static prerendering must be fully re-evaluated for the new table
    m_isStaticPrepassDirty = true;
+   m_pbrShadowsDirty = true;
    m_staticPrepassAccumCount = 0;
    m_statsDrawnStaticTriangles = 0;
 
@@ -471,6 +472,13 @@ Renderer::~Renderer()
    m_ballTrailMeshBuffer = nullptr;
    delete m_tonemapLUT;
    delete m_staticPrepassRT;
+#if defined(ENABLE_BGFX)
+   for (int i = 0; i < MAX_PBR_SHADOW_SLOTS; i++)
+      delete m_pbrShadowLayerRT[i];
+   m_pbrShadowMapSampler = nullptr;
+   if (bgfx::isValid(m_pbrShadowMapTex))
+      bgfx::destroy(m_pbrShadowMapTex);
+#endif
    delete m_depthPrepassRT[0];
    delete m_depthPrepassRT[1];
    delete m_pOffscreenBackBufferTexture1;
@@ -652,6 +660,7 @@ void Renderer::ResizeRenderTargets()
    m_pAORenderTarget2 = nullptr;
    m_staticPrepassRT = nullptr;
    m_isStaticPrepassDirty = true;
+   m_pbrShadowsDirty = true;
    for (RenderProbe* probe : m_table->m_vrenderprobe)
       probe->ReleaseRenderTargets();
 
@@ -2349,6 +2358,7 @@ void Renderer::RenderStatics()
    // Static parts may have changed while the prepass was not used (e.g. edited in the editor, which disables it): refresh it when it is used again
    const bool useStaticPrepass = IsUsingStaticPrepass();
    m_isStaticPrepassDirty |= useStaticPrepass && !m_wasUsingStaticPrepass;
+   m_staticPrepassContentDirty |= useStaticPrepass && !m_wasUsingStaticPrepass;
    m_wasUsingStaticPrepass = useStaticPrepass;
 
    // The depth prepass is recorded before the scene pass. The frame then fills it with clones of the scene draw
@@ -2384,12 +2394,15 @@ void Renderer::RenderStatics()
       m_renderDevice->GetCurrentPass()->m_emitDepthPrepass = useDepthPrepass;
       if (useDepthPrepass)
          m_renderDevice->AddRenderTargetDependency(GetDepthPrepassRenderTarget());
+      AddPBRShadowDependencies();
       return;
    }
 
    if (m_isStaticPrepassDirty)
    {
       m_isStaticPrepassDirty = false;
+      m_pbrShadowsDirty |= m_staticPrepassContentDirty;
+      m_staticPrepassContentDirty = false;
       PLOGI << "Performing prerendering of static parts."; // For profiling
       // Defer deletion to the render thread end-of-frame: already submitted frames may still hold copy commands sourcing this RT
       if (m_staticPrepassRT)
@@ -2562,6 +2575,7 @@ void Renderer::RenderStatics()
       m_renderDevice->m_FBShader->SetTextureNull(ShaderUniform::tex_fb_unfiltered);
    }
    m_renderDevice->SetRenderTarget("Render Scene"s, GetMSAABackBufferTexture(), true, true); // Force new pass to avoid sorting the statics composite draw calls with 3D rendering draw calls
+   AddPBRShadowDependencies();
    m_renderDevice->GetCurrentPass()->m_emitDepthPrepass = useDepthPrepass;
    if (useDepthPrepass)
       m_renderDevice->AddRenderTargetDependency(GetDepthPrepassRenderTarget());
@@ -2574,6 +2588,7 @@ void Renderer::PreparePBRPasses()
 
    // Forward+ light list: light states animate per frame so the cluster grid is rebuilt and uploaded each frame
 #ifdef ENABLE_BGFX
+   RenderPBRShadowMaps();
    BuildPBRLightList();
 #endif
 
@@ -2594,6 +2609,174 @@ void Renderer::PreparePBRPasses()
       m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_pbr_ao, GetAORenderTarget(1)->GetColorSampler());
    }
 }
+
+// Declared unconditionally like PreparePBRPasses: the call sites in RenderStatics run on every
+// renderer, so the body self-guards and is a no-op without BGFX.
+void Renderer::AddPBRShadowDependencies()
+{
+#if defined(ENABLE_BGFX)
+   for (int i = 0; i < m_pbrShadowSlotCount; i++)
+      m_renderDevice->AddRenderTargetDependency(m_pbrShadowLayerRT[i]);
+#endif
+}
+
+#if defined(ENABLE_BGFX)
+// Lazily creates the layered shadow map: a single depth texture array (one layer per shadowed light slot) plus one
+// render target per layer, wrapping a framebuffer that renders into that array layer. The array is bound once as
+// tex_shadowmaps and each light indexes its own layer when shading.
+void Renderer::CreatePBRShadowMapTargets()
+{
+   constexpr int shadowMapSize = 2048;
+   if (bgfx::isValid(m_pbrShadowMapTex))
+      return;
+   m_pbrShadowMapTex = bgfx::createTexture2D(shadowMapSize, shadowMapSize, false, MAX_PBR_SHADOW_SLOTS, bgfx::TextureFormat::D32F, BGFX_TEXTURE_RT);
+   bgfx::setName(m_pbrShadowMapTex, "PBRShadowMaps");
+   for (int i = 0; i < MAX_PBR_SHADOW_SLOTS; i++)
+   {
+      bgfx::Attachment attachment;
+      attachment.init(m_pbrShadowMapTex, bgfx::Access::Write, static_cast<uint16_t>(i), 1, 0, BGFX_ATTACHMENT_NONE);
+      const bgfx::FrameBufferHandle fbh = bgfx::createFrameBuffer(1, &attachment);
+      assert(bgfx::isValid(fbh));
+      m_pbrShadowLayerRT[i] = new RenderTarget(m_renderDevice, GetBackBufferTexture()->m_type, fbh, BGFX_INVALID_HANDLE, bgfx::TextureFormat::Count, m_pbrShadowMapTex,
+         bgfx::TextureFormat::D32F, "PBRShadowMap"s + std::to_string(i), shadowMapSize, shadowMapSize, colorFormat::RGBA8);
+   }
+   m_pbrShadowMapSampler = m_pbrShadowLayerRT[0]->GetDepthSampler();
+   m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_shadowmaps, m_pbrShadowMapSampler);
+}
+
+
+// Assigns a shadow map slot to each eligible PBR light (ortho layout for high/scene lights; near lights would need
+// a cube map layout which is not implemented and are therefore skipped), then emits the caster passes: static
+// casters are baked only when the statics are (re)rendered or the shadow maps are dirty, dynamic-tier lights
+// re-rasterize all their casters every frame.
+void Renderer::RenderPBRShadowMaps()
+{
+   CreatePBRShadowMapTargets();
+
+   const Vertex3Ds tableCenter((m_table->m_left + m_table->m_right) * 0.5f, (m_table->m_top + m_table->m_bottom) * 0.5f, 0.f);
+   m_pbrShadowSlotCount = 0;
+   for (Matrix3D& vp : m_pbrShadowVP)
+      vp.SetIdentity();
+
+   const bool bakeStatics = m_pbrShadowsDirty;
+   const unsigned int prevMask = m_render_mask;
+   const PartGroupData::SpaceReference prevSpaceRef = m_mvpSpaceReference;
+   const Matrix3D savedView[2] = { m_playfieldView[0], m_playfieldView[1] };
+   const Matrix3D savedProj[2] = { m_mvp.GetProj(0), m_mvp.GetProj(m_mvp.m_nEyes - 1) };
+
+   for (IEditable* const part : m_table->GetParts())
+   {
+      if (part->GetItemType() != eItemLight)
+         continue;
+      Light* const light = static_cast<Light*>(part);
+      light->m_pbrShadowSlot = -1;
+      const bool eligible = light->m_d.m_type == LightType::PBR && light->m_d.m_visible && light->m_currentIntensity > 0.f && !light->m_desktopBackdrop
+         && light->m_d.m_shadows >= ShadowMode::PBR_STATIC_SHADOWS;
+      if (!eligible)
+         light->m_pbrShadowBakedSlot = -1; // a light that is off loses its layer claim: re-bake when it turns back on
+      if (!eligible || m_pbrShadowSlotCount >= MAX_PBR_SHADOW_SLOTS)
+         continue;
+
+      const Vertex3Ds lPos(light->m_d.m_vCenter.x, light->m_d.m_vCenter.y, light->GetCurrentHeight());
+      // Ortho (scene) layout: the light must sit above the glass top — ortho approximates a directional
+      // source, so a light embedded in the scene below the glass would project near-horizontally (its
+      // direction swinging with any move); those near lights need a direction-sampled layout (skipped here)
+      if (lPos.z <= m_table->m_glassTopHeight)
+      {
+         light->m_pbrShadowBakedSlot = -1;
+         continue;
+      }
+      light->m_pbrShadowLayout = 0;
+      light->m_pbrShadowSlot = m_pbrShadowSlotCount;
+
+      // Light view-projection: look at the table center, ortho box fitted on the table bounds in light view space
+      const Matrix3D view = Matrix3D::MatrixLookAtRH(lPos, tableCenter, Vertex3Ds(0.f, -1.f, 0.f));
+      float l = FLT_MAX, r = -FLT_MAX, b = FLT_MAX, t = -FLT_MAX, zn = FLT_MAX, zf = -FLT_MAX;
+      for (int c = 0; c < 8; c++)
+      {
+         const Vertex3Ds corner(c & 1 ? m_table->m_right : m_table->m_left, c & 2 ? m_table->m_bottom : m_table->m_top, c & 4 ? m_table->m_glassTopHeight : 0.f);
+         const Vertex3Ds v = view.MultiplyVectorNoPerspective(corner);
+         l = std::min(l, v.x);
+         r = std::max(r, v.x);
+         b = std::min(b, v.y);
+         t = std::max(t, v.y);
+         zn = std::min(zn, -v.z);
+         zf = std::max(zf, -v.z);
+      }
+      const float m = 25.f; // margin around the table bounds (global lights sit far away: keep coverage generous)
+      const Matrix3D proj = Matrix3D::MatrixOrthoOffCenterRH(l - m, r + m, b - m, t + m, std::max(0.1f, zn - m), zf + m);
+      m_pbrShadowVP[m_pbrShadowSlotCount] = view * proj;
+      const int slot = m_pbrShadowSlotCount;
+      m_pbrShadowSlotCount++;
+
+      // Emit the caster pass for this slot: static-tier lights only render when the statics are baked or the light
+      // moved since its map was rendered, dynamic-tier lights clear and re-render all casters every frame
+      const bool dynamicTier = light->m_d.m_shadows == ShadowMode::PBR_STATIC_N_DYNAMIC_SHADOWS;
+      const bool needsRebake = light->m_pbrShadowBakedSlot != slot || light->m_pbrShadowBakedPos.x != lPos.x || light->m_pbrShadowBakedPos.y != lPos.y
+         || light->m_pbrShadowBakedPos.z != lPos.z || light->m_pbrShadowBakedFalloff != light->m_d.m_falloff;
+      if (!dynamicTier && !bakeStatics && !needsRebake)
+         continue;
+      light->m_pbrShadowBakedPos = lPos;
+      light->m_pbrShadowBakedFalloff = light->m_d.m_falloff;
+      light->m_pbrShadowBakedSlot = slot;
+      m_renderDevice->SetRenderTarget("PBR Shadow "s + std::to_string(slot), m_pbrShadowLayerRT[slot], false);
+      m_renderDevice->Clear(clearType::ZBUFFER, 0x00000000);
+      m_renderDevice->ResetRenderState();
+      m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_TRUE);
+      m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_TRUE);
+      m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
+      m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
+      m_renderDevice->m_basicShader->SetTechnique(ShaderTechnique::unshaded_without_texture);
+      for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
+      {
+         m_playfieldView[eye] = view;
+         m_mvp.SetView(eye, view);
+         m_mvp.SetProj(eye, proj);
+      }
+      m_render_mask = SHADOW_MAP | (dynamicTier ? 0u : static_cast<unsigned int>(STATIC_ONLY));
+      for (auto renderable : m_table->GetParts())
+      {
+         switch (renderable->GetItemType()) // Only the parts that implement a shadow caster branch
+         {
+         case eItemPrimitive:
+         case eItemRamp:
+         case eItemRubber:
+         case eItemSurface:
+         case eItemFlipper:
+         case eItemHitTarget:
+         case eItemBumper:
+         case eItemGate:
+         case eItemSpinner:
+         case eItemPlunger:
+         case eItemTrigger: RenderItem(renderable, true); break;
+         default: break;
+         }
+      }
+   }
+
+   if (m_pbrShadowSlotCount > 0)
+   {
+      // Restore the camera matrices (the parts' RenderItem calls re-applied the space reference during the passes)
+      for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
+      {
+         m_playfieldView[eye] = savedView[eye];
+         m_mvp.SetProj(eye, savedProj[eye]);
+      }
+      m_mvp = m_initialMVP;
+      SetSpaceReference(prevSpaceRef, true);
+      m_render_mask = prevMask;
+      constexpr float invMapSize = 1.f / 2048.f;
+      m_renderDevice->m_basicShader->SetMatrix(ShaderUniform::matShadowVP, m_pbrShadowVP, MAX_PBR_SHADOW_SLOTS);
+      m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrShadowParams, invMapSize, 0.002f, 0.f, 0.f);
+      m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrShadowRanges, m_pbrShadowRange.x, m_pbrShadowRange.y, m_pbrShadowRange.z, m_pbrShadowRange.w);
+      m_pbrShadowsDirty = false;
+   }
+   else
+   {
+      m_render_mask = prevMask;
+   }
+}
+#endif
 
 #if defined(ENABLE_BGFX)
 // Builds the Forward+ light list: a world-space XY cluster grid over the table bounds, packed into a RGBA32F
@@ -2654,7 +2837,11 @@ void Renderer::BuildPBRLightList()
       e.pos = Vertex3Ds(light->m_d.m_vCenter.x, light->m_d.m_vCenter.y, light->GetCurrentHeight());
       e.range = max(light->m_d.m_falloff, 1.f);
       const float radiance = light->m_currentIntensity * intensityToLinear;
-      e.radiance = vec4(tint.x * radiance, tint.y * radiance, tint.z * radiance, (float)light->m_d.m_shadows); // w: mode, reserved for the M5 shadow mapping
+      // w packs the shadow mode (bits 0-3), the shadow map layer + 1 (bits 4-11, 0 = no map), the map layout
+      // (bits 12-15, 0 = ortho) and the quantized penumbra radius in 0.5 VPU units (bits 16+)
+      const int shadowSlot = light->m_pbrShadowSlot;
+      const int shadowInfo = static_cast<int>(light->m_d.m_shadows) | ((shadowSlot + 1) << 4) | (light->m_pbrShadowLayout << 12) | (4 << 16);
+      e.radiance = vec4(tint.x * radiance, tint.y * radiance, tint.z * radiance, (float)shadowInfo);
       e.index = lightCount;
       lightCount++;
 

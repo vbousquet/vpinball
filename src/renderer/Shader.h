@@ -383,6 +383,9 @@ enum class ShaderUniform : unsigned int
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrProbeParams, 1), // x/y: influence range of probe0/1 (0 = unbound), z: SSR suppression weight mu, w: refraction probe bound
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrResolveParams, 1), // x: SSR fade start roughness, y: fade end, z: max pooling radius (low res texels), w: firefly clamp factor
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrProbeLods, 1), // x/y: max mip level of reflection probe0/1, z: max mip level of the refraction probe
+   SHADER_UNIFORM(ShaderUniformType::Float4x4, matShadowVP, 4), // ortho/spot shadow map view-projection, per slot
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrShadowParams, 1),
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrShadowRanges, 1), // x: 1/map size, y: depth bias, z: penumbra scale, w: unused
    SHADER_SAMPLER(tex_pbr_orm, 8, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // packed occlusion/roughness/metallic
    SHADER_SAMPLER(tex_pbr_emission, 9, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // emission map
    SHADER_SAMPLER(tex_pbr_ao, 10, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // screenspace ambient occlusion
@@ -391,6 +394,7 @@ enum class ShaderUniform : unsigned int
    SHADER_SAMPLER(tex_pbr_probe0, 13, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // first planar reflection probe
    SHADER_SAMPLER(tex_pbr_probe1, 14, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // second planar reflection probe
    SHADER_SAMPLER(tex_pbr_refr, 15, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // screen space refraction probe (transparent parts)
+   SHADER_SAMPLER(tex_shadowmaps, 16, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // layered depth shadow maps (ortho/spot)
    SHADER_SAMPLER(tex_pbr_mask, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP,
       SamplerFilter::SF_BILINEAR), // PBR pixel mask (sideband attachment alpha), masks the tonemap AO application
    SHADER_SAMPLER(tex_pbr_att1, 8, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // sideband att1: probe radiance + coverage

@@ -889,6 +889,18 @@ void Primitive::Render(const unsigned int renderMask)
    assert(m_renderer != nullptr);
    assert(!m_desktopBackdrop);
 
+   // PBR shadow map pass: draw only the caster geometry with the light's view-projection
+   if (renderMask & Renderer::SHADOW_MAP)
+   {
+      if (m_d.m_visible && !m_skipRendering && m_meshBuffer != nullptr && ((renderMask & Renderer::STATIC_ONLY) == 0 || m_d.m_staticRendering))
+      {
+         m_renderer->UpdateBasicShaderMatrix(RecalculateMatrices());
+         m_renderer->m_renderDevice->DrawMesh(
+            m_renderer->m_renderDevice->m_basicShader, false, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, (uint32_t)m_mesh.NumIndices());
+      }
+      return;
+   }
+
    if (!m_d.m_visible || m_skipRendering)
       return;
 

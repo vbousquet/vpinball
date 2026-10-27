@@ -106,6 +106,12 @@ uniform vec4 pbrProbes1; // reflection plane of the second bound probe
 uniform vec4 pbrProbeParams; // x/y: influence ranges of probe0/1 (0 = unbound), z: SSR/probe blend factor, w: refraction probe bound
 uniform vec4 pbrProbeLods;   // x/y: max mip level of probe0/1, z: max mip level of the refraction probe (roughness-dependent lod)
 
+SAMPLER2DARRAY(tex_shadowmaps, 3); // layered depth shadow maps (one layer per shadowed ortho/spot light)
+
+uniform mat4 matShadowVP[4];   // light view-projection per shadow map layer
+uniform vec4 pbrShadowParams; // x: 1/map size, y: slope-scaled depth bias, z: unused, w: unused
+uniform vec4 pbrShadowRanges; // ortho depth range (VPU) per shadow slot
+
 #ifdef TRANSPARENT
 uniform vec4 refractionTint_thickness;
 #endif
@@ -286,7 +292,8 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wV, const vec3 wPos, const vec3 
    {
       const int li = int(pbr_light_texel(1024 + start + i).x);
       const vec4 lPos = pbr_light_texel(li * 2);
-      const vec3 lCol = pbr_light_texel(li * 2 + 1).rgb;
+      const vec4 lRad = pbr_light_texel(li * 2 + 1);
+      const vec3 lCol = lRad.rgb;
       const vec3 dl = lPos.xyz - wPos;
       // Clamp the distance to ~1 VPU (~0.5mm): a light embedded in geometry would otherwise
       // produce unbounded inverse-square irradiance
@@ -315,7 +322,45 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wV, const vec3 wPos, const vec3 
       // inside the clipped region so the bloom blob edge moves smoothly as the view moves
       vec3 spec = D * F * G * (lCol * (x * x / dist2)) * NdotL;
       spec /= 1.0 + dot(spec, vec3(0.176204, 0.812985, 0.0108109)) * (1.0 / 1024.0);
-      acc += diffuse * (vec3_splat(1.0) - F) * (1.0 / PI) * (lCol * (x * x / dist2)) * NdotL + spec;
+
+      // Shadowed light record: w packs mode (bits 0-3), map layer + 1 (bits 4-11, 0 = no map), layout (bits 12-15)
+      // and the penumbra radius quantized in 0.5 VPU units (bits 16+)
+      float shadow = 1.0;
+      const int shadowInfo = int(floor(lRad.w + 0.5));
+      const int shadowMode = shadowInfo & 15;
+      const int shadowLayer = ((shadowInfo >> 4) & 255) - 1;
+      const int shadowLayout = (shadowInfo >> 12) & 15;
+      const float lightRadius = float(shadowInfo >> 16) * 0.5;
+      BRANCH if (shadowLayer >= 0 && shadowLayout <= 1)
+      {
+         const vec4 sc = mul(matShadowVP[shadowLayer], vec4(wPos, 1.0));
+         const vec2 suv = sc.xy * vec2(0.5, -0.5) + 0.5;
+         BRANCH if (sc.z > 0.0 && all(greaterThanEqual(suv, vec2_splat(0.0))) && all(lessThanEqual(suv, vec2_splat(1.0))))
+         {
+            // Slope-scaled depth bias plus a constant term to fight self-shadowing acne
+            const float bias = pbrShadowParams.y * (1.0 - NdotL) / max(NdotL, 0.1) + 0.25 * pbrShadowParams.x;
+            const float blocker = texture2DArrayLod(tex_shadowmaps, vec3(suv, float(shadowLayer)), 0.0).x;
+            // PCSS-lite: the penumbra radius grows with the receiver/blocker gap, expressed in world units
+            // (the ortho depth is linear so the gap scales by the map's depth range)
+            const float worldGap = (sc.z - blocker) * (shadowLayer == 0 ? pbrShadowRanges.x : shadowLayer == 1 ? pbrShadowRanges.y : shadowLayer == 2 ? pbrShadowRanges.z : pbrShadowRanges.w);
+            const float filterRadius = clamp(lightRadius * worldGap / max(sqrt(dist2), 1.0) * pbrShadowParams.x, pbrShadowParams.x, 16.0 * pbrShadowParams.x);
+            float shadowAcc = 0.0;
+            UNROLL for (int py = -1; py <= 1; py++)
+            {
+               UNROLL for (int px = -1; px <= 1; px++)
+               {
+                  const vec2 off = vec2(float(px), float(py)) * filterRadius;
+                  const float d = texture2DArrayLod(tex_shadowmaps, vec3(suv + off, float(shadowLayer)), 0.0).x;
+                  shadowAcc += step(sc.z - bias, d);
+               }
+            }
+            shadow = shadowAcc * (1.0 / 9.0);
+         }
+      }
+      BRANCH if (shadowMode == 1 || shadowMode >= 3) // RAYTRACED_BALL_SHADOWS or PBR ball shadow tiers
+         shadow *= get_light_ball_shadow(lPos.xyz, -dl, sqrt(dist2));
+
+      acc += shadow * (diffuse * (vec3_splat(1.0) - F) * (1.0 / PI) * (lCol * (x * x / dist2)) * NdotL + spec);
    }
    return acc;
 }
