@@ -235,6 +235,7 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(AO),
    SHADER_TECHNIQUE(AO_shaded),
    SHADER_TECHNIQUE(fb_AO), // Display debug AO
+   SHADER_TECHNIQUE(fb_pbr_ssr), // Display debug PBR specular march
    SHADER_TECHNIQUE(fb_prepass_depth), // Display debug depth prepass depth attachment
    SHADER_TECHNIQUE(fb_prepass_normal), // Display debug depth prepass shaded normals
    SHADER_TECHNIQUE(fb_prepass_motion), // Display debug depth prepass motion vectors
@@ -461,6 +462,8 @@ enum class ShaderUniform : unsigned int
    SHADER_SAMPLER(tex_normals, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // Shaded normals from the depth prepass (attachment 0)
    SHADER_SAMPLER(tex_pbr_data, 10, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // PBR roughness & opaque flag from the depth prepass (attachment 1)
    SHADER_SAMPLER(tex_ssr_lowres, 3, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // Half resolution raymarched reflections
+   SHADER_SAMPLER(tex_pbr_ssr_history, 3, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP,
+      SamplerFilter::SF_BILINEAR), // previous frame premultiplied PBR specular march (temporal reprojection)
    //SHADER_SAMPLER(tex_tonemap_lut, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // Tonemap LUT
    SHADER_SAMPLER(edgesTex, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // SMAA
    SHADER_SAMPLER(blendTex, 8, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // SMAA
