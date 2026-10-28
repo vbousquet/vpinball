@@ -10,9 +10,20 @@
 #include "math/matrix.h"
 #include "meshes/ballMesh.h"
 #include "parts/ball.h"
+#include "parts/bumper.h"
 #include "parts/Collection.h"
+#include "parts/flipper.h"
+#include "parts/gate.h"
+#include "parts/hittarget.h"
 #include "parts/light.h"
 #include "parts/pintable.h"
+#include "parts/plunger.h"
+#include "parts/primitive.h"
+#include "parts/ramp.h"
+#include "parts/rubber.h"
+#include "parts/spinner.h"
+#include "parts/surface.h"
+#include "parts/trigger.h"
 #include "physics/cabinet/NudgeHandler.h"
 #include "renderer/Anaglyph.h"
 #include "renderer/Shader.h"
@@ -455,6 +466,10 @@ void Renderer::SetTable(PinTable *const table)
    m_isStaticPrepassDirty = true;
    m_staticPrepassAccumCount = 0;
    m_statsDrawnStaticTriangles = 0;
+#if defined(ENABLE_BGFX)
+   m_vsmLights.clear(); // all virtual maps are table-dependent: re-mark and re-bake from scratch
+   m_vsmPool.Reset(m_vsmPool.LayerCount());
+#endif
 
    // The environment map sampler and its precomputed radiance are kept: base tables and their
    // live copies share the same table images (and therefore the same environment map). Rebinding
@@ -471,6 +486,14 @@ Renderer::~Renderer()
    m_ballTrailMeshBuffer = nullptr;
    delete m_tonemapLUT;
    delete m_staticPrepassRT;
+#if defined(ENABLE_BGFX)
+   m_vsmPoolSampler = nullptr;
+   m_vsmPageTableSampler = nullptr;
+   if (bgfx::isValid(m_vsmPoolTex))
+      bgfx::destroy(m_vsmPoolTex);
+   if (bgfx::isValid(m_vsmPageTableTex))
+      bgfx::destroy(m_vsmPageTableTex);
+#endif
    delete m_depthPrepassRT[0];
    delete m_depthPrepassRT[1];
    delete m_pOffscreenBackBufferTexture1;
@@ -2275,7 +2298,7 @@ void Renderer::SetSpaceReference(PartGroupData::SpaceReference spaceReference, b
    // Record the camera transform under which this frame's scene is rendered for this space reference, to feed
    // the depth prepass motion vectors (skipped for passes which do not contribute to the scene prepass, e.g.
    // the reflected passes whose reflected view would break the recorded camera history)
-   if (IsMotionVectorPrepass() && !IsRenderPass(RenderMask::REFLECTION_PASS))
+   if (IsMotionVectorPrepass() && (m_render_mask & (RenderMask::REFLECTION_PASS | RenderMask::SHADOW_MAP)) == 0)
    {
       const int refIndex = clamp(static_cast<int>(spaceReference), 0, 3);
       for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
@@ -2384,6 +2407,7 @@ void Renderer::RenderStatics()
       PreparePBRPasses();
       m_renderDevice->SetRenderTarget("Render Scene"s, GetMSAABackBufferTexture(), true, true); // Force new pass to avoid sorting background draw calls with 3D rendering draw calls
       m_renderDevice->GetCurrentPass()->m_emitDepthPrepass = useDepthPrepass;
+      AddPBRShadowDependencies();
       if (useDepthPrepass)
          m_renderDevice->AddRenderTargetDependency(GetDepthPrepassRenderTarget());
       return;
@@ -2565,6 +2589,7 @@ void Renderer::RenderStatics()
    }
    m_renderDevice->SetRenderTarget("Render Scene"s, GetMSAABackBufferTexture(), true, true); // Force new pass to avoid sorting the statics composite draw calls with 3D rendering draw calls
    m_renderDevice->GetCurrentPass()->m_emitDepthPrepass = useDepthPrepass;
+   AddPBRShadowDependencies();
    if (useDepthPrepass)
       m_renderDevice->AddRenderTargetDependency(GetDepthPrepassRenderTarget());
 }
@@ -2576,6 +2601,7 @@ void Renderer::PreparePBRPasses()
 
    // Forward+ light list: light states animate per frame so the cluster grid is rebuilt and uploaded each frame
 #ifdef ENABLE_BGFX
+   UpdateVirtualShadowMaps();
    BuildPBRLightList();
 #endif
 
@@ -2596,6 +2622,554 @@ void Renderer::PreparePBRPasses()
       m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_pbr_ao, GetAORenderTarget(1)->GetColorSampler());
    }
 }
+
+// Declared unconditionally like PreparePBRPasses: the call sites in RenderStatics run on every
+// renderer, so the body self-guards and is a no-op without BGFX.
+void Renderer::AddPBRShadowDependencies()
+{
+#if defined(ENABLE_BGFX)
+   for (RenderTarget* const rt : m_vsmTouchedRTs)
+      m_renderDevice->AddRenderTargetDependency(rt);
+#endif
+}
+
+#if defined(ENABLE_BGFX)
+// Lazily creates the physical page pool: a single depth texture array (one layer = one 128^2 page)
+// plus one render target per layer, wrapping a framebuffer that renders into that array layer. The
+// pool is bound once as tex_vsm_pool and the page table (tex_vsm_pagetables) maps each light's
+// virtual pages onto physical layers.
+void Renderer::CreateVSMPagePoolTargets()
+{
+   if (!bgfx::isValid(m_vsmPoolTex) || m_vsmPoolTexLayers != m_vsmPoolPages)
+   {
+      if (bgfx::isValid(m_vsmPoolTex))
+         bgfx::destroy(m_vsmPoolTex);
+      m_vsmPoolTex = bgfx::createTexture2D(VSM::PAGE_SIZE, VSM::PAGE_SIZE, false, static_cast<uint16_t>(m_vsmPoolPages), bgfx::TextureFormat::D32F, BGFX_TEXTURE_RT);
+      bgfx::setName(m_vsmPoolTex, "VSM Page Pool");
+      m_vsmPoolTexLayers = m_vsmPoolPages;
+      m_vsmPool.Reset(m_vsmPoolPages);
+      // Framebuffers are not pre-created per layer: the pool can exceed BGFX's framebuffer handle limit (128),
+      // so each page render job creates its layer attachment + framebuffer transiently (freed at end of frame).
+      m_vsmPoolSampler = std::make_shared<Sampler>(m_renderDevice, "VSM Page Pool"s, SurfaceType::RT_DEFAULT, m_vsmPoolTex, bgfx::TextureFormat::D32F, VSM::PAGE_SIZE, VSM::PAGE_SIZE, true);
+      m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_vsm_pool, m_vsmPoolSampler);
+   }
+   if (!bgfx::isValid(m_vsmPageTableTex))
+   {
+      constexpr int ptH = VSM::MAX_LIGHTS * VSM::PAGETABLE_STRIDE / VSM::PAGETABLE_W; // 32 * 4096 / 512 = 256
+      m_vsmPageTableTex = bgfx::createTexture2D(VSM::PAGETABLE_W, ptH, false, 1, bgfx::TextureFormat::RGBA32F, BGFX_TEXTURE_NONE);
+      bgfx::setName(m_vsmPageTableTex, "VSM Page Table");
+      m_vsmPageTableSampler = std::make_shared<Sampler>(m_renderDevice, "VSM Page Table"s, SurfaceType::RT_DEFAULT, m_vsmPageTableTex, bgfx::TextureFormat::RGBA32F,
+         VSM::PAGETABLE_W, ptH, true);
+      m_vsmPageTableData.assign(VSM::PAGETABLE_W * ptH * 4, 0.f);
+      m_vsmPageTableDirty = true;
+      m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_vsm_pagetables, m_vsmPageTableSampler);
+   }
+}
+
+// Clip-space transform zooming a whole-map projection into a single page: page (px, py) of a
+// gridW x gridH virtual map becomes the full NDC box. Composed on the right of the light's
+// projection (pageVP = view * proj * PageZoom), so page depth is the map's depth unchanged.
+static Matrix3D PageZoomMatrix(const int px, const int py, const int gridW, const int gridH)
+{
+   Matrix3D zoom;
+   zoom.SetIdentity();
+   zoom._11 = (float)gridW;
+   zoom._22 = (float)gridH;
+   zoom._41 = (float)(gridW - 1 - 2 * px);
+   zoom._42 = (float)(1 - gridH + 2 * py);
+   return zoom;
+}
+
+// World-space AABB of a shadow caster part: precise bounding vertices for static casters, a
+// conservative box built from the part's public data (center + size fields) for dynamic ones.
+Vertex3Ds Renderer::GetShadowCasterBoundsMin(IEditable* const part, Vertex3Ds& boundsMax) const
+{
+   Vertex3Ds boundsMin(FLT_MAX, FLT_MAX, FLT_MAX);
+   boundsMax = Vertex3Ds(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+   switch (part->GetItemType())
+   {
+   case eItemSurface:
+   case eItemRamp:
+   case eItemRubber:
+   case eItemPrimitive:
+   {
+      vector<Vertex3Ds> bounds;
+      bounds.reserve(8);
+      part->GetBoundingVertices(bounds, nullptr);
+      for (const Vertex3Ds& v : bounds)
+      {
+         boundsMin.x = min(boundsMin.x, v.x);
+         boundsMin.y = min(boundsMin.y, v.y);
+         boundsMin.z = min(boundsMin.z, v.z);
+         boundsMax.x = max(boundsMax.x, v.x);
+         boundsMax.y = max(boundsMax.y, v.y);
+         boundsMax.z = max(boundsMax.z, v.z);
+      }
+      break;
+   }
+   case eItemFlipper:
+   {
+      const Flipper* const p = static_cast<const Flipper*>(part);
+      const float r = p->m_d.m_FlipperRadius * 2.5f;
+      boundsMin = Vertex3Ds(p->m_d.m_Center.x - r, p->m_d.m_Center.y - r, 0.f);
+      boundsMax = Vertex3Ds(p->m_d.m_Center.x + r, p->m_d.m_Center.y + r, p->m_d.m_height + 50.f);
+      break;
+   }
+   case eItemHitTarget:
+   {
+      const HitTarget* const p = static_cast<const HitTarget*>(part);
+      const Vertex3Ds& c = p->m_d.m_vPosition;
+      const Vertex3Ds& s = p->m_d.m_vSize;
+      boundsMin = Vertex3Ds(c.x - s.x, c.y - s.y, c.z - s.z); // dropped targets sink below their rest position
+      boundsMax = Vertex3Ds(c.x + s.x, c.y + s.y, c.z + 2.f * s.z);
+      break;
+   }
+   case eItemBumper:
+   {
+      const Bumper* const p = static_cast<const Bumper*>(part);
+      const float r = p->m_d.m_radius * 1.5f;
+      boundsMin = Vertex3Ds(p->m_d.m_vCenter.x - r, p->m_d.m_vCenter.y - r, 0.f);
+      boundsMax = Vertex3Ds(p->m_d.m_vCenter.x + r, p->m_d.m_vCenter.y + r, 200.f);
+      break;
+   }
+   case eItemGate:
+   {
+      const Gate* const p = static_cast<const Gate*>(part);
+      const float r = p->m_d.m_length * 0.75f + 20.f;
+      boundsMin = Vertex3Ds(p->m_d.m_vCenter.x - r, p->m_d.m_vCenter.y - r, 0.f);
+      boundsMax = Vertex3Ds(p->m_d.m_vCenter.x + r, p->m_d.m_vCenter.y + r, p->m_d.m_height * 2.f + 40.f);
+      break;
+   }
+   case eItemSpinner:
+   {
+      const Spinner* const p = static_cast<const Spinner*>(part);
+      const float r = p->m_d.m_length * 0.75f + 20.f;
+      boundsMin = Vertex3Ds(p->m_d.m_vCenter.x - r, p->m_d.m_vCenter.y - r, 0.f);
+      boundsMax = Vertex3Ds(p->m_d.m_vCenter.x + r, p->m_d.m_vCenter.y + r, p->m_d.m_height * 2.f + 40.f);
+      break;
+   }
+   case eItemPlunger:
+   {
+      const Plunger* const p = static_cast<const Plunger*>(part);
+      // Rod span plus the collider extension behind it (m_height), half width in x
+      boundsMin = Vertex3Ds(p->m_d.m_v.x - p->m_d.m_width - 20.f, p->m_d.m_v.y - p->m_d.m_stroke - p->m_d.m_height, 0.f);
+      boundsMax = Vertex3Ds(p->m_d.m_v.x + p->m_d.m_width + 20.f, p->m_d.m_v.y + p->m_d.m_height + 20.f, 80.f);
+      break;
+   }
+   case eItemTrigger:
+   {
+      const Trigger* const p = static_cast<const Trigger*>(part);
+      const float r = p->m_d.m_radius * max(p->m_d.m_scaleX, p->m_d.m_scaleY) + 10.f;
+      boundsMin = Vertex3Ds(p->m_d.m_vCenter.x - r, p->m_d.m_vCenter.y - r, 0.f);
+      boundsMax = Vertex3Ds(p->m_d.m_vCenter.x + r, p->m_d.m_vCenter.y + r, p->m_d.m_hit_height + 50.f);
+      break;
+   }
+   default: break;
+   }
+   if (boundsMin.x > boundsMax.x) // no bounds produced: collapse to the bounding sphere center
+   {
+      boundsMin = boundsMax = Vertex3Ds(0.f, 0.f, 0.f);
+   }
+   return boundsMin;
+}
+
+// Mirrors each caster part's SHADOW_MAP branch gating: true when the part draws under
+// SHADOW_MAP|STATIC_ONLY (static geometry), false when it only draws for dynamic-tier lights.
+bool Renderer::IsStaticShadowCaster(const IEditable* const part) const
+{
+   switch (part->GetItemType())
+   {
+   case eItemSurface:
+   case eItemRamp:
+   case eItemBumper: return true; // rest-pose geometry, drawn under STATIC_ONLY
+   case eItemPrimitive: return static_cast<const Primitive*>(part)->m_d.m_staticRendering;
+   case eItemRubber: return static_cast<const Rubber*>(part)->m_d.m_staticRendering;
+   default: return false; // flipper, hittarget, gate, spinner, plunger, trigger animate
+   }
+}
+
+// Marks caster coverage per shadowed light, allocates physical pages for covered virtual pages
+// (LRU-evicting cold pages under pressure), then renders each dirty page into its pool layer with
+// the caster whitelist under a page-zoomed projection. Static-tier lights re-mark but their pages
+// persist until their bake key changes (light move, tier switch, content serial); dynamic-tier
+// lights additionally re-render the pages under dynamic casters every frame.
+void Renderer::UpdateVirtualShadowMaps()
+{
+   m_vsmPoolPages = m_table->GetSettings().GetPlayer_PBRShadowPoolPages();
+   m_vsmVirtRes = m_table->GetSettings().GetPlayer_PBRShadowMapSize();
+   m_vsmMaxLights = std::clamp(m_table->GetSettings().GetPlayer_PBRShadowMaxLights(), 1, VSM::MAX_LIGHTS);
+   m_vsmPageBudget = m_table->GetSettings().GetPlayer_PBRShadowPagesPerFrame();
+   CreateVSMPagePoolTargets();
+   m_vsmTouchedRTs.clear();
+   m_vsmPool.BeginFrame(++m_vsmFrame);
+   if ((int)m_vsmLights.size() != VSM::MAX_LIGHTS)
+      m_vsmLights.assign(VSM::MAX_LIGHTS, VSM::LightMap {});
+
+   const Vertex3Ds tableCenter((m_table->m_left + m_table->m_right) * 0.5f, (m_table->m_top + m_table->m_bottom) * 0.5f, 0.f);
+   // Content invalidation samples the dirty state once per frame: undo bookkeeping began-and-discarded
+   // within the same frame (e.g. on selection) must not reset the maps, real edits persist and still do
+   const SaveDirtyState tableDirty = m_table->GetDirtyState();
+   const bool contentDirty = tableDirty != m_vsmLastTableDirty;
+   m_vsmLastTableDirty = tableDirty;
+   for (Matrix3D& vp : m_vsmShadowVP)
+      vp.SetIdentity();
+   for (vec4& v : m_vsmParams)
+      v = vec4(0.f, 0.f, 0.f, 0.f);
+   for (vec4& v : m_vsmBox)
+      v = vec4(0.f, 0.f, 0.f, 0.f);
+
+   // Caster whitelist + per-frame bounds cache (mirrors the SHADOW_MAP branches of the parts)
+   struct Caster
+   {
+      IEditable* part;
+      bool isStatic;
+      Vertex3Ds boundsMin, boundsMax;
+   };
+   vector<Caster> casters;
+   for (IEditable* const part : m_table->GetParts())
+   {
+      switch (part->GetItemType())
+      {
+      case eItemPrimitive:
+      case eItemRamp:
+      case eItemRubber:
+      case eItemSurface:
+      case eItemFlipper:
+      case eItemHitTarget:
+      case eItemBumper:
+      case eItemGate:
+      case eItemSpinner:
+      case eItemPlunger:
+      case eItemTrigger:
+      {
+         Caster c;
+         c.part = part;
+         c.isStatic = IsStaticShadowCaster(part);
+         c.boundsMin = GetShadowCasterBoundsMin(part, c.boundsMax);
+         casters.push_back(c);
+         break;
+      }
+      default: break;
+      }
+   }
+
+   // Emits one depth-only caster pass: whitelisted caster parts drawn under the given view-projection
+   const unsigned int prevMask = m_render_mask;
+   const PartGroupData::SpaceReference prevSpaceRef = m_mvpSpaceReference;
+   const Matrix3D savedView[2] = { m_playfieldView[0], m_playfieldView[1] };
+   const Matrix3D savedProj[2] = { m_mvp.GetProj(0), m_mvp.GetProj(m_mvp.m_nEyes - 1) };
+   struct PageJob
+   {
+      int vpage, layer;
+      Matrix3D view, proj;
+      bool dynamicTier;
+      VSM::LightMap* map;
+   };
+   vector<PageJob> jobs;
+   vector<uint8_t> markTmp;
+   bool indexUsed[VSM::MAX_LIGHTS] = {};
+
+   for (IEditable* const part : m_table->GetParts())
+   {
+      if (part->GetItemType() != eItemLight)
+         continue;
+      Light* const light = static_cast<Light*>(part);
+      const bool eligible = light->m_d.m_type == LightType::PBR && light->m_d.m_visible && light->m_currentIntensity > 0.f && !light->m_desktopBackdrop
+         && light->m_d.m_shadows >= ShadowMode::PBR_STATIC_SHADOWS;
+      if (!eligible)
+      {
+         // Release the index and any resident pages: re-marked from scratch when it comes back
+         if (light->m_pbrShadowSlot >= 0 && light->m_pbrShadowSlot < VSM::MAX_LIGHTS)
+         {
+            VSM::LightMap& dead = m_vsmLights[light->m_pbrShadowSlot];
+            for (const int phys : dead.phys)
+               if (phys > 0)
+                  m_vsmPool.Free(phys - 1);
+            dead = VSM::LightMap {};
+         }
+         light->m_pbrShadowSlot = -1;
+         light->m_pbrShadowBakedSlot = -1;
+         continue;
+      }
+
+      // Stable index assignment: keep the light's current index, else take the first free one
+      int index = light->m_pbrShadowSlot;
+      if (index < 0 || index >= m_vsmMaxLights || indexUsed[index])
+      {
+         index = -1;
+         for (int i = 0; i < m_vsmMaxLights && index < 0; i++)
+            if (!indexUsed[i])
+               index = i;
+         if (index < 0)
+         {
+            light->m_pbrShadowBakedSlot = -1; // index-starved light: shadow=1 through the missing map
+            continue;
+         }
+      }
+      indexUsed[index] = true;
+      light->m_pbrShadowSlot = index;
+
+      const Vertex3Ds lPos(light->m_d.m_vCenter.x, light->m_d.m_vCenter.y, light->GetCurrentHeight());
+      const bool dynamicTier = light->m_d.m_shadows == ShadowMode::PBR_STATIC_N_DYNAMIC_SHADOWS;
+      VSM::LightMap& map = m_vsmLights[index];
+      map.ptBase = index * VSM::PAGETABLE_STRIDE;
+
+      // Ortho (scene) layout requires the light above the glass top; near lights take the cube layout
+      Matrix3D lightView;
+      Matrix3D lightProj;
+      float boxL = 0.f, boxR = 1.f, boxB = 0.f, boxT = 1.f;
+      if (lPos.z > m_table->m_glassTopHeight)
+      {
+         // Fitted ortho box over the table bounds in light view space (same fit as the layer maps had)
+         lightView = Matrix3D::MatrixLookAtRH(lPos, tableCenter, Vertex3Ds(0.f, -1.f, 0.f));
+         const Matrix3D& view = lightView;
+         float l = FLT_MAX, r = -FLT_MAX, b = FLT_MAX, t = -FLT_MAX, zn = FLT_MAX, zf = -FLT_MAX;
+         for (int c = 0; c < 8; c++)
+         {
+            const Vertex3Ds corner(c & 1 ? m_table->m_right : m_table->m_left, c & 2 ? m_table->m_bottom : m_table->m_top, c & 4 ? m_table->m_glassTopHeight : 0.f);
+            const Vertex3Ds v = view.MultiplyVectorNoPerspective(corner);
+            l = std::min(l, v.x);
+            r = std::max(r, v.x);
+            b = std::min(b, v.y);
+            t = std::max(t, v.y);
+            zn = std::min(zn, -v.z);
+            zf = std::max(zf, -v.z);
+         }
+         const float m = 25.f; // margin around the table bounds
+         l -= m;
+         r += m;
+         b -= m;
+         t += m;
+         zn = std::max(0.1f, zn - m);
+         zf += m;
+         boxL = l;
+         boxR = r;
+         boxB = b;
+         boxT = t;
+         lightProj = Matrix3D::MatrixOrthoOffCenterRH(l, r, b, t, zn, zf);
+         const Matrix3D& proj = lightProj;
+         const float side = std::max(r - l, t - b);
+         const float pageWorld = side * VSM::PAGE_SIZE / (float)m_vsmVirtRes;
+         const int gridW = std::clamp((int)ceilf((r - l) / pageWorld), 1, VSM::MAX_ORTHO_GRID);
+         const int gridH = std::clamp((int)ceilf((t - b) / pageWorld), 1, VSM::MAX_ORTHO_GRID);
+
+         const bool rebake = light->m_pbrShadowBakedSlot != index || light->m_pbrShadowBakedPos.x != lPos.x || light->m_pbrShadowBakedPos.y != lPos.y
+            || light->m_pbrShadowBakedPos.z != lPos.z || light->m_pbrShadowBakedFalloff != light->m_d.m_falloff || light->m_pbrShadowBakedMode != (int)light->m_d.m_shadows || contentDirty
+            || map.layout != VSM::LAYOUT_ORTHO || map.gridW != gridW || map.gridH != gridH;
+         if (rebake)
+         {
+            for (const int phys : map.phys)
+               if (phys > 0)
+                  m_vsmPool.Free(phys - 1);
+            map.Reset(VSM::LAYOUT_ORTHO, gridW, gridH);
+            map.ptBase = index * VSM::PAGETABLE_STRIDE;
+            light->m_pbrShadowBakedPos = lPos;
+            light->m_pbrShadowBakedFalloff = light->m_d.m_falloff;
+            light->m_pbrShadowBakedSlot = index;
+            light->m_pbrShadowBakedMode = (int)light->m_d.m_shadows;
+         }
+         light->m_pbrShadowLayout = VSM::LAYOUT_ORTHO;
+         m_vsmShadowVP[index] = view * proj;
+         m_vsmParams[index] = vec4((float)map.ptBase, (float)gridW, (float)gridH, zf - zn);
+         m_vsmBox[index] = vec4(1.f / (r - l), 1.f / (t - b), 0.f, 0.f);
+
+         // Mark caster coverage; dynamic casters of a dynamic-tier light also dirty their pages
+         std::fill(map.needed.begin(), map.needed.end(), uint8_t(0));
+         markTmp.assign(map.EntryCount(), 0);
+         for (const Caster& caster : casters)
+         {
+            std::fill(markTmp.begin(), markTmp.end(), uint8_t(0));
+            VSM::MarkOrthoPages(view, l, r, b, t, caster.boundsMin, caster.boundsMax, gridW, gridH, 1, markTmp.data());
+            const bool dynDirty = dynamicTier && !caster.isStatic;
+            for (int i = 0; i < (int)map.needed.size(); i++)
+            {
+               map.needed[i] |= markTmp[i];
+               if (dynDirty)
+                  map.dirty[i] |= markTmp[i];
+            }
+         }
+      }
+      else
+      {
+         // Cube layout: 6 faces of CUBE_FACE_GRID^2 pages rendered as 90 deg perspective maps
+         const float zNear = 2.f; // must match PBR_SHADOW_NEAR_ZN in fs_pbr.sc
+         const float zFar = std::max(light->m_d.m_falloff, 60.f);
+         const bool rebake = light->m_pbrShadowBakedSlot != index || light->m_pbrShadowBakedPos.x != lPos.x || light->m_pbrShadowBakedPos.y != lPos.y
+            || light->m_pbrShadowBakedPos.z != lPos.z || light->m_pbrShadowBakedFalloff != light->m_d.m_falloff || light->m_pbrShadowBakedMode != (int)light->m_d.m_shadows || contentDirty
+            || map.layout != VSM::LAYOUT_CUBE;
+         if (rebake)
+         {
+            for (const int phys : map.phys)
+               if (phys > 0)
+                  m_vsmPool.Free(phys - 1);
+            map.Reset(VSM::LAYOUT_CUBE, VSM::CUBE_FACE_GRID, VSM::CUBE_FACE_GRID);
+            map.ptBase = index * VSM::PAGETABLE_STRIDE;
+            light->m_pbrShadowBakedPos = lPos;
+            light->m_pbrShadowBakedFalloff = light->m_d.m_falloff;
+            light->m_pbrShadowBakedSlot = index;
+            light->m_pbrShadowBakedMode = (int)light->m_d.m_shadows;
+         }
+         light->m_pbrShadowLayout = VSM::LAYOUT_CUBE;
+         m_vsmParams[index] = vec4((float)map.ptBase, (float)VSM::CUBE_FACE_GRID, (float)VSM::CUBE_FACE_GRID, zFar);
+
+         std::fill(map.needed.begin(), map.needed.end(), uint8_t(0));
+         markTmp.assign(map.EntryCount(), 0);
+         for (const Caster& caster : casters)
+         {
+            std::fill(markTmp.begin(), markTmp.end(), uint8_t(0));
+            VSM::MarkCubePages(lPos, zNear, caster.boundsMin, caster.boundsMax, VSM::CUBE_FACE_GRID, 0, markTmp.data());
+            const bool dynDirty = dynamicTier && !caster.isStatic;
+            for (int i = 0; i < (int)map.needed.size(); i++)
+            {
+               map.needed[i] |= markTmp[i];
+               if (dynDirty)
+                  map.dirty[i] |= markTmp[i];
+            }
+         }
+      }
+
+      // Alloc/free against the marked coverage, then enqueue the dirty pages
+      bool ptChanged = false;
+      for (int vp = 0; vp < map.EntryCount(); vp++)
+      {
+         if (map.needed[vp] && map.phys[vp] == 0)
+         {
+            int evictLight = -1, evictPage = -1;
+            const int layer = m_vsmPool.Alloc(index, vp, &evictLight, &evictPage);
+            if (evictLight >= 0)
+            {
+               VSM::LightMap& evicted = m_vsmLights[evictLight];
+               evicted.phys[evictPage] = 0;
+               evicted.dirty[evictPage] = 1; // re-render when needed again
+               float* const evictTexel = m_vsmPageTableData.data() + (evicted.ptBase + evictPage) * 4;
+               if (evictTexel[0] != 0.f)
+               {
+                  evictTexel[0] = 0.f;
+                  m_vsmPageTableDirty = true;
+               }
+            }
+            if (layer >= 0)
+            {
+               map.phys[vp] = layer + 1;
+               map.dirty[vp] = 1;
+               ptChanged = true;
+            }
+         }
+         else if (map.needed[vp])
+            m_vsmPool.Touch(map.phys[vp] - 1);
+         else if (map.phys[vp] != 0)
+         {
+            m_vsmPool.Free(map.phys[vp] - 1);
+            map.phys[vp] = 0;
+            ptChanged = true;
+         }
+      }
+      if (ptChanged)
+      {
+         float* const base = m_vsmPageTableData.data() + map.ptBase * 4;
+         for (int vp = 0; vp < map.EntryCount(); vp++)
+            base[vp * 4] = (float)map.phys[vp];
+         m_vsmPageTableDirty = true;
+      }
+      for (int vp = 0; vp < map.EntryCount(); vp++)
+      {
+         if (!map.dirty[vp] || map.phys[vp] == 0)
+            continue;
+         PageJob job;
+         job.vpage = vp;
+         job.layer = map.phys[vp] - 1;
+         job.dynamicTier = dynamicTier;
+         job.map = &map;
+         if (map.layout == VSM::LAYOUT_CUBE)
+         {
+            const int face = vp / (map.gridW * map.gridH);
+            const int pg = vp % (map.gridW * map.gridH);
+            const int px = pg % map.gridW, py = pg / map.gridW;
+            const float zNear = 2.f; // must match PBR_SHADOW_NEAR_ZN in fs_pbr.sc
+            const float zFar = std::max(light->m_d.m_falloff, 60.f);
+            job.view = Matrix3D::MatrixLookAtRH(lPos, lPos + VSM::CUBE_FACE_FWD[face], VSM::CUBE_FACE_UP[face]);
+            job.proj = Matrix3D::MatrixPerspectiveFovRH(90.f, 1.f, zNear, zFar) * PageZoomMatrix(px, py, map.gridW, map.gridH);
+         }
+         else
+         {
+            const int px = vp % map.gridW, py = vp / map.gridW;
+            job.view = lightView;
+            job.proj = lightProj * PageZoomMatrix(px, py, map.gridW, map.gridH);
+         }
+         jobs.push_back(job);
+      }
+   }
+
+   // Render dirty pages, bounded by the per-frame budget (deferred pages stay dirty for next frame)
+   int rendered = 0;
+   for (PageJob& job : jobs)
+   {
+      if (rendered >= m_vsmPageBudget)
+         break;
+      rendered++;
+      // Transient per-page framebuffer: only the few pages rendered this frame hold an FB handle at once
+      bgfx::Attachment attachment;
+      attachment.init(m_vsmPoolTex, bgfx::Access::Write, static_cast<uint16_t>(job.layer), 1, 0, BGFX_ATTACHMENT_NONE);
+      const bgfx::FrameBufferHandle fbh = bgfx::createFrameBuffer(1, &attachment);
+      if (!bgfx::isValid(fbh))
+      {
+         PLOGE << "VSM page framebuffer creation failed (handle pool exhausted)";
+         break;
+      }
+      // depthTex left invalid: RenderTarget would own+destroy it, but the pool texture is shared/persistent
+      RenderTarget* const pageRT = new RenderTarget(m_renderDevice, GetBackBufferTexture()->m_type, fbh, BGFX_INVALID_HANDLE, bgfx::TextureFormat::Count, BGFX_INVALID_HANDLE,
+         bgfx::TextureFormat::D32F, "VSMPage"s + std::to_string(job.layer), VSM::PAGE_SIZE, VSM::PAGE_SIZE, colorFormat::RGBA8);
+      m_renderDevice->AddEndOfFrameCmd([pageRT]() { delete pageRT; });
+      m_renderDevice->SetRenderTarget("VSM Page "s + std::to_string(job.layer), pageRT, false);
+      m_renderDevice->Clear(clearType::ZBUFFER, 0x00000000);
+      m_renderDevice->ResetRenderState();
+      m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_TRUE);
+      m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_TRUE);
+      m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
+      m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
+      m_renderDevice->m_basicShader->SetTechnique(ShaderTechnique::unshaded_without_texture);
+      for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
+      {
+         m_playfieldView[eye] = job.view;
+         m_mvp.SetView(eye, job.view);
+         m_mvp.SetProj(eye, job.proj);
+      }
+      m_render_mask = SHADOW_MAP | (job.dynamicTier ? 0u : static_cast<unsigned int>(STATIC_ONLY));
+      for (const Caster& caster : casters)
+         RenderItem(caster.part, true);
+      job.map->dirty[job.vpage] = 0;
+      m_vsmTouchedRTs.push_back(pageRT);
+   }
+
+   if (!jobs.empty() || !m_vsmTouchedRTs.empty())
+   {
+      // Restore the camera matrices (the parts' RenderItem calls re-applied the space reference during the passes)
+      for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
+      {
+         m_playfieldView[eye] = savedView[eye];
+         m_mvp.SetProj(eye, savedProj[eye]);
+      }
+      m_mvp = m_initialMVP;
+      SetSpaceReference(prevSpaceRef, true);
+   }
+   m_render_mask = prevMask;
+
+   // Upload the page table once per frame when allocation changed (begin-of-frame on the render thread)
+   if (m_vsmPageTableDirty)
+   {
+      m_vsmPageTableDirty = false;
+      const bgfx::TextureHandle tex = m_vsmPageTableTex;
+      const int ptH = VSM::MAX_LIGHTS * VSM::PAGETABLE_STRIDE / VSM::PAGETABLE_W;
+      m_renderDevice->AddBeginOfFrameCmd([rd = m_renderDevice, tex, data = m_vsmPageTableData, ptH]()
+         { bgfx::updateTexture2D(tex, 0, 0, 0, 0, VSM::PAGETABLE_W, ptH, bgfx::copy(data.data(), static_cast<uint32_t>(data.size() * sizeof(float)))); });
+   }
+
+   m_renderDevice->m_basicShader->SetMatrix(ShaderUniform::matShadowVP, m_vsmShadowVP, VSM::MAX_LIGHTS);
+   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrVSMParams, m_vsmParams, VSM::MAX_LIGHTS);
+   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrVSMBox, m_vsmBox, VSM::MAX_LIGHTS);
+   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrShadowParams, 1.f / VSM::PAGE_SIZE, 0.002f, 0.f, 0.f);
+}
+#endif
 
 #if defined(ENABLE_BGFX)
 // Builds the Forward+ light list: a world-space XY cluster grid over the table bounds, packed into a RGBA32F
@@ -2656,7 +3230,11 @@ void Renderer::BuildPBRLightList()
       e.pos = Vertex3Ds(light->m_d.m_vCenter.x, light->m_d.m_vCenter.y, light->GetCurrentHeight());
       e.range = max(light->m_d.m_falloff, 1.f);
       const float radiance = light->m_currentIntensity * intensityToLinear;
-      e.radiance = vec4(tint.x * radiance, tint.y * radiance, tint.z * radiance, (float)light->m_d.m_shadows); // w: mode, reserved for the M5 shadow mapping
+      // w packs the shadow mode (bits 0-3), the VSM shadow index + 1 (bits 4-11, 0 = no virtual map),
+      // the map layout (bits 12-15, 0 = ortho, 2 = cube) and the quantized penumbra radius in 0.5 VPU units (bits 16+)
+      const int shadowIndex = light->m_pbrShadowSlot;
+      const int shadowInfo = static_cast<int>(light->m_d.m_shadows) | ((shadowIndex + 1) << 4) | (light->m_pbrShadowLayout << 12) | (4 << 16);
+      e.radiance = vec4(tint.x * radiance, tint.y * radiance, tint.z * radiance, (float)shadowInfo);
       e.index = lightCount;
       lightCount++;
 
