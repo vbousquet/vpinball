@@ -208,6 +208,7 @@ Shader::TechniqueDef Shader::shaderTechniqueNames[static_cast<unsigned int>(Shad
    SHADER_TECHNIQUE(AO),
    SHADER_TECHNIQUE(AO_shaded),
    SHADER_TECHNIQUE(fb_AO),
+   SHADER_TECHNIQUE(fb_pbr_ssr),
    SHADER_TECHNIQUE(fb_prepass_depth),
    SHADER_TECHNIQUE(fb_prepass_normal),
    SHADER_TECHNIQUE(fb_prepass_motion),
@@ -1663,8 +1664,8 @@ void Shader::Load()
       BGFX_EMBEDDED_SHADER_ST(fs_pp_prepass_normal), BGFX_EMBEDDED_SHADER_ST(fs_pp_prepass_motion), BGFX_EMBEDDED_SHADER_ST(fs_pp_ssao), BGFX_EMBEDDED_SHADER_ST(fs_pp_ssao_shaded),
       BGFX_EMBEDDED_SHADER_ST(fs_pp_ssao_shaded_mv), BGFX_EMBEDDED_SHADER_ST(fs_pp_bloom), BGFX_EMBEDDED_SHADER_ST(fs_pp_mirror), BGFX_EMBEDDED_SHADER_ST(fs_pp_copy),
       BGFX_EMBEDDED_SHADER_ST(fs_pp_ssr), BGFX_EMBEDDED_SHADER_ST(fs_pp_ssr_masked), BGFX_EMBEDDED_SHADER_ST(fs_pp_ssr_shaded), BGFX_EMBEDDED_SHADER_ST(fs_pp_ssr_shaded_masked),
-      BGFX_EMBEDDED_SHADER_ST(fs_pp_pbr_march), BGFX_EMBEDDED_SHADER_ST(fs_pp_pbr_resolve), BGFX_EMBEDDED_SHADER_ST(fs_pp_irradiance), BGFX_EMBEDDED_SHADER_ST(fs_pp_msaa_depth),
-      BGFX_EMBEDDED_SHADER_ST(fs_pp_copy_depth),
+      BGFX_EMBEDDED_SHADER_ST(fs_pp_pbr_march), BGFX_EMBEDDED_SHADER_ST(fs_pp_pbr_resolve), BGFX_EMBEDDED_SHADER_ST(fs_pp_pbr_ssr_display), BGFX_EMBEDDED_SHADER_ST(fs_pp_irradiance),
+      BGFX_EMBEDDED_SHADER_ST(fs_pp_msaa_depth), BGFX_EMBEDDED_SHADER_ST(fs_pp_copy_depth),
       BGFX_EMBEDDED_SHADER(fs_pp_passthrough),
       // Motion Blur as post-processes
       BGFX_EMBEDDED_SHADER_ST(fs_pp_motionblur),
@@ -1895,6 +1896,7 @@ void Shader::Load()
       loadProgram(embeddedShaders, ShaderTechnique::SSReflection_shaded_masked, STEREO(vs_postprocess), STEREO(fs_pp_ssr_shaded_masked));
       loadProgram(embeddedShaders, ShaderTechnique::PBR_march, STEREO(vs_postprocess), STEREO(fs_pp_pbr_march));
       loadProgram(embeddedShaders, ShaderTechnique::PBR_resolve, STEREO(vs_postprocess), STEREO(fs_pp_pbr_resolve));
+      loadProgram(embeddedShaders, ShaderTechnique::fb_pbr_ssr, STEREO(vs_postprocess), STEREO(fs_pp_pbr_ssr_display));
       loadProgram(embeddedShaders, ShaderTechnique::irradiance, STEREO(vs_postprocess), STEREO(fs_pp_irradiance));
       loadProgram(embeddedShaders, ShaderTechnique::fb_resolve_depth_msaa, STEREO(vs_postprocess), STEREO(fs_pp_msaa_depth));
       loadProgram(embeddedShaders, ShaderTechnique::fb_copy_depth, STEREO(vs_postprocess), STEREO(fs_pp_copy_depth));

@@ -47,6 +47,8 @@ void RendererInspectionModal::Render()
       ImGui::RadioButton("Transmitted light pass", &m_passSelection, IF_LIGHT_BUFFER_ONLY);
       if (m_editor.m_player->m_renderer->GetAOMode() != 0)
          ImGui::RadioButton("Ambient Occlusion pass", &m_passSelection, IF_AO_ONLY);
+      if (m_editor.m_player->m_renderer->m_renderDevice->m_pbrActive)
+         ImGui::RadioButton("PBR specular march", &m_passSelection, IF_PBR_SPECULAR);
       if (m_editor.m_player->m_renderer->IsUsingDepthPrepass())
       {
          ImGui::RadioButton("Depth prepass depth", &m_passSelection, IF_DEPTH);
