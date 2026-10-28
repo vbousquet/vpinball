@@ -21,7 +21,8 @@ $input v_texcoord0
 uniform vec4 w_h_height;
 uniform vec4 pbrResolveParams; // y: SSR coverage fade end roughness (march is skipped past it)
 
-SAMPLER2DSTEREO(tex_fb_filtered,  0); // Scene framebuffer
+SAMPLER2DSTEREO(tex_fb_filtered,     0); // Scene framebuffer
+SAMPLER2DSTEREO(tex_pbr_ssr_history, 3); // Previous frame premultiplied march for temporal reprojection
 SAMPLER2DSTEREO(tex_depth,        4); // Depth prepass
 SAMPLER2D(tex_ao_dither,          5); // AO Dither
 SAMPLER2DSTEREO(tex_normals,      6); // Prepass attachment 0: xy = shaded normal
@@ -102,5 +103,18 @@ void main()
 			#endif
 		}
 	}
-	gl_FragColor = acc;
+	// Temporal reprojection (M7): accumulate the previous frame's premultiplied march, reprojected by
+	// the prepass motion vectors (prepass.zw maps each pixel to its previous frame position). A soft
+	// clamp against this frame's premultiplied sample rejects stale history (disocclusion, script
+	// teleports); a full prev-depth rejection would need a depth history.
+	vec4 hist = vec4_splat(0.0);
+	const vec2 prevUV = u - prepass.zw * w_h_height.z; // z = MV-valid flag: 0 falls back to in-place accumulation
+	if (prevUV.x > 0.0 && prevUV.x < 1.0 && prevUV.y > 0.0 && prevUV.y < 1.0)
+	{
+		hist = texStereoNoLod(tex_pbr_ssr_history, prevUV);
+		hist.rgb = min(hist.rgb, acc.rgb * 2.0 + 0.02);
+		hist.a = min(hist.a, acc.a * 2.0 + 0.2);
+	}
+	const float histWeight = min(0.75, max(0.0, 2.0 - acc.a) / max(hist.a, 1e-4));
+	gl_FragColor = acc + hist * histWeight;
 }

@@ -506,6 +506,7 @@ Renderer::~Renderer()
    delete m_pReflectionBufferTexture;
    delete m_pReflectionHalfBufferTexture;
    delete m_pPBRResolveBufferTexture;
+   delete m_pPBRSsrHistoryTexture;
    delete m_pMotionBlurBufferTexture;
    delete m_pOffscreenVRLeft;
    delete m_pOffscreenVRRight;
@@ -770,6 +771,18 @@ RenderTarget* Renderer::GetPBRResolveBufferTexture()
          GetBackBufferTexture()->GetColorFormat(), false, 1, "Fatal Error: unable to create PBR resolve buffer!");
    }
    return m_pPBRResolveBufferTexture;
+}
+
+RenderTarget* Renderer::GetPBRSsrHistoryTexture()
+{
+   // Lazily created half res buffer holding the previous frame's premultiplied specular march,
+   // sampled back by the march for temporal reprojection (premultiplied RGBA16F, same as the target)
+   if (m_pPBRSsrHistoryTexture == nullptr)
+   {
+      m_pPBRSsrHistoryTexture = new RenderTarget(m_renderDevice, GetBackBufferTexture()->m_type, "PBRSsrHistory"s, GetBackBufferTexture()->GetWidth() / 2,
+         GetBackBufferTexture()->GetHeight() / 2, colorFormat::RGBA16F, false, 1, "Fatal Error: unable to create PBR SSR history buffer!");
+   }
+   return m_pPBRSsrHistoryTexture;
 }
 
 RenderTarget* Renderer::GetMotionBlurBufferTexture()
@@ -3653,13 +3666,20 @@ RenderTarget* Renderer::ApplyPBRSpecularResolve(RenderTarget* renderedRT)
    m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_normals, prepassRT->GetColorSampler());
    m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_pbr_data, prepassRT->GetPBRDataSampler());
    m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_ao_dither, m_aoDitherSampler);
-   m_renderDevice->m_FBShader->SetVector(ShaderUniform::w_h_height, (float)(1.0 / halfRT->GetWidth()), (float)(1.0 / halfRT->GetHeight()), 1.0f, 1.0f);
+   m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_pbr_ssr_history, GetPBRSsrHistoryTexture()->GetColorSampler());
+   m_renderDevice->m_FBShader->SetVector(
+      ShaderUniform::w_h_height, (float)(1.0 / halfRT->GetWidth()), (float)(1.0 / halfRT->GetHeight()), m_renderDevice->m_depthPrepassMotion ? 1.0f : 0.0f, 1.0f);
    // x: SSR coverage fade start roughness, y: fade end (march early-outs there), z: max pooling radius in low res texels, w: firefly clamp factor
    m_renderDevice->m_FBShader->SetVector(ShaderUniform::pbrResolveParams, 0.5f, 0.9f, 8.0f, 4.0f);
    m_renderDevice->m_FBShader->SetMatrix(ShaderUniform::matProj, &matProj[0], nEyes);
    m_renderDevice->m_FBShader->SetMatrix(ShaderUniform::matProjInv, &matProjInv[0], nEyes);
    m_renderDevice->m_FBShader->SetTechnique(ShaderTechnique::PBR_march);
    m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
+
+   // Keep this frame's march as the next frame's temporal reprojection history
+   RenderTarget* const historyRT = GetPBRSsrHistoryTexture();
+   m_renderDevice->SetRenderTarget("PBR SSR History"s, historyRT, false);
+   m_renderDevice->BlitRenderTarget(halfRT, historyRT, true, false);
 
    // Full res joint bilateral upsample & composite with the planar probe radiance
    m_renderDevice->SetRenderTarget("PBR Specular Resolve"s, outRT, true);
