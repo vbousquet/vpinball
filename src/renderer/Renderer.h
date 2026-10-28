@@ -426,8 +426,10 @@ private:
    RenderTarget* GetReflectionBufferTexture();
    RenderTarget* m_pReflectionHalfBufferTexture = nullptr;
    RenderTarget* m_pPBRResolveBufferTexture = nullptr; // Full res scratch for the PBR specular resolve composite
+   RenderTarget* m_pPBRSsrHistoryTexture = nullptr; // Half res premultiplied specular march history for temporal reprojection
    RenderTarget* GetReflectionHalfBufferTexture();
    RenderTarget* GetPBRResolveBufferTexture();
+   RenderTarget* GetPBRSsrHistoryTexture();
 
    RenderTarget* m_pMotionBlurBufferTexture = nullptr;
    RenderTarget* GetMotionBlurBufferTexture();
