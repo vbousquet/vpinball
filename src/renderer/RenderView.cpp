@@ -102,6 +102,8 @@ void RenderView::ReleaseTargets()
    m_pReflectionHalfBufferTexture = nullptr;
    delete m_pPBRResolveBufferTexture;
    m_pPBRResolveBufferTexture = nullptr;
+   delete m_pPBRSsrHistoryTexture;
+   m_pPBRSsrHistoryTexture = nullptr;
    delete m_pMotionBlurBufferTexture;
    m_pMotionBlurBufferTexture = nullptr;
    delete m_pOffscreenVRLeft;
@@ -198,7 +200,7 @@ void RenderView::ResizeRenderTargets()
    // Frames already submitted may still reference the previous targets: release them at the end of the frame being prepared
    vector<RenderTarget*> released { m_pOffscreenBackBufferTexture1, m_pOffscreenBackBufferTexture2, m_pOffscreenMSAABackBufferTexture, m_pBloomBufferTexture, m_pBloomTmpBufferTexture,
       m_pPostProcessRenderTarget1, m_pPostProcessRenderTarget2, m_pPostProcessRenderTarget3, m_pReflectionBufferTexture, m_pReflectionHalfBufferTexture, m_pPBRResolveBufferTexture,
-      m_pMotionBlurBufferTexture, m_pAORenderTarget1, m_pAORenderTarget2, m_staticPrepassRT };
+      m_pPBRSsrHistoryTexture, m_pMotionBlurBufferTexture, m_pAORenderTarget1, m_pAORenderTarget2, m_staticPrepassRT };
    std::erase(released, nullptr);
    rd->AddEndOfFrameCmd(
       [released]()
@@ -232,6 +234,7 @@ void RenderView::ResizeRenderTargets()
    m_pReflectionBufferTexture = nullptr;
    m_pReflectionHalfBufferTexture = nullptr;
    m_pPBRResolveBufferTexture = nullptr;
+   m_pPBRSsrHistoryTexture = nullptr;
    m_pMotionBlurBufferTexture = nullptr;
    m_pAORenderTarget1 = nullptr;
    m_pAORenderTarget2 = nullptr;
@@ -333,6 +336,18 @@ RenderTarget* RenderView::GetPBRResolveBufferTexture()
          GetBackBufferTexture()->GetColorFormat(), false, 1, "Fatal Error: unable to create PBR resolve buffer!");
    }
    return m_pPBRResolveBufferTexture;
+}
+
+RenderTarget* RenderView::GetPBRSsrHistoryTexture()
+{
+   // Lazily created half res buffer holding the previous frame's premultiplied specular march,
+   // sampled back by the march for temporal reprojection (premultiplied RGBA16F, same as the target)
+   if (m_pPBRSsrHistoryTexture == nullptr)
+   {
+      m_pPBRSsrHistoryTexture = new RenderTarget(m_renderer->m_renderDevice, GetBackBufferTexture()->m_type, "PBRSsrHistory"s, GetBackBufferTexture()->GetWidth() / 2,
+         GetBackBufferTexture()->GetHeight() / 2, colorFormat::RGBA16F, false, 1, "Fatal Error: unable to create PBR SSR history buffer!");
+   }
+   return m_pPBRSsrHistoryTexture;
 }
 
 RenderTarget* RenderView::GetMotionBlurBufferTexture()
@@ -1511,13 +1526,20 @@ RenderTarget* RenderView::ApplyPBRSpecularResolve(RenderTarget* renderedRT)
    rd->m_FBShader->SetTexture(ShaderUniform::tex_normals, prepassRT->GetColorSampler());
    rd->m_FBShader->SetTexture(ShaderUniform::tex_pbr_data, prepassRT->GetPBRDataSampler());
    rd->m_FBShader->SetTexture(ShaderUniform::tex_ao_dither, r->m_aoDitherSampler);
-   rd->m_FBShader->SetVector(ShaderUniform::w_h_height, (float)(1.0 / halfRT->GetWidth()), (float)(1.0 / halfRT->GetHeight()), 1.0f, 1.0f);
+   rd->m_FBShader->SetTexture(ShaderUniform::tex_pbr_ssr_history, GetPBRSsrHistoryTexture()->GetColorSampler());
+   rd->m_FBShader->SetVector(
+      ShaderUniform::w_h_height, (float)(1.0 / halfRT->GetWidth()), (float)(1.0 / halfRT->GetHeight()), rd->m_depthPrepassMotion ? 1.0f : 0.0f, 1.0f);
    // x: SSR coverage fade start roughness, y: fade end (march early-outs there), z: max pooling radius in low res texels, w: firefly clamp factor
    rd->m_FBShader->SetVector(ShaderUniform::pbrResolveParams, 0.5f, 0.9f, 8.0f, 4.0f);
    rd->m_FBShader->SetMatrix(ShaderUniform::matProj, &matProj[0], nEyes);
    rd->m_FBShader->SetMatrix(ShaderUniform::matProjInv, &matProjInv[0], nEyes);
    rd->m_FBShader->SetTechnique(ShaderTechnique::PBR_march);
    rd->DrawFullscreenTexturedQuad(rd->m_FBShader);
+
+   // Keep this frame's march as the next frame's temporal reprojection history
+   RenderTarget* const historyRT = GetPBRSsrHistoryTexture();
+   rd->SetRenderTarget("PBR SSR History"s, historyRT, false);
+   rd->BlitRenderTarget(halfRT, historyRT, true, false);
 
    // Full res joint bilateral upsample & composite with the planar probe radiance
    rd->SetRenderTarget("PBR Specular Resolve"s, outRT, true);
