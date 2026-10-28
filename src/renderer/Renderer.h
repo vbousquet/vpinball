@@ -12,6 +12,7 @@
 #include "parts/PartGroup.h"
 #include "renderer/RenderProbe.h"
 #include "renderer/Sampler.h"
+#include "renderer/VSMPagePool.h"
 
 class IEditable;
 class Renderable;
@@ -266,6 +267,7 @@ public:
       DISABLE_LIGHTMAPS = 1 << 4, // Disable lightmaps, useful for reflection probe parallel to lightmap ot avoid doubling them
       UI_EDGES = 1 << 5,          // Render as wireframe
       UI_FILL = 1 << 6,           // Render filled interior
+      SHADOW_MAP = 1 << 7,        // PBR shadow map pass, only render shadow casting geometry
    };
    unsigned int m_render_mask = DEFAULT; // Active pass render bit mask
    bool IsRenderPass(const RenderMask pass_mask) const { return (m_render_mask & pass_mask) != 0; }
@@ -307,8 +309,34 @@ private:
    void RenderItem(IEditable* const renderable, bool isNoBackdrop);
    void RenderStatics(); // Render background, then static parts if IsUsingStaticPrepass
    void PreparePBRPasses(); // Record PBR sideband clear and early AO passes when PBR is active
+   void AddPBRShadowDependencies(); // Order this frame's shadow page passes before the (just created) scene pass (no-op without BGFX)
 #if defined(ENABLE_BGFX)
    void BuildPBRLightList(); // Rebuild the Forward+ clustered light list (CPU world-space XY grid, per frame)
+   void UpdateVirtualShadowMaps(); // Paged virtual shadow maps: mark coverage, allocate pages, render dirty pages
+   void CreateVSMPagePoolTargets(); // Lazily create the physical page pool texture array and its per-layer render targets
+   Vertex3Ds GetShadowCasterBoundsMin(IEditable* part, Vertex3Ds& boundsMax) const; // World AABB of a shadow caster part
+   bool IsStaticShadowCaster(const IEditable* part) const; // True for casters that also draw under SHADOW_MAP|STATIC_ONLY
+
+   static constexpr int MAX_PBR_SHADOW_LIGHTS = 32; // shadowed-light cap (shadowIndex+1 packed in 8 bits of the light record)
+   VSM::PagePool m_vsmPool{ 256 }; // physical page pool (one depth-array layer per page)
+   int m_vsmPoolTexLayers = 0; // layer count the pool texture was created with (framebuffers are created transiently per page job)
+   bgfx::TextureHandle m_vsmPoolTex = BGFX_INVALID_HANDLE; // depth texture array backing the pool
+   std::shared_ptr<Sampler> m_vsmPoolSampler;
+   bgfx::TextureHandle m_vsmPageTableTex = BGFX_INVALID_HANDLE; // CPU-generated page table (physical layer+1 per virtual page)
+   std::shared_ptr<Sampler> m_vsmPageTableSampler;
+   std::vector<float> m_vsmPageTableData; // CPU mirror of the page-table texture
+   bool m_vsmPageTableDirty = false; // upload the page-table texture at frame submit
+   std::vector<VSM::LightMap> m_vsmLights; // per-shadowIndex virtual maps
+   Matrix3D m_vsmShadowVP[VSM::MAX_LIGHTS]; // ortho light view-projection per shadowed light
+   vec4 m_vsmParams[VSM::MAX_LIGHTS]; // x: page-table texel base, y: pages across (face grid for cube), z: pages down, w: ortho depth range
+   vec4 m_vsmBox[VSM::MAX_LIGHTS]; // x: 1/boxW, y: 1/boxH, z/w: unused
+   std::vector<RenderTarget*> m_vsmTouchedRTs; // page RTs written this frame (scene pass dependencies)
+   uint64_t m_vsmFrame = 0; // marking frame stamp for pool LRU
+   int m_vsmPoolPages = 256; // physical pool size in pages (Player_PBRShadowPoolPages)
+   int m_vsmVirtRes = 8192; // ortho virtual map edge in texels (Player_PBRShadowMapSize)
+   int m_vsmMaxLights = VSM::MAX_LIGHTS; // shadowed-light cap (Player_PBRShadowMaxLights)
+   SaveDirtyState m_vsmLastTableDirty = SaveDirtyState::Clean; // table dirty state sampled per VSM frame
+   int m_vsmPageBudget = 32; // dirty pages rendered per frame (Player_PBRShadowPagesPerFrame)
 #endif
    void RenderDynamics(); // Render static parts if not IsUsingStaticPrepass, then render dynamic parts
    void DrawBackground();

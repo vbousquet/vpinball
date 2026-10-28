@@ -267,6 +267,8 @@ set(VPX_SOURCES
    src/renderer/VertexBuffer.h
    src/renderer/ViewSetup.cpp
    src/renderer/ViewSetup.h
+   src/renderer/VSMPagePool.cpp
+   src/renderer/VSMPagePool.h
    src/renderer/VRDevice.cpp
    src/renderer/VRDevice.h
    src/renderer/Window.cpp

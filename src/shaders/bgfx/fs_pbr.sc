@@ -106,11 +106,84 @@ uniform vec4 pbrProbes1; // reflection plane of the second bound probe
 uniform vec4 pbrProbeParams; // x/y: influence ranges of probe0/1 (0 = unbound), z: SSR/probe blend factor, w: refraction probe bound
 uniform vec4 pbrProbeLods;   // x/y: max mip level of probe0/1, z: max mip level of the refraction probe (roughness-dependent lod)
 
+SAMPLER2DARRAY(tex_vsm_pool, 3);     // VSM physical page pool: depth texture array, one 128^2 page per layer
+SAMPLER2D     (tex_vsm_pagetables, 5); // VSM page table: physical layer+1 per virtual page (0 = not resident)
+
+uniform mat4 matShadowVP[32];   // ortho virtual map view-projection per shadowed light
+uniform vec4 pbrVSMParams[32];  // x: page-table texel base, y: pages across (face grid for cube), z: pages down, w: ortho depth range
+uniform vec4 pbrVSMBox[32];     // x/y: world->virtual-uv scale (1/ortho box extents)
+uniform vec4 pbrShadowParams;   // x: 1/page size, y: slope-scaled depth bias, z/w: unused
+
 #ifdef TRANSPARENT
 uniform vec4 refractionTint_thickness;
 #endif
 
 #include "ball_shadows.sh"
+
+// Near-light cube face lookup: the light->fragment direction selects one of the 6 consecutive face
+// groups (major axis), uv comes from the face's axis projection. Faces match the rasterization lookAt
+// in the renderer (+X,-X,+Y,-Y,+Z,-Z with the same up vectors, shared with VSMPagePool's CUBE_FACE_*).
+// Returns (u, v, face, dir.F) where dir.F is the direction component along the face's forward axis
+// (positive in front).
+vec4 pbr_shadow_cube_lookup(const vec3 dir)
+{
+   const vec3 ad = abs(dir);
+   float fw; vec2 fuv; float face;
+   if (ad.x >= ad.y && ad.x >= ad.z)
+   {
+      if (dir.x > 0.0) { fw = dir.x; fuv = vec2(-dir.y, dir.z) / fw; face = 0.0; }
+      else { fw = -dir.x; fuv = vec2(dir.y, dir.z) / fw; face = 1.0; }
+   }
+   else if (ad.y >= ad.z)
+   {
+      if (dir.y > 0.0) { fw = dir.y; fuv = vec2(dir.x, dir.z) / fw; face = 2.0; }
+      else { fw = -dir.y; fuv = vec2(-dir.x, dir.z) / fw; face = 3.0; }
+   }
+   else
+   {
+      if (dir.z > 0.0) { fw = dir.z; fuv = vec2(dir.x, -dir.y) / fw; face = 4.0; }
+      else { fw = -dir.z; fuv = vec2(-dir.x, -dir.y) / fw; face = 5.0; }
+   }
+   return vec4(fuv * vec2(0.5, -0.5) + 0.5, face, fw);
+}
+
+// Page-table fetch + page-local depth sample. idx is the linear virtual-page index into the
+// page-table texture (ptBase + page), luv is the page-local uv (fract of the virtual-map scaled uv).
+// Returns -1 when the page is not resident (no caster coverage -> lit by construction).
+float pbr_vsm_fetch(const int idx, const vec2 luv)
+{
+   const float phys = texelFetch(tex_vsm_pagetables, ivec2(idx & 511, idx >> 9), 0).x;
+   if (phys <= 0.0)
+      return -1.0;
+   return texture2DArrayLod(tex_vsm_pool, vec3(luv, phys - 1.0), 0.0).x;
+}
+
+// Linear virtual-page index of a virtual-map uv, or -1 when outside the grid
+int pbr_vsm_index(const float ptBase, const vec2 grid, const vec2 vuv)
+{
+   const vec2 pg = floor(vuv * grid);
+   if (any(lessThan(pg, vec2_splat(0.0))) || any(greaterThanEqual(pg, grid)))
+      return -1;
+   return int(ptBase + pg.y * grid.x + pg.x);
+}
+
+// Ortho paged depth at a virtual-map uv (page-local resolution per tap: PCF taps may cross pages)
+float pbr_vsm_depth(const float ptBase, const vec2 grid, const vec2 vuv)
+{
+   const int idx = pbr_vsm_index(ptBase, grid, vuv);
+   if (idx < 0)
+      return -1.0;
+   return pbr_vsm_fetch(idx, fract(vuv * grid));
+}
+
+// Cube paged depth for a lookup (cl.xy = face uv in [0,1], cl.z = face index)
+float pbr_vsm_cube_depth(const float ptBase, const float faceGrid, const vec4 cl)
+{
+   const int g = int(faceGrid + 0.5);
+   const vec2 pg = floor(cl.xy * vec2_splat(faceGrid));
+   const int idx = int(ptBase + 0.5) + int(cl.z + 0.5) * g * g + int(pg.y) * g + int(pg.x);
+   return pbr_vsm_fetch(idx, fract(cl.xy * vec2_splat(faceGrid)));
+}
 
 mat3 TBN_trafo(const vec3 N, const vec3 V, const vec2 uv)
 {
@@ -284,7 +357,8 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wV, const vec3 wPos, const vec3 
    {
       const int li = int(pbr_light_texel(1024 + start + i).x);
       const vec4 lPos = pbr_light_texel(li * 2);
-      const vec3 lCol = pbr_light_texel(li * 2 + 1).rgb;
+      const vec4 lRad = pbr_light_texel(li * 2 + 1);
+      const vec3 lCol = lRad.rgb;
       const vec3 dl = lPos.xyz - wPos;
       // Clamp the distance to ~1 VPU (~0.5mm): a light embedded in geometry would otherwise
       // produce unbounded inverse-square irradiance
@@ -313,7 +387,99 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wV, const vec3 wPos, const vec3 
       // inside the clipped region so the bloom blob edge moves smoothly as the view moves
       vec3 spec = D * F * G * (lCol * (x * x / dist2)) * NdotL;
       spec /= 1.0 + dot(spec, vec3(0.176204, 0.812985, 0.0108109)) * (1.0 / 1024.0);
-      acc += diffuse * (vec3_splat(1.0) - F) * (1.0 / PI) * (lCol * (x * x / dist2)) * NdotL + spec;
+
+      // Shadowed light record: w packs mode (bits 0-3), VSM index + 1 (bits 4-11, 0 = no map),
+      // layout (bits 12-15, 0 = ortho, 2 = cube) and the penumbra radius quantized in 0.5 VPU units (bits 16+)
+      float shadow = 1.0;
+      const int shadowInfo = int(floor(lRad.w + 0.5));
+      const int shadowMode = shadowInfo & 15;
+      const int shadowIndex = ((shadowInfo >> 4) & 255) - 1;
+      const int shadowLayout = (shadowInfo >> 12) & 15;
+      const float lightRadius = float(shadowInfo >> 16) * 0.5;
+      BRANCH if (shadowIndex >= 0 && shadowLayout <= 1)
+      {
+         // Ortho virtual map: project once, then each PCF tap resolves its own page through the
+         // page table (a tap landing in a non-resident page counts as lit: pages without casters
+         // are never allocated)
+         const vec4 sc = mul(matShadowVP[shadowIndex], vec4(wPos, 1.0));
+         const vec2 suv = sc.xy * vec2(0.5, -0.5) + 0.5;
+         BRANCH if (sc.z > 0.0 && all(greaterThanEqual(suv, vec2_splat(0.0))) && all(lessThanEqual(suv, vec2_splat(1.0))))
+         {
+            const vec4 vsmP = pbrVSMParams[shadowIndex];
+            const vec4 vsmB = pbrVSMBox[shadowIndex];
+            const vec2 grid = vsmP.yz;
+            // Slope-scaled depth bias plus a constant term to fight self-shadowing acne
+            const float bias = pbrShadowParams.y * (1.0 - NdotL) / max(NdotL, 0.1) + 0.25 * pbrShadowParams.x;
+            const float blocker = pbr_vsm_depth(vsmP.x, grid, suv);
+            if (blocker >= 0.0)
+            {
+               // PCSS-lite: the penumbra radius grows with the receiver/blocker gap, expressed in
+               // world units then converted to virtual uv through the box scale
+               const float worldGap = (sc.z - blocker) * vsmP.w;
+               const vec2 filterRadius = clamp(vec2_splat(lightRadius * worldGap / max(sqrt(dist2), 1.0)) * vsmB.xy, vec2_splat(pbrShadowParams.x), vec2_splat(0.02));
+               float shadowAcc = 0.0;
+               UNROLL for (int py = -1; py <= 1; py++)
+               {
+                  UNROLL for (int px = -1; px <= 1; px++)
+                  {
+                     const vec2 tuv = suv + vec2(float(px), float(py)) * filterRadius;
+                     const float d = pbr_vsm_depth(vsmP.x, grid, tuv);
+                     shadowAcc += d < 0.0 ? 1.0 : step(sc.z - bias, d);
+                  }
+               }
+               shadow = shadowAcc * (1.0 / 9.0);
+            }
+         }
+      }
+      BRANCH if (shadowIndex >= 0 && shadowLayout == 2)
+      {
+         // Cube layout: 6 faces of faceGrid^2 pages each, rasterized as regular 90 deg perspective
+         // depth and reconstructed to the projected distance along the face's forward axis (world units).
+         // PCF taps offset the lookup direction so they cross face edges cleanly.
+         // Contact-shadow fix: offset the shading point along the surface normal before computing
+         // the light->fragment direction, so the cube lookup samples deeper inside the caster
+         // silhouette instead of grazing its edge (removes light leaks at caster contact points)
+         const vec4 vsmP = pbrVSMParams[shadowIndex];
+         const float faceGrid = vsmP.y;
+         const vec3 shadowPos = wPos + wN * (0.5 + 0.04 * sqrt(dist2));
+         const vec3 sdl = lPos.xyz - shadowPos;
+         const float sdist = inversesqrt(dot(sdl, sdl));
+         const vec3 ldir = -sdl * sdist; // normalized light -> fragment direction
+         const float dist = 1.0 / sdist;
+         const float zN = 2.0; // near plane, must match the renderer's cube face projection
+         const float zF = max(lPos.w, 60.0);
+         const vec4 cl = pbr_shadow_cube_lookup(ldir);
+         const float blockerNdc = pbr_vsm_cube_depth(vsmP.x, faceGrid, cl);
+         if (blockerNdc >= 0.0)
+         {
+            const float blocker = zN * zF / (zF - blockerNdc * (zF - zN));
+            const float worldGap = dist * cl.w - blocker;
+            // PCSS-lite penumbra in direction space (a uv offset of 1.0 maps to ~2 direction units);
+            // the face's virtual texel size is 1/(faceGrid * PAGE_SIZE) of a direction unit
+            const float invFaceRes = 1.0 / (faceGrid * 128.0);
+            const float filterRadius = clamp(lightRadius * worldGap / max(blocker, 1.0) * invFaceRes * 2.0, invFaceRes, 8.0 * invFaceRes);
+            const float bias = min(0.5 + 2.0 * (1.0 - NdotL) / max(NdotL, 0.05), 8.0);
+            const vec3 upRef = abs(ldir.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+            const vec3 tX = normalize(cross(upRef, ldir));
+            const vec3 tY = cross(ldir, tX);
+            float shadowAcc = 0.0;
+            UNROLL for (int py = -1; py <= 1; py++)
+            {
+               UNROLL for (int px = -1; px <= 1; px++)
+               {
+                  const vec3 tdir = normalize(ldir + (float(px) * tX + float(py) * tY) * filterRadius);
+                  const vec4 tl = pbr_shadow_cube_lookup(tdir);
+                  const float tapNdc = pbr_vsm_cube_depth(vsmP.x, faceGrid, tl);
+                  const float tapBlocker = tapNdc < 0.0 ? -1.0 : zN * zF / (zF - tapNdc * (zF - zN));
+                  shadowAcc += tapBlocker < 0.0 ? 1.0 : step(dist * tl.w - bias, tapBlocker);
+               }
+            }
+            shadow = shadowAcc * (1.0 / 9.0);
+         }
+      }
+      BRANCH if (shadowMode == 1 || shadowMode >= 3) // RAYTRACED_BALL_SHADOWS or PBR ball shadow tiers
+         shadow *= get_light_ball_shadow(lPos.xyz, -dl, sqrt(dist2));
+      acc += shadow * (diffuse * (vec3_splat(1.0) - F) * (1.0 / PI) * (lCol * (x * x / dist2)) * NdotL + spec);
    }
    return acc;
 }

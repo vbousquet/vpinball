@@ -831,6 +831,14 @@ void Plunger::Render(const unsigned int renderMask)
    m_prevFramePos = pa.m_pos;
    m_prevFramePosValid = true;
 
+   // PBR shadow map pass: draw only the caster geometry with the light's view-projection (no material setup)
+   if (renderMask & Renderer::SHADOW_MAP)
+   {
+      m_renderer->UpdateBasicShaderMatrix();
+      m_renderer->RenderMesh(renderMask, body, {});
+      return;
+   }
+
    VisualMaterial material;
    if (!(renderMask & (Renderer::UI_EDGES | Renderer::UI_FILL)))
    {

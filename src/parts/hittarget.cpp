@@ -643,6 +643,13 @@ void HitTarget::Render(const unsigned int renderMask)
    body.edgeVertices = m_vertices;
    body.prevTransform = m_prevMatTrafoValid ? &m_prevMatTrafo : nullptr;
 
+   // PBR shadow map pass: draw only the caster geometry with the light's view-projection (no material setup)
+   if (renderMask & Renderer::SHADOW_MAP)
+   {
+      m_renderer->RenderMesh(renderMask, body, {});
+      return;
+   }
+
    VisualMaterial material;
    if (!isUIPass)
    {
