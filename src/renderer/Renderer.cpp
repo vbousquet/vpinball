@@ -4021,6 +4021,11 @@ void Renderer::SetupTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapR
    const bool filtered = resample || (m_screenOffset.x != 0.f) || (m_screenOffset.y != 0.f);
    if (infoMode == IF_AO_ONLY)
       tonemapTechnique = ShaderTechnique::fb_AO;
+   else if (infoMode == IF_PBR_SPECULAR)
+   {
+      tonemapTechnique = ShaderTechnique::fb_pbr_ssr;
+      m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_ssr_lowres, GetReflectionHalfBufferTexture()->GetColorSampler());
+   }
    else if (infoMode == IF_DEPTH)
    {
       tonemapTechnique = ShaderTechnique::fb_prepass_depth;
