@@ -143,6 +143,10 @@ PropString(Player, GfxBackend, "Graphics Backend"s, "Graphics API/backend used f
 PropEnum(Player, ShowFPS, "Show FPS"s, "Performance overlay display mode"s, int /* PerfUI::PerfMode */, 0, "Disable"s, "FPS"s, "Full"s);
 PropBool(Player, SSRefl, "Additive Screen Space Reflection"s, "Add global reflection to the entire scene"s, false);
 PropBool(Player, PBR, "PBR Materials"s, "Enable the physically based rendering path for parts using a PBR material (BGFX only)"s, true);
+PropInt(Player, PBRShadowMapSize, "PBR Shadow Map Size"s, "Virtual resolution in texels of each ortho PBR light's shadow map (paged: only caster-covered pages are allocated)"s, 2048, 16384, 8192);
+PropInt(Player, PBRShadowPoolPages, "PBR Shadow Pool Pages"s, "Number of 128x128 physical pages shared by all shadowed PBR lights"s, 64, 1024, 256);
+PropInt(Player, PBRShadowMaxLights, "PBR Shadow Max Lights"s, "Maximum number of PBR lights with virtual shadow maps"s, 1, 32, 32);
+PropInt(Player, PBRShadowPagesPerFrame, "PBR Shadow Pages Per Frame"s, "Maximum number of shadow map pages rendered per frame (bakes and dynamic updates amortize over frames)"s, 1, 128, 32);
 PropBool(Player, HDRDisableToneMapper, "Disable tonemapping on HDR display"s, "Do not perform tonemapping when rendering on a high dynamic range (HDR) capable monitor/gfxboard/OS"s, true);
 PropFloat(Player, HDRGlobalExposure, "HDR Display Global Exposure"s, "Global exposure scale multiplier for high dynamic range (HDR) capable monitors"s, 0.f, 5.f, 1.f);
 PropBool(Player, ForceBloomOff, "Disable Bloom"s, "Disable postprocessed bloom filter"s, false);

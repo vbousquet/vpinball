@@ -240,6 +240,35 @@ void Bumper::Render(const unsigned int renderMask)
       return;
 
    const Vertex3Ds pos(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight);
+   // PBR shadow map pass: draw the caster geometry with the light's view-projection, always in the rest position
+   if (renderMask & Renderer::SHADOW_MAP)
+   {
+      if (m_d.m_baseVisible && m_baseMeshBuffer != nullptr)
+      {
+         m_renderer->UpdateBasicShaderMatrix();
+         m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_baseMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperBaseNumIndices);
+      }
+      if (m_d.m_capVisible && m_capMeshBuffer != nullptr)
+      {
+         m_renderer->UpdateBasicShaderMatrix();
+         m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_capMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperCapNumIndices);
+      }
+      // Skirt (socket mesh): always included, drawn at rest — its hit tilt is small, so the rest pose is close enough for shadowing
+      if (m_d.m_skirtVisible && m_socketMeshBuffer != nullptr)
+      {
+         const Matrix3D socketMatrix = Matrix3D::MatrixRotateZ(ANGTORAD(m_d.m_orientation)) * Matrix3D::MatrixScale(m_d.m_radius, m_d.m_radius, m_d.m_heightScale)
+            * Matrix3D::MatrixTranslate(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight + 5.0f);
+         m_renderer->UpdateBasicShaderMatrix(socketMatrix);
+         m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_socketMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperSocketNumIndices);
+      }
+      // Ring: always included, drawn at rest — it pops up/down too fast for shadow map updates to be worth tracking
+      if (m_d.m_ringVisible && m_ringMeshBuffer != nullptr)
+      {
+         m_renderer->UpdateBasicShaderMatrix();
+         m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_ringMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperRingNumIndices);
+      }
+      return;
+   }
 
    if (m_d.m_baseVisible)
    {

@@ -365,6 +365,19 @@ void Gate::Render(const unsigned int renderMask)
    bracket.edgeTriIndices16 = true;
    bracket.edgeVertices = gateBracket;
 
+   // PBR shadow map pass: draw only the caster geometry with the light's view-projection (no material setup)
+   if (renderMask & Renderer::SHADOW_MAP)
+   {
+      if (m_bracketMeshBuffer != nullptr)
+      {
+         m_renderer->UpdateBasicShaderMatrix();
+         m_renderer->RenderMesh(renderMask, bracket, {});
+      }
+      if (m_wireMeshBuffer != nullptr)
+         m_renderer->RenderMesh(renderMask, wire, {});
+      return;
+   }
+
    VisualMaterial material;
    if (!isUIPass)
    {
