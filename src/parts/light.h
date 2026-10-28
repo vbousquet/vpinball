@@ -192,6 +192,13 @@ private:
    void UpdateBounds();
 
 public:
+   // PBR virtual shadow map state, assigned by the renderer when shadow passes are emitted
+   mutable int m_pbrShadowSlot = -1; // index into the per-light VSM uniform/page-table arrays (-1 = no virtual map)
+   mutable int m_pbrShadowLayout = 0; // 0 = ortho paged map, 2 = cube (6 faces of CUBE_FACE_GRID^2 pages)
+   mutable Vertex3Ds m_pbrShadowBakedPos { FLT_MAX, FLT_MAX, FLT_MAX }; // Light position the virtual map was last marked for (invalid = needs bake)
+   mutable float m_pbrShadowBakedFalloff = 0.f; // Falloff the virtual map was last marked for
+   mutable int m_pbrShadowBakedSlot = -1; // VSM index the map was last marked for (invalid = needs bake)
+   mutable int m_pbrShadowBakedMode = -1; // ShadowMode tier the map was last marked for (a static bake must not inherit frozen dynamic casters from a downgraded dynamic tier)
    STDMETHOD(get_Surface)(/*[out, retval]*/ BSTR *pVal);
    STDMETHOD(put_Surface)(/*[in]*/ BSTR newVal);
    STDMETHOD(get_Intensity)(/*[out, retval]*/ float *pVal);

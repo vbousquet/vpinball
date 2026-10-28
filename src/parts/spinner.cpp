@@ -377,6 +377,22 @@ void Spinner::Render(const unsigned int renderMask)
    plate.edgeVertices = spinnerPlate;
    plate.prevTransform = m_prevMatTrafoValid ? &m_prevMatTrafo : nullptr;
 
+   const bool plateVisible = m_phitspinner ? m_phitspinner->m_spinnerMover.m_visible : m_d.m_visible;
+
+   // PBR shadow map pass: draw only the caster geometry with the light's view-projection (no material setup).
+   // Static-tier bakes only get the fixed bracket; the animated plate is drawn for dynamic-tier lights.
+   if (renderMask & Renderer::SHADOW_MAP)
+   {
+      if (m_d.m_showBracket && m_bracketMeshBuffer != nullptr)
+      {
+         m_renderer->UpdateBasicShaderMatrix();
+         m_renderer->RenderMesh(renderMask, bracket, {});
+      }
+      if (plateVisible && !isStaticOnly && m_plateMeshBuffer != nullptr)
+         m_renderer->RenderMesh(renderMask, plate, {});
+      return;
+   }
+
    Material bracketMat;
    VisualMaterial bracketMaterial;
    VisualMaterial plateMaterial;
@@ -405,7 +421,6 @@ void Spinner::Render(const unsigned int renderMask)
    if (m_d.m_showBracket && !isDynamicOnly)
       m_renderer->RenderMesh(renderMask, bracket, bracketMaterial);
 
-   const bool plateVisible = m_phitspinner ? m_phitspinner->m_spinnerMover.m_visible : m_d.m_visible;
    if (plateVisible && !isStaticOnly)
    {
       m_renderer->RenderMesh(renderMask, plate, plateMaterial);

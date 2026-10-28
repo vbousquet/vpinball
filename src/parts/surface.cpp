@@ -775,6 +775,18 @@ void Surface::Render(const unsigned int renderMask)
 {
    assert(m_renderer != nullptr);
    assert(!m_desktopBackdrop);
+
+   // PBR shadow map pass: draw only the caster geometry (top surface + walls) with the light's view-projection
+   if (renderMask & Renderer::SHADOW_MAP)
+   {
+      if (m_d.m_visible && m_meshBuffer != nullptr)
+      {
+         m_renderer->UpdateBasicShaderMatrix();
+         m_renderer->m_renderDevice->DrawMesh(
+            m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_meshBuffer->m_ib->m_count);
+      }
+      return;
+   }
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
    const bool isReflectionPass = renderMask & Renderer::REFLECTION_PASS;

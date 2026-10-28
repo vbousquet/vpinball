@@ -723,6 +723,18 @@ void Ramp::Render(const unsigned int renderMask)
    const Material *const mat = m_ptable->GetMaterial(m_d.m_szMaterial);
    // PBR materials are always dynamic: their shading state can not be frozen in the static accumulation
    const bool isPBR = m_renderer->m_renderDevice->m_pbrActive && mat != nullptr && mat->m_type == Material::MaterialType::PBR;
+
+   // PBR shadow map pass: draw only the caster geometry with the light's view-projection
+   if (renderMask & Renderer::SHADOW_MAP)
+   {
+      if (m_d.m_visible && m_meshBuffer != nullptr && mat != nullptr && (!isStaticOnly || (!mat->m_bOpacityActive && !isPBR)))
+      {
+         m_renderer->UpdateBasicShaderMatrix();
+         m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
+      }
+      return;
+   }
+
    if (!m_d.m_visible || (!isUIPass && mat == nullptr) || (isReflectionPass && !m_d.m_reflectionEnabled) || (isStaticOnly && (mat->m_bOpacityActive || isPBR))
       || (isDynamicOnly && !mat->m_bOpacityActive && !isPBR))
       return;

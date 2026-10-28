@@ -515,7 +515,6 @@ public:
    SaveDirtyState GetPropDirtyState() const { return m_sdsDirtyProp; }
    SaveDirtyState GetScriptDirtyState() const { return m_sdsDirtyScript; }
    SaveDirtyState GetNonUndoableDirtyState() const { return m_sdsNonUndoableDirty; }
-
    VPX::Sound *GetSound(const string &name) const;
 
    int GetDetailLevel() const { return m_settings.GetPlayer_AlphaRampAccuracy(); } // used for rubber, ramp and ball
