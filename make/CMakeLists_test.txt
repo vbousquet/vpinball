@@ -86,6 +86,7 @@ set(VPX_TEST_SOURCES
    tests/render/test-mirror-render.cpp
    tests/render/test-multiview-render.cpp
    tests/render/test-normalmap-render.cpp
+   tests/render/test-pbr-shadow-render.cpp
    tests/render/test-renderframe.cpp
    tests/render/test-vr-spaces.cpp
    tests/render/test-window.cpp
