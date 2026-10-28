@@ -837,7 +837,7 @@ void RenderView::SetSpaceReference(PartGroupData::SpaceReference spaceReference,
    // Record the camera transform under which this frame's scene is rendered for this space reference, to feed
    // the depth prepass motion vectors (skipped for passes which do not contribute to the scene prepass, e.g.
    // the reflected passes whose reflected view would break the recorded camera history)
-   if (m_renderer->IsMotionVectorPrepass() && !m_renderer->IsRenderPass(Renderer::REFLECTION_PASS))
+   if (m_renderer->IsMotionVectorPrepass() && (m_renderer->m_render_mask & (Renderer::REFLECTION_PASS | Renderer::SHADOW_MAP)) == 0)
    {
       const int refIndex = clamp(static_cast<int>(spaceReference), 0, 3);
       for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
@@ -1019,6 +1019,7 @@ void RenderView::RenderStatics()
       PreparePBRPasses();
       rd->SetRenderTarget("Render Scene"s, GetMSAABackBufferTexture(), true, true); // Force new pass to avoid sorting background draw calls with 3D rendering draw calls
       rd->GetCurrentPass()->m_depthPrepassTarget = rd->m_depthPrepassTarget;
+      r->AddPBRShadowDependencies();
       if (useDepthPrepass)
          rd->AddRenderTargetDependency(GetDepthPrepassRenderTarget());
       return;
@@ -1205,6 +1206,7 @@ void RenderView::RenderStatics()
    }
    rd->SetRenderTarget("Render Scene"s, GetMSAABackBufferTexture(), true, true); // Force new pass to avoid sorting the statics composite draw calls with 3D rendering draw calls
    rd->GetCurrentPass()->m_depthPrepassTarget = rd->m_depthPrepassTarget;
+   r->AddPBRShadowDependencies();
    if (useDepthPrepass)
       rd->AddRenderTargetDependency(GetDepthPrepassRenderTarget());
 }
@@ -1218,6 +1220,7 @@ void RenderView::PreparePBRPasses()
 
    // Forward+ light list: light states animate per frame so the cluster grid is rebuilt and uploaded each frame
 #ifdef ENABLE_BGFX
+   r->UpdateVirtualShadowMaps();
    r->BuildPBRLightList();
 #endif
 

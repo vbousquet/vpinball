@@ -377,6 +377,13 @@ void Trigger::Render(const unsigned int renderMask)
    body.edgeVertices = m_triggerVertices->data();
    body.prevTransform = m_prevMatTrafo.Update(translate, g_pplayer->m_overall_frames);
 
+   // PBR shadow map pass: draw only the caster geometry with the light's view-projection (no material setup)
+   if (renderMask & Renderer::SHADOW_MAP)
+   {
+      m_renderer->RenderMesh(renderMask, body, {});
+      return;
+   }
+
    const bool isUIPass = renderMask & (Renderer::UI_EDGES | Renderer::UI_FILL);
    VisualMaterial material;
    if (!isUIPass)

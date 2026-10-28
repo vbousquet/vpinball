@@ -633,6 +633,21 @@ void Flipper::Render(const unsigned int renderMask)
    base.edgeTriIndices16 = true;
    base.edgeVertices = flipperBaseMesh;
 
+   // PBR shadow map pass: draw only the caster geometry with the light's view-projection
+   if (renderMask & Renderer::SHADOW_MAP)
+   {
+      if (m_meshBuffer != nullptr)
+      {
+         m_renderer->m_renderDevice->DrawMesh(
+            m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, flipperBaseNumIndices);
+         if (m_d.m_rubberthickness > 0.f)
+            m_renderer->m_renderDevice->DrawMesh(
+               m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, flipperBaseNumIndices, flipperBaseNumIndices);
+      }
+      m_renderer->UpdateBasicShaderMatrix();
+      return;
+   }
+
    RenderMeshDesc rubber = base;
    rubber.startIndex = flipperBaseNumIndices;
    rubber.uiEdgeMesh = &m_meshEdgeRubberBuffer;
