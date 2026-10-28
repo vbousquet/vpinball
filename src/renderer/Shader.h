@@ -109,6 +109,7 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(unshaded_with_texture),
    SHADER_TECHNIQUE(unshaded_without_texture_shadow),
    SHADER_TECHNIQUE(unshaded_with_texture_shadow),
+   SHADER_TECHNIQUE(insert_traced), // additive traced insert (multi-view baked light + facet glints)
 
    SHADER_TECHNIQUE(basic_reflection_only),
 
@@ -331,6 +332,7 @@ enum class ShaderUniform : unsigned int
    SHADER_UNIFORM(ShaderUniformType::Float4, lightCenter_doShadow, 1), // Basic & Flasher (for ball shadows)
    SHADER_UNIFORM(ShaderUniformType::Float4v, balls, 8), // Basic & Flasher (for ball shadows)
    SHADER_UNIFORM(ShaderUniformType::Float4, staticColor_Alpha, 1), // Basic & Flasher
+   SHADER_UNIFORM(ShaderUniformType::Float4v, tracedParams, 8), // Basic (traced insert parameters, see fs_insert_traced.sc)
    SHADER_UNIFORM(ShaderUniformType::Float4, w_h_height, 1), // Post process & Basic (for screen space reflection/refraction)
 
    // Shared material for Ball, Basic and Classic light shaders
@@ -365,6 +367,7 @@ enum class ShaderUniform : unsigned int
    SHADER_SAMPLER(tex_reflection, 5, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // plane reflection
    SHADER_SAMPLER(tex_refraction, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // screen space refraction
    SHADER_SAMPLER(tex_probe_depth, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // depth probe
+   SHADER_SAMPLER(tex_traced_env, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // traced insert lamp-off atlas
 
    // PBR extensions (BGFX only)
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrFactors, 1), // metallic/occlusion/roughness factors + AO flag

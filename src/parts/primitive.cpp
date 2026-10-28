@@ -6,6 +6,7 @@
 #include "core/VPApp.h"
 #include "math/matrix.h"
 #include "parts/light.h"
+#include "utils/bulb.h"
 #include "parts/Collection.h"
 #include "physics/collideex.h"
 #include "physics/PhysicsEngine.h"
@@ -958,8 +959,12 @@ void Primitive::Render(const unsigned int renderMask)
          alpha = 0.f;
    }
 
+   // Traced insert prototype: an additive card whose image is a multi-view traced bake ('TRACED_' image name prefix). It is
+   // drawn with the lamp off too, since the room still glints in its facets
+   const bool tracedInsert = m_d.m_addBlend && lowerCase(m_d.m_szImage).rfind("traced_", 0) == 0;
+
    // don't render additive primitive if there is nothing to add
-   if (!isUIPass && m_d.m_addBlend && (m_d.m_color == 0 || alpha == 0.f))
+   if (!isUIPass && m_d.m_addBlend && !tracedInsert && (m_d.m_color == 0 || alpha == 0.f))
       return;
 
    if (m_groupdRendering)
@@ -1049,8 +1054,63 @@ void Primitive::Render(const unsigned int renderMask)
       m_renderer->m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
       const vec4 color = convertColor(m_d.m_color, alpha * (float)(1.0 / 100.0));
       m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::staticColor_Alpha, color.x * color.w, color.y * color.w, color.z * color.w, color.w);
-      m_renderer->m_renderDevice->m_basicShader->SetTechnique(lightmap ? (img ? ShaderTechnique::unshaded_with_texture_shadow : ShaderTechnique::unshaded_without_texture_shadow)
-                                                 : (img ? ShaderTechnique::unshaded_with_texture : ShaderTechnique::unshaded_without_texture));
+      if (img && tracedInsert)
+      {
+         // Look of the AFM 'round 1.19in starburst' type (l63), hard coded for the prototype
+         const float hash = sinf(m_d.m_vPosition.x * 127.1f + m_d.m_vPosition.y * 311.7f) * 43758.5453f;
+         const float seed = hash - floorf(hash);
+         vec4 params[8] = {
+            vec4(15.f, 45.f, 60.f, 70.f), // traced elevations
+            vec4(4.f, 2.5f, 3.5f, 1.5f), // depths (mm): cover, facets, glow parallax, rim fade
+            vec4(8.f, 0.67f, 1.6f, 0.f), // glow gain (uncalibrated), glow spread, IOR, alignment view
+            vec4(1.5f, 76.648f, 50.938f, 1.62f), // glints: strength, sharpness, facet tilt, fringe
+            vec4(5.f, -78.201f + (seed * 2.f - 1.f) * 14.641f, 3.f, 6.f), // glints: keys, turn, waviness (deg), wavelength (mm)
+            vec4(seed, nMap ? 1.f : 0.f, 0.5396875f, 0.f), // seed, has facets, mm per table unit, frost
+            vec4(0.3f, 0.29f, 0.27f, 0.f), // room light glinting in the facets, lamp-off look gain
+            convertColor(m_d.m_color, 0.f) }; // the plastic's colour
+         // The lamp-off look atlas, in the Emission Map slot
+         Texture *const envMap = m_ptable->GetImage(m_d.m_szEmissionMap);
+         if (envMap)
+         {
+            m_renderer->m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_traced_env, envMap, true, SamplerFilter::SF_TRILINEAR, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP);
+            params[6].w = 1.f;
+         }
+         // Prototype tuning without a rebuild: VPX_TRACED="gain=4 spread=0.67 glint=1.5 debug=1"
+         static const char *const tuning = std::getenv("VPX_TRACED");
+         if (tuning)
+         {
+            float v;
+            const char *p;
+            if ((p = strstr(tuning, "gain=")) && sscanf(p + 5, "%f", &v) == 1) params[2].x = v;
+            if ((p = strstr(tuning, "spread=")) && sscanf(p + 7, "%f", &v) == 1) params[2].y = v;
+            if ((p = strstr(tuning, "debug=")) && sscanf(p + 6, "%f", &v) == 1) params[2].w = v;
+            if ((p = strstr(tuning, "glint=")) && sscanf(p + 6, "%f", &v) == 1) params[3].x = v;
+            if ((p = strstr(tuning, "sharp=")) && sscanf(p + 6, "%f", &v) == 1) params[3].y = v;
+            if ((p = strstr(tuning, "frost=")) && sscanf(p + 6, "%f", &v) == 1) params[5].w = v;
+            if ((p = strstr(tuning, "room=")) && sscanf(p + 5, "%f", &v) == 1) params[6] = vec4(v, v * 0.96f, v * 0.9f, params[6].w);
+            if (envMap && (p = strstr(tuning, "env=")) && sscanf(p + 4, "%f", &v) == 1) params[6].w = v;
+            if ((p = strstr(tuning, "facetblur=")) && sscanf(p + 10, "%f", &v) == 1) params[7].w = v;
+         }
+         m_renderer->m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_base_color, img, true, SamplerFilter::SF_TRILINEAR, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP);
+         if (nMap)
+            m_renderer->m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_base_normalmap, nMap, true, SamplerFilter::SF_TRILINEAR, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP);
+         // An incandescent lamp glows red-orange as its filament heats and cools, as the light's own draw does
+         if (m_lightmap && m_lightmap->m_d.m_fader == FADER_INCANDESCENT)
+         {
+            float tint2700[3], tint[3];
+            bulb_filament_temperature_to_tint(2700.f, tint2700);
+            bulb_filament_temperature_to_tint((float)m_lightmap->m_currentFilamentTemperature, tint);
+            m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::staticColor_Alpha, color.x * color.w * tint[0] / tint2700[0],
+               color.y * color.w * tint[1] / tint2700[1], color.z * color.w * tint[2] / tint2700[2], color.w);
+         }
+         m_renderer->m_renderDevice->m_basicShader->SetFloat4v(ShaderUniform::tracedParams, params, 8);
+         m_renderer->m_renderDevice->m_basicShader->SetTechnique(ShaderTechnique::insert_traced);
+      }
+      else
+      {
+         m_renderer->m_renderDevice->m_basicShader->SetTechnique(lightmap ? (img ? ShaderTechnique::unshaded_with_texture_shadow : ShaderTechnique::unshaded_without_texture_shadow)
+                                                    : (img ? ShaderTechnique::unshaded_with_texture : ShaderTechnique::unshaded_without_texture));
+      }
       m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, true, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_groupdRendering ? m_numGroupIndices : (uint32_t)m_mesh.NumIndices());
    }
    else

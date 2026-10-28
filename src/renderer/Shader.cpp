@@ -104,6 +104,7 @@ Shader::TechniqueDef Shader::shaderTechniqueNames[static_cast<unsigned int>(Shad
    SHADER_TECHNIQUE(unshaded_with_texture),
    SHADER_TECHNIQUE(unshaded_without_texture_shadow),
    SHADER_TECHNIQUE(unshaded_with_texture_shadow),
+   SHADER_TECHNIQUE(insert_traced), // additive traced insert (multi-view baked light + facet glints)
    SHADER_TECHNIQUE(basic_reflection_only),
    // BGFX OpenXR shaders
    SHADER_TECHNIQUE(vr_mask),
@@ -323,6 +324,7 @@ ShaderUniformDef ShaderUniformDef::coreUniforms[static_cast<unsigned int>(Shader
    SHADER_UNIFORM(ShaderUniformType::Float4, lightCenter_doShadow, 1), // Basic & Flasher (for ball shadows)
    SHADER_UNIFORM(ShaderUniformType::Float4v, balls, 8), // Basic & Flasher (for ball shadows)
    SHADER_UNIFORM(ShaderUniformType::Float4, staticColor_Alpha, 1), // Basic & Flasher
+   SHADER_UNIFORM(ShaderUniformType::Float4v, tracedParams, 8), // Basic (traced insert parameters, see fs_insert_traced.sc)
    SHADER_UNIFORM(ShaderUniformType::Float4, w_h_height, 1), // Post process & Basic (for screen space reflection/refraction)
 
    // Shared material for Ball, Basic and Classic light shaders
@@ -353,6 +355,7 @@ ShaderUniformDef ShaderUniformDef::coreUniforms[static_cast<unsigned int>(Shader
    SHADER_SAMPLER(tex_reflection, 5, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // plane reflection
    SHADER_SAMPLER(tex_refraction, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // screen space refraction
    SHADER_SAMPLER(tex_probe_depth, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // depth probe
+   SHADER_SAMPLER(tex_traced_env, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // traced insert lamp-off atlas
 
    // PBR extensions (BGFX only)
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrFactors, 1), // metallic/occlusion/roughness factors + AO flag
@@ -1583,6 +1586,7 @@ void Shader::Load()
       BGFX_EMBEDDED_SHADER_ST_CLIP(fs_unshaded_notex_ballshadow),
       BGFX_EMBEDDED_SHADER_ST_CLIP(fs_unshaded_tex),
       BGFX_EMBEDDED_SHADER_ST_CLIP(fs_unshaded_tex_ballshadow),
+      BGFX_EMBEDDED_SHADER_ST_CLIP(fs_insert_traced),
       // Depth prepass variants
       BGFX_EMBEDDED_SHADER_ST_CLIP(vs_depth),
       BGFX_EMBEDDED_SHADER_ST_CLIP(vs_depth_mv),
@@ -1756,6 +1760,7 @@ void Shader::Load()
       loadProgram(embeddedShaders, ShaderTechnique::unshaded_with_texture,    STEREO(vs_basic_tex_noclip),           STEREO(fs_unshaded_tex_noclip));
       loadProgram(embeddedShaders, ShaderTechnique::unshaded_without_texture_shadow, STEREO(vs_basic_notex_noclip),  STEREO(fs_unshaded_notex_ballshadow_noclip));
       loadProgram(embeddedShaders, ShaderTechnique::unshaded_with_texture_shadow, STEREO(vs_basic_tex_noclip),       STEREO(fs_unshaded_tex_ballshadow_noclip));
+      loadProgram(embeddedShaders, ShaderTechnique::insert_traced,            STEREO(vs_basic_tex_noclip),           STEREO(fs_insert_traced_noclip));
       // Depth prepass variants
       loadProgram(embeddedShaders, ShaderTechnique::basic_depth, STEREO(vs_depth_noclip), STEREO(fs_depth_notex_noclip));
       loadProgram(embeddedShaders, ShaderTechnique::basic_depth_at, STEREO(vs_depth_noclip), STEREO(fs_depth_tex_at_noclip));
@@ -1792,6 +1797,7 @@ void Shader::Load()
       loadProgram(embeddedShaders, ShaderTechnique::unshaded_with_texture,    STEREO(vs_basic_tex_clip),           STEREO(fs_unshaded_tex_clip), true);
       loadProgram(embeddedShaders, ShaderTechnique::unshaded_without_texture_shadow, STEREO(vs_basic_notex_clip),  STEREO(fs_unshaded_notex_ballshadow_clip), true);
       loadProgram(embeddedShaders, ShaderTechnique::unshaded_with_texture_shadow, STEREO(vs_basic_tex_clip),       STEREO(fs_unshaded_tex_ballshadow_clip), true);
+      loadProgram(embeddedShaders, ShaderTechnique::insert_traced,            STEREO(vs_basic_tex_clip),           STEREO(fs_insert_traced_clip), true);
       // Depth prepass variants
       loadProgram(embeddedShaders, ShaderTechnique::basic_depth, STEREO(vs_depth_clip), STEREO(fs_depth_notex_clip), true);
       loadProgram(embeddedShaders, ShaderTechnique::basic_depth_at, STEREO(vs_depth_clip), STEREO(fs_depth_tex_at_clip), true);
