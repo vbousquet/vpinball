@@ -858,6 +858,8 @@ void Primitive::RenderSetup(Renderer *renderer)
 
    m_currentFrame = -1.f;
 
+   if (IsFlasherDome())
+      MeasureFlasherDome(); // orders the index list (outer skin first) before it is uploaded
    if (m_mesh.NumVertices() > 0 && !m_mesh.m_indices.empty())
    {
       std::shared_ptr<VertexBuffer> vertexBuffer = std::make_shared<VertexBuffer>(m_renderer->m_renderDevice, (unsigned int)m_mesh.NumVertices(), nullptr, !(m_d.m_staticRendering || m_mesh.m_animationFrames.empty()));
@@ -885,6 +887,123 @@ void Primitive::RenderRelease()
    m_renderer = nullptr;
 }
 
+bool Primitive::IsFlasherDome() const
+{
+   static const bool enabled = std::getenv("VPX_T9") == nullptr || std::string(std::getenv("VPX_T9")) != "0";
+   return enabled && !m_d.m_addBlend && lowerCase(m_d.m_szImage).rfind("dome_", 0) == 0;
+}
+
+// The dome is measured from its mesh: base centre and outer radius from the bounds (tabs stick out symmetrically along one
+// axis only), the flute profile from the vertices facing the axis (the farthest are the groove roots, the nearest the ridge
+// tips), the flute count as the smallest n for which the ridge tips' angles agree mod 2pi/n, and the cap underside
+const Primitive::FlasherDomeShape &Primitive::MeasureFlasherDome()
+{
+   if (m_dome.measured)
+      return m_dome;
+   m_dome.measured = true;
+   m_mesh.UpdateBounds();
+   const Vertex3Ds lo = m_mesh.m_minAABound, hi = m_mesh.m_maxAABound;
+   FlasherDomeShape d;
+   d.measured = true;
+   d.cx = 0.5f * (lo.x + hi.x);
+   d.cy = 0.5f * (lo.y + hi.y);
+   d.baseZ = lo.z;
+   d.radius = 0.5f * min(hi.x - lo.x, hi.y - lo.y);
+   d.height = hi.z - lo.z;
+   d.rootR = 0.f;
+   d.ridgeR = FLT_MAX;
+   d.capZ = d.height;
+   for (const Vertex3D_NoTex2 &v : m_mesh.m_vertices)
+   {
+      const float px = v.x - d.cx, py = v.y - d.cy, r = sqrtf(px * px + py * py);
+      if (v.nz < -0.7f && v.z > lo.z + 0.5f * d.height)
+         d.capZ = min(d.capZ, v.z - lo.z);
+      if (r < 0.5f * d.radius || r > 0.98f * d.radius || fabsf(v.nz) > 0.3f || v.nx * px + v.ny * py > -0.3f * r)
+         continue;
+      d.rootR = max(d.rootR, r);
+      d.ridgeR = min(d.ridgeR, r);
+   }
+   if (d.rootR <= 0.f || d.ridgeR >= d.rootR)
+   {
+      PLOGW << "Flasher dome " << GetName() << ": no inner flutes found";
+      return m_dome;
+   }
+   vector<float> tips;
+   for (const Vertex3D_NoTex2 &v : m_mesh.m_vertices)
+   {
+      const float px = v.x - d.cx, py = v.y - d.cy, r = sqrtf(px * px + py * py);
+      if (fabsf(v.nz) < 0.3f && v.nx * px + v.ny * py < -0.3f * r && r < d.ridgeR + 0.15f * (d.rootR - d.ridgeR))
+         tips.push_back(atan2f(py, px));
+   }
+   for (int n = 6; n <= 64 && !tips.empty(); n++)
+   {
+      double cs = 0., sn = 0.;
+      for (const float a : tips)
+      {
+         cs += cos(n * a);
+         sn += sin(n * a);
+      }
+      if (sqrt(cs * cs + sn * sn) > 0.9 * (double)tips.size())
+      {
+         d.flutes = n;
+         d.phase = (float)(atan2(sn, cs) / n + M_PI / n); // a groove root sits half a period from a ridge tip
+         break;
+      }
+   }
+   d.valid = d.flutes > 0 && d.capZ < d.height;
+   if (d.valid)
+   {
+      // Outer skin triangles first: the dome layer reaches the inner flutes through the wall, so the body draws only its
+      // outer skin (with the inner faces drawn too, their own white specular would read through a red wall)
+      vector<unsigned int> outer, inner;
+      const float midWall = 0.5f * (d.rootR + d.radius), capMid = d.capZ + 0.5f * (d.height - d.capZ);
+      for (size_t t = 0; t + 2 < m_mesh.m_indices.size(); t += 3)
+      {
+         const Vertex3D_NoTex2 &a = m_mesh.m_vertices[m_mesh.m_indices[t]], &b = m_mesh.m_vertices[m_mesh.m_indices[t + 1]], &c = m_mesh.m_vertices[m_mesh.m_indices[t + 2]];
+         const float px = (a.x + b.x + c.x) * (1.f / 3.f) - d.cx, py = (a.y + b.y + c.y) * (1.f / 3.f) - d.cy, pz = (a.z + b.z + c.z) * (1.f / 3.f) - d.baseZ;
+         const float nz = a.nz + b.nz + c.nz;
+         const bool isInner = (sqrtf(px * px + py * py) < midWall && pz < capMid) || nz < -1.5f;
+         (isInner ? inner : outer).insert((isInner ? inner : outer).end(), { m_mesh.m_indices[t], m_mesh.m_indices[t + 1], m_mesh.m_indices[t + 2] });
+      }
+      d.outerIndices = (unsigned int)outer.size();
+      outer.insert(outer.end(), inner.begin(), inner.end());
+      m_mesh.m_indices = outer;
+   }
+   m_dome = d;
+   PLOGI << "Flasher dome " << GetName() << ": " << (d.valid ? "" : "NOT measured, ") << d.flutes << " flutes, phase " << RADTOANG(d.phase) << " deg, R " << VPUTOMM(d.radius)
+         << " mm, H " << VPUTOMM(d.height) << " mm, flutes " << VPUTOMM(d.ridgeR) << ".." << VPUTOMM(d.rootR) << " mm, cap underside " << VPUTOMM(d.capZ) << " mm";
+   return m_dome;
+}
+
+static float FlasherDomeTune(const char *key, const float def)
+{
+   static const char *const tuning = std::getenv("VPX_T9_TUNE");
+   float v;
+   const char *p;
+   if (tuning && (p = strstr(tuning, key)) && sscanf(p + strlen(key), "%f", &v) == 1)
+      return v;
+   return def;
+}
+
+bool Primitive::GetFlasherDomeBulb(Vertex3Ds &pos)
+{
+   const FlasherDomeShape &d = MeasureFlasherDome();
+   if (!d.valid)
+      return false;
+   pos = RecalculateMatrices() * Vertex3Ds(d.cx, d.cy, d.baseZ + FlasherDomeTune("fil=", 0.47f) * d.height);
+   return true;
+}
+
+bool Primitive::GetFlasherDomeCookie(vec3 &cookie)
+{
+   const FlasherDomeShape &d = MeasureFlasherDome();
+   if (!d.valid)
+      return false;
+   const Vertex3Ds root = RecalculateMatrices().MultiplyVectorNoTranslate(Vertex3Ds(cosf(d.phase), sinf(d.phase), 0.f));
+   cookie = vec3((float)d.flutes, atan2f(root.y, root.x), RADTOANG(atan2f(FlasherDomeTune("fil=", 0.47f) * d.height, d.rootR)));
+   return true;
+}
+
 void Primitive::Render(const unsigned int renderMask)
 {
    assert(m_renderer != nullptr);
@@ -893,6 +1012,11 @@ void Primitive::Render(const unsigned int renderMask)
    // PBR shadow map pass: draw only the caster geometry with the light's view-projection
    if (renderMask & Renderer::SHADOW_MAP)
    {
+#if defined(ENABLE_BGFX)
+      // A flasher dome never shadows its own lamp (the lamp sits inside it)
+      if (m_lightmap != nullptr && m_lightmap == m_renderer->m_vsmShadowLight && IsFlasherDome())
+         return;
+#endif
       if (m_d.m_visible && !m_skipRendering && m_meshBuffer != nullptr && ((renderMask & Renderer::STATIC_ONLY) == 0 || m_d.m_staticRendering))
       {
          m_renderer->UpdateBasicShaderMatrix(RecalculateMatrices());
@@ -949,9 +1073,11 @@ void Primitive::Render(const unsigned int renderMask)
    // Update lightmap before checking anything that uses alpha
    float alpha = m_d.m_alpha;
    float linkState;
+   const bool flasherDome = IsFlasherDome();
+   const uint32_t bodyIndices = m_groupdRendering ? m_numGroupIndices : (flasherDome && m_dome.valid) ? m_dome.outerIndices : (uint32_t)m_mesh.NumIndices();
    if (!m_d.m_stateSrcLink.empty() && g_pplayer->m_resURIResolver.TryGetFloatState(m_d.m_stateSrcLink, linkState))
       alpha *= linkState;
-   else if (m_lightmap)
+   else if (m_lightmap && !flasherDome) // a flasher dome's lamp drives its dome layer, not its body
    {
       if (m_lightmap->m_d.m_intensity != 0.f && m_lightmap->m_d.m_intensity_scale != 0.f)
          alpha *= m_lightmap->m_currentIntensity / (m_lightmap->m_d.m_intensity * m_lightmap->m_d.m_intensity_scale);
@@ -1047,6 +1173,7 @@ void Primitive::Render(const unsigned int renderMask)
    if (lightmap)
       m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::lightCenter_doShadow, m_lightmap->m_d.m_vCenter.x, m_lightmap->m_d.m_vCenter.y, m_lightmap->GetCurrentHeight(), 1.0f);
 
+   bool is_reflection_only_pass = false;
    if (m_d.m_addBlend)
    {
       // Additive blending is a special unlit mode with depth mask disabled
@@ -1124,7 +1251,6 @@ void Primitive::Render(const unsigned int renderMask)
          : Shader::PBRTextureSet();
       m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(img ? ShaderTechnique::basic_with_texture : ShaderTechnique::basic_without_texture, *mat,
          img ? pinAlphaTest >= 0.f && !img->IsOpaque() : false, nMap, reflections, refractions, isPBR ? &pbrMaps : nullptr);
-      bool is_reflection_only_pass = false;
 
       // Handle render probes
       if (reflections || refractions)
@@ -1211,7 +1337,7 @@ void Primitive::Render(const unsigned int renderMask)
             || (mat->m_bOpacityActive
                && (!m_d.m_staticRendering
                   || isPBR) /* && !m_renderer->m_renderDevice->GetRenderState().IsOpaque() */), // We can not use the real render state opaque state since Blood Machine and other tables use depth masks
-         m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_groupdRendering ? m_numGroupIndices : (uint32_t)m_mesh.NumIndices());
+         m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, bodyIndices);
    }
 
    // Draw the front of the primitive if backface enabled
@@ -1219,8 +1345,42 @@ void Primitive::Render(const unsigned int renderMask)
    {
       m_renderer->m_renderDevice->SetRenderState(RenderState::CULLMODE, cullMode);
       m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, mat->m_bOpacityActive, m_d.m_vPosition, m_d.m_depthBias, 
-         m_meshBuffer, RenderDevice::TRIANGLELIST, 0,
-         m_groupdRendering ? m_numGroupIndices : (uint32_t)m_mesh.NumIndices());
+         m_meshBuffer, RenderDevice::TRIANGLELIST, 0, bodyIndices);
+   }
+
+   // Flasher dome layer: additive over the body just drawn (same sort key, submitted after it), outer skin only (depth equal)
+   if (flasherDome && !is_reflection_only_pass && MeasureFlasherDome().valid)
+   {
+      const FlasherDomeShape &d = m_dome;
+      const Matrix3D &mat3 = m_fullMatrix;
+      const Vertex3Ds base = mat3 * Vertex3Ds(d.cx, d.cy, d.baseZ);
+      Vertex3Ds axis = mat3.MultiplyVectorNoTranslate(Vertex3Ds(0.f, 0.f, 1.f));
+      const float scale = axis.Length(); // object to table units
+      axis.Normalize();
+      // The coil lies along the dome's object x; the flute phase is measured from it
+      Vertex3Ds coil = mat3.MultiplyVectorNoTranslate(Vertex3Ds(1.f, 0.f, 0.f));
+      coil -= axis * coil.Dot(axis);
+      coil.Normalize();
+      const float mm = VPUTOMM(1.f);
+      float level = 0.f;
+      if (m_lightmap && m_lightmap->m_d.m_intensity * m_lightmap->m_d.m_intensity_scale > 0.f)
+         level = m_lightmap->m_currentIntensity / (m_lightmap->m_d.m_intensity * m_lightmap->m_d.m_intensity_scale);
+      const vec4 params[8] = {
+         vec4(base.x, base.y, base.z, mm),
+         vec4(axis.x, axis.y, axis.z, d.radius * scale * mm),
+         vec4(coil.x, coil.y, coil.z, d.height * scale * mm),
+         vec4(FlasherDomeTune("fil=", 0.47f) * d.height * scale * mm, (float)d.flutes, d.phase, level),
+         vec4(d.rootR * scale * mm, d.ridgeR * scale * mm, d.capZ * scale * mm, FlasherDomeTune("room=", 1.5f)),
+         vec4(FlasherDomeTune("glow=", 300.f), FlasherDomeTune("bars=", 30000.f), FlasherDomeTune("needle=", 1.f), FlasherDomeTune("white=", 6000.f)),
+         vec4(FlasherDomeTune("halo=", 2500.f), FlasherDomeTune("spot=", 2000.f), FlasherDomeTune("flash=", 8.f), 0.f),
+         vec4(FlasherDomeTune("gain=", 1.f / 170.f), FlasherDomeTune("debug=", 0.f), FlasherDomeTune("sigma=", 1.f), 0.f) };
+      m_renderer->m_renderDevice->ResetRenderState();
+      m_renderer->m_renderDevice->EnableAlphaBlend(true);
+      m_renderer->m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
+      m_renderer->m_renderDevice->SetRenderState(RenderState::CULLMODE, cullMode);
+      m_renderer->m_renderDevice->m_basicShader->SetFloat4v(ShaderUniform::domeParams, params, 8);
+      m_renderer->m_renderDevice->m_basicShader->SetTechnique(ShaderTechnique::flasher_dome);
+      m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, true, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, bodyIndices);
    }
 
    // Restore state

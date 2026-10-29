@@ -1,0 +1,336 @@
+// license:GPLv3+
+
+// Flasher dome: the lit and sparkle layer of a fluted plastic flasher dome, an additive pass drawn over the dome's own PBR
+// body (which carries the OFF body colour and the smooth outer highlight). Live: nothing is baked, the lamp level and the
+// view drive every term. Port of the HDRP dome recipe (pinball-rebuild recipes/flasher-dome-vpe-PORTABLE.md): all the
+// maths runs in dome-local space (mm, y = dome axis, x = the bulb's coil axis), no UVs. Only the outer skin emits; the inner
+// flutes are reached by refracting the view ray through the wall, so thin lines are never resampled into dot chains.
+//
+// Layers: body glow (near wall and the far wall seen across the dome), bars (the coil seen through each flute flank, a GGX
+// transmission lobe against a 5-sample line filament), bulb halo and cap spot, the peak (heat, flash, white-hot outer
+// skin), and the OFF sparkle (facet glints of a fixed studio room, ridge glints and needles on the flute edges).
+// Colour is blackbody(T(level)) x the plastic's Beer-Lambert transmission; white appears only where the tonemapper clips.
+//
+// domeParams (dome-local mm unless noted):
+// [0] xyz dome base centre (table units), w mm per table unit
+// [1] xyz dome axis (table space), w outer radius
+// [2] xyz coil axis (table space, across the dome axis), w outer height
+// [3] x filament height, y flute count, z flute phase (rad, a groove root = thinnest wall), w lamp level (may pass 1)
+// [4] x inner radius at the groove roots, y at the ridge tips, z cap underside height, w room light (OFF sparkle, linear)
+// [5] gains: x body glow, y bars (nit), z needles and ridge glints (relative to the room), w white-hot peak (nit)
+// [6] gains: x bulb halo, y cap spot, z peak flash, w heat at peak
+// [7] x emission scale (nit to linear), y debug (1 bars + core + cap, 2 glow, 3 sparkle, 4 bars only), z absorption scale (plastic colour), w unused
+
+$input v_worldPos, v_tablePos, v_normal, v_texcoord0
+#ifdef STEREO
+	$input v_eye
+#endif
+#ifdef CLIP
+	$input v_clipDistance
+#endif
+
+#include "common.sh"
+
+uniform vec4 domeParams[8];
+
+#ifdef STEREO
+	uniform mat4 matView[2];
+	uniform vec4 cameraPosWorld[2];
+	#define mView           matView[int(round(v_eye))]
+	#define cCameraPosWorld cameraPosWorld[int(round(v_eye))].xyz
+#else
+	uniform mat4 matView;
+	uniform vec4 cameraPosWorld;
+	#define mView           matView
+	#define cCameraPosWorld cameraPosWorld.xyz
+#endif
+
+#define DOME_PI 3.14159265
+
+float domeHash(const float n) { return fract(sin(n) * 43758.5453); }
+
+// Smooth 1D value noise (breaks the bars into segments)
+float domeNoise(const float x, const float seed)
+{
+	const float i = floor(x);
+	const float f = fract(x);
+	return mix(domeHash(i * 12.9898 + seed * 78.233), domeHash((i + 1.0) * 12.9898 + seed * 78.233), f * f * (3.0 - 2.0 * f));
+}
+
+// Kelvin to RGB (Tanner Helland fit), normalised to R = 1 below 6600 K
+vec3 domeBlackbody(const float T)
+{
+	const float t = T / 100.0;
+	return vec3(1.0, saturate((99.4708025861 * log(t) - 161.1195681661) / 255.0), t <= 19.0 ? 0.0 : saturate((138.5177312231 * log(t - 10.0) - 305.0447927307) / 255.0));
+}
+
+// Fixed procedural studio room for the OFF glints (dome-independent, table space: z up, +y toward the player)
+float domeStudio(const vec3 wd)
+{
+	float env = mix(0.008, 0.16, saturate(wd.z * 0.5 + 0.5));
+	env += 5.0 * pow(saturate(dot(wd, normalize(vec3(0.0, 0.66, 0.75)))), 70.0);  // key card above the player
+	env += 3.0 * pow(saturate(dot(wd, normalize(vec3(0.85, -0.2, 0.35)))), 60.0); // side card
+	env += 2.5 * pow(saturate(dot(wd, normalize(vec3(-0.3, -0.4, 0.95)))), 70.0); // overhead bar
+	env += 2.0 * pow(saturate(dot(wd, normalize(vec3(-0.8, 0.5, 0.3)))), 60.0);   // left card
+	return env;
+}
+
+void main()
+{
+	#ifdef CLIP
+	if (v_clipDistance < 0.0)
+		discard;
+	#endif
+
+	// Dome-local frame
+	const vec3 up = domeParams[1].xyz;
+	const vec3 ex = domeParams[2].xyz;
+	const vec3 ez = cross(up, ex);
+	const vec3 dt = (v_tablePos - domeParams[0].xyz) * domeParams[0].w;
+	const vec3 P = vec3(dot(dt, ex), dot(dt, up), dot(dt, ez));
+	const vec3 wV = normalize(cCameraPosWorld - v_tablePos);
+	const vec3 V = vec3(dot(wV, ex), dot(wV, up), dot(wV, ez));
+	const vec3 wN = normalize(mul(vec4(normalize(v_normal), 0.0), mView).xyz);
+	vec3 Ns = vec3(dot(wN, ex), dot(wN, up), dot(wN, ez));
+	if (dot(Ns, V) < 0.0)
+		Ns = -Ns;
+
+	const float R = domeParams[1].w;
+	const float H = domeParams[2].w;
+	const float rootR = domeParams[4].x;
+	const float ridgeR = domeParams[4].y;
+	const float capY = domeParams[4].z;
+	const float rxz = length(P.xz);
+
+	// Only the outer skin emits (the inner flutes, base and cap underside are hidden behind it or seen through it)
+	if (!((Ns.y > 0.5 && P.y > capY + 0.2) || (dot(Ns.xz, P.xz) > 0.3 * rxz && rxz > rootR + 0.1)))
+		discard;
+	const float capW = smoothstep(0.55, 0.9, Ns.y) * smoothstep(capY, capY + 0.5, P.y);
+
+	// Lamp level: emission black below 1 %, mid levels lifted (two-segment map), filament temperature from the level
+	const float level = max(domeParams[3].w, 0.0);
+	const float lvl = saturate(level);
+	const float lvlE = saturate((lvl - 0.01) / 0.99);
+	const float lvlG = lvlE >= 0.45 ? sqrt(lvlE) : sqrt(0.45) * pow(lvlE / 0.45, 1.5);
+	const float T = 2900.0 * pow(max(lvl, 1e-3), 0.1235);
+	const vec3 bb = domeBlackbody(T);
+	const vec3 sigma = vec3(0.100, 1.400, 1.500) * domeParams[7].z; // red acrylic absorption (1/mm)
+	const float pk = smoothstep(0.9, 1.0, level);                    // the 1-2 true peak frames
+	const float heatW = smoothstep(0.85, 1.0, level);
+
+	// The view ray refracted in at the smooth skin, carried through the wall to the inner surface
+	vec3 VrIn = refract(-V, Ns, 1.0 / 1.49);
+	if (dot(VrIn, VrIn) < 1e-4)
+		VrIn = -Ns;
+	VrIn = normalize(VrIn);
+	const float wallB = R - 0.5 * (rootR + ridgeR);
+	const vec3 PinB = P + VrIn * (wallB / max(dot(-VrIn, Ns), 0.25));
+	const vec3 PinC = P + VrIn * (max(P.y - capY, 0.0) / max(-VrIn.y, 0.25));
+	vec3 Pin = mix(PinB, PinC, capW);
+	Pin.y = min(Pin.y, capY);
+
+	// Flute coordinates at the inner point: eP is the signed offset from the nearest groove root in flute periods, the
+	// ridge tips sit at +-0.5. Each flank runs straight from a root to a tip (a sawtooth profile, the flutes' V)
+	const float nFlutes = domeParams[3].y;
+	const float period = 2.0 * DOME_PI / nFlutes;
+	float theta = atan2(Pin.z, Pin.x) - domeParams[3].z;
+	const float fluteF = theta / period;
+	const float idx = floor(fluteF + 0.5);
+	const float eP = fluteF - idx;
+	const float s = eP >= 0.0 ? 1.0 : -1.0;
+	const float flankId = idx * 2.0 + (s > 0.0 ? 1.0 : 0.0);
+	const float rIn = mix(rootR, ridgeR, 2.0 * abs(eP));
+	const float eRoot = abs(eP), eTip = 0.5 - abs(eP);
+	const float edge = max(exp(-(eRoot / 0.09) * (eRoot / 0.09)), exp(-(eTip / 0.09) * (eTip / 0.09)));
+	const float thN = mix(R - rIn, max(H - capY, 0.5), capW);    // wall thickness across the wall
+	const float thH = 1.6 * mix(wallB, max(H - capY, 0.5), capW); // hemispherical mean path
+	const vec3 trN = exp(-sigma * thN);
+	const vec3 trH = exp(-sigma * thH);
+
+	// Flank normal on the cavity side: the radius falls from root to tip, the flank leans toward its root
+	const vec3 radial = normalize(vec3(Pin.x, 0.0, Pin.z) + vec3(1e-5, 0.0, 0.0));
+	const vec3 tg = vec3(-radial.z, 0.0, radial.x);
+	const float slope = (rootR - ridgeR) / max(0.5 * period * rIn, 1e-3);
+	const vec3 nFlank = normalize(-radial - s * slope * tg);
+	const vec3 nIn = normalize(mix(nFlank, vec3(0.0, -1.0, 0.0), capW));
+
+	// Into the cavity (total internal reflection keeps the ray in the plastic)
+	vec3 d2 = refract(VrIn, -nIn, 1.49);
+	const bool tir = dot(d2, d2) < 1e-4;
+	d2 = tir ? reflect(VrIn, -nIn) : normalize(d2);
+
+	// Filament: a horizontal coil along x, 3.2 mm long
+	const vec3 F = vec3(0.0, domeParams[3].x, 0.0);
+	// Where the cavity ray passes the filament: vertical (dvF) and horizontal (dhF) miss distances
+	const float tF = max(dot(F - Pin, d2), 0.0);
+	const vec3 Q = Pin + d2 * tF;
+	const float dvF = tir ? 99.0 : Q.y - F.y;
+	const float dhF = tir ? 99.0 : length(vec3(Q.x * 0.35, 0.0, Q.z));
+
+	// Body glow: scattered light in the rough flutes, falling off from the filament, +-25 % per facet
+	const float dist = max(length(Pin - F), 4.0);
+	const float fall = (12.0 / dist) * (12.0 / dist);
+	const float facet = 0.75 + 0.5 * domeHash(flankId * 3.0 + 1.7);
+	const float lvlB = mix(lvlE, lvlG, saturate(0.7 + 0.3 * edge));
+	const float flash = 1.0 + domeParams[6].z * pk * (0.25 + 0.75 * edge);
+	vec3 glow = bb * trH * fall * (0.65 + 0.9 * edge * (1.0 - 0.85 * capW)) * mix(facet, 1.0, 0.6 * capW) * (1.0 - 0.5 * capW);
+	// ... and the far wall seen across the dome (through the near wall: red)
+	{
+		const float rMid = 0.5 * (rootR + ridgeR);
+		const float a = dot(d2.xz, d2.xz);
+		const float b = dot(Pin.xz, d2.xz);
+		const float c = dot(Pin.xz, Pin.xz) - rMid * rMid;
+		const float disc = b * b - a * c;
+		if (!tir && a > 1e-4 && disc > 0.0)
+		{
+			const float tFar = (-b + sqrt(disc)) / a;
+			const vec3 Pf = Pin + d2 * tFar;
+			if (Pf.y > 0.0 && Pf.y < capY)
+			{
+				const float df = max(length(Pf - F), 4.0);
+				glow += 0.8 * bb * trH * trN * (12.0 / df) * (12.0 / df);
+			}
+		}
+	}
+	const vec3 body = lvlB * domeParams[5].x * glow * flash;
+
+	// Bars: each flank transmits the coil as a narrow vertical bar where its GGX transmission lobe (in the horizontal
+	// plane: a vertical flute smears elevation) meets the filament. Broken, staggered and tapered per flank.
+	vec3 bars = vec3_splat(0.0);
+	BRANCH if (lvlE > 0.0 && capW < 0.99)
+	{
+		// Each flank is evaluated once, at its own centre, so a flank inside the lobe is one bar and its neighbour stays dark;
+		// the bar is drawn along the flank's groove root (the thin wall), BarWidth wide
+		const float barAlpha = 0.22;
+		const float a2 = barAlpha * barAlpha;
+		const float thC = (idx + 0.25 * s) * period + domeParams[3].z;
+		const vec3 radC = vec3(cos(thC), 0.0, sin(thC));
+		const vec3 Pc = radC * 0.5 * (rootR + ridgeR);
+		const vec3 nfH = normalize(-radC - s * slope * vec3(-radC.z, 0.0, radC.x));
+		const vec3 woH = normalize(vec3(-VrIn.x, 0.0, -VrIn.z) + vec3(1e-5, 0.0, 0.0));
+		float sB = 0.0;
+		UNROLL for (int k = -2; k <= 2; k++)
+		{
+			const vec3 toL = vec3(float(k) * 0.8, 0.0, 0.0) - Pc;
+			const vec3 Lb = normalize(vec3(toL.x, 0.0, toL.z) + vec3(1e-5, 0.0, 0.0));
+			vec3 h = normalize(-1.49 * woH - Lb);
+			if (dot(h, nfH) < 0.0)
+				h = -h;
+			const float nh = saturate(dot(nfH, h));
+			const float den = nh * nh * (a2 - 1.0) + 1.0;
+			sB += a2 * a2 / (den * den) * saturate(4.0 * dot(Lb, nfH)); // GGX, 1 at the lobe centre
+		}
+		const float across = 1.0 - smoothstep(0.6 * 0.09, 0.09, eRoot);
+		const float hb1 = domeHash(flankId * 7.13 + 0.31);
+		const float hb2 = domeHash(flankId * 3.77 + 5.17);
+		const float hb3 = domeHash(flankId * 9.41 + 2.93);
+		const float yc = 1.5 + (hb1 - 0.5) * 8.0;               // bar centre, above the filament
+		const float hl = 5.0 * (0.6 + 0.9 * hb2);              // bar half-height
+		const float prof = exp(-pow(abs((dvF - yc) / hl), 3.0));
+		const float brk = mix(1.0, smoothstep(0.2, 0.7, domeNoise(Pin.y / 4.0 + 17.0 * hb2, s)), 0.7);
+		const float yh = (dvF - 1.0 - (hb3 - 0.5) * 8.0) / (4.0 * (0.5 + 1.2 * hb2));
+		const float tp = saturate(1.0 - abs(yh) / 2.2);         // parabolic taper: pointed ends, not round beads
+		const float coreX = (1.0 - smoothstep(0.025, 0.045, eRoot)) * pow(tp, 1.5) * (hb1 > 0.5 ? 1.0 : 0.0);
+		const float heat = mix(1.0, 3.0, heatW * (1.0 - 0.5 * capW));
+		const vec3 col = mix(bb * trN, vec3(1.0, 0.62, 0.10), 0.9);
+		bars = domeParams[5].y * lvlG * (sB * 0.2) * across * brk * prof * mix(0.35, 1.0, tp) * heat * (1.0 + 15.0 * coreX * tp) * col * flash * (1.0 - capW);
+		// Small orange bulb halo where the view ray passes the coil, carried by the flute edges
+		bars += 0.5 * domeParams[6].x * lvlG * exp(-(dvF * dvF + 3.0 * dhF * dhF) / (2.5 * 2.5)) * edge * edge * edge * bb * vec3(1.0, 0.35, 0.06) * heat;
+	}
+
+	// Hot core: the rough flutes scatter the coil's image over a few flutes around the line of sight to the bulb (the
+	// bright band at bulb height), yellow-hot at its centre
+	vec3 core = vec3_splat(0.0);
+	BRANCH if (lvlE > 0.0)
+	{
+		const float c = dot(VrIn, normalize(F - Pin));
+		const float lobe = exp(-(1.0 - saturate(c)) / 0.02) * (1.0 - capW);
+		// broken into the flutes: brighter along the groove roots, per-flank strength
+		const float streak = (0.25 + 0.75 * exp(-(eRoot / 0.12) * (eRoot / 0.12))) * (0.5 + domeHash(flankId * 5.31 + 0.7));
+		core = domeParams[6].x * lvlG * lobe * streak * mix(bb * trN, vec3(1.0, 0.62, 0.10), 0.6 * lobe) * mix(1.0, 3.0, heatW) * flash;
+	}
+
+	// Cap: the coil seen down through the flat cap (parallax correct: where the cavity ray crosses the coil)
+	vec3 cap = vec3_splat(0.0);
+	BRANCH if (capW > 0.0 && lvlE > 0.0)
+	{
+		const float rC = dhF / max(rootR, 1.0);
+		cap = domeParams[6].y * lvlG * capW * bb * (vec3(1.0, 0.42, 0.10) * trN.r * exp(-rC / 0.1) * (0.3 + 0.7 * edge * edge)
+			+ vec3(1.0, 0.85, 0.6) * 1.2 * exp(-(rC / 0.06) * (rC / 0.06))) * mix(1.0, 3.0, heatW);
+	}
+
+	// Peak: the outer shell goes white-hot for the 1-2 peak frames (red-wall leak that clips cream), ribs faintly visible,
+	// the silhouette stays red
+	const float nv = saturate(dot(Ns, V));
+	const float whS = (1.0 - 0.45 * edge) * (0.05 + 0.95 * nv * nv) * fall;
+	const vec3 white = domeParams[5].w * pk * whS * vec3(1.0, 0.05, 0.018);
+
+	// OFF sparkle: the view ray reflects off the (hash-tilted) inner facet with Fresnel, goes back out through the skin and
+	// picks up a fixed studio room. Deep red: two passes through the wall. Ridge glints and needles on the flute edges.
+	vec3 sparkle = vec3_splat(0.0);
+	BRANCH if (domeParams[4].w > 0.0)
+	{
+		const float hA = domeHash(flankId * 78.233 + 1.7);
+		const float hB = domeHash(flankId * 12.9898 + 7.3);
+		const vec3 nJ = normalize(nIn + tg * (hB - 0.5) * 0.25 + vec3(0.0, (hA - 0.5) * 0.15, 0.0));
+		const float ci = saturate(dot(VrIn, nJ));
+		const float st2 = 1.49 * 1.49 * (1.0 - ci * ci);
+		const float Fr = st2 >= 1.0 ? 1.0 : 0.0387 + 0.9613 * pow(1.0 - sqrt(1.0 - st2), 5.0);
+		const vec3 rr = reflect(VrIn, nJ);
+		vec3 ro = refract(rr, -Ns, 1.49);
+		if (dot(ro, ro) < 1e-4)
+			ro = reflect(rr, -Ns);
+		ro = normalize(ro);
+		const vec3 wd = ro.x * ex + ro.y * up + ro.z * ez;
+		const vec3 tint = exp(-sigma * 2.0 * thN);
+		const float facetGain = mix(0.05, 2.5, hA * hA * hA);
+		const float side = s > 0.0 ? 1.0 : 0.25;
+		const float facing = smoothstep(-0.15, 0.35, dot(V, s * tg));
+		const float spark = mix(0.12, 2.2, pow(domeHash(idx * 12.9898 + 4.1), 8.0)); // a few hot facets, most dim
+		sparkle = Fr * min(domeStudio(wd), mix(8.0, 1.0, capW)) * tint * facetGain * side * spark;
+		// The room seen through the dome (into the cavity, out through the far wall): deep red, lensed by the flutes
+		const vec3 wt = d2.x * ex + d2.y * up + d2.z * ez;
+		sparkle += 0.35 * (1.0 - Fr) * domeStudio(wt) * exp(-sigma * (thN + 1.2 * wallB)) * (0.7 + 0.6 * hA);
+
+		// One edge per flute carries a ridge glint (1-D random cells along the height), a fraction of the flutes a long
+		// needle on the other edge (linear taper to sharp tips); both slide with the view
+		const float hF0 = domeHash(idx * 63.7 + 0.9);
+		const float hF1 = domeHash(idx * 21.3 + 4.4);
+		const float hF2 = domeHash(idx * 47.9 + 8.1);
+		const float hF3 = domeHash(idx * 11.7 + 2.6);
+		const float viewShift = 2.2 * dot(-V, tg) * s + 1.6 * V.y;
+		const float Hb = max(capY - 1.0, 1.0);
+		const bool tipSide = eTip < eRoot;
+		const float dEdge = tipSide ? eTip : eRoot;
+		if (tipSide == (hF0 < 0.5))
+		{
+			const float dE = dEdge / 0.022;
+			const float Lseg = Hb * mix(0.15, 0.6, hF1);
+			const float zc = Pin.y / (Lseg * 1.7) + hF3 * 7.0 + viewShift;
+			const float cI = floor(zc);
+			const float u = (fract(zc) - 0.5) * 3.4;
+			const float hc = domeHash((cI + flankId * 17.0) * 12.9898);
+			const float hc2 = domeHash((cI + flankId * 17.0) * 78.233);
+			const float taper = exp(-2.5 * u * u) * (abs(u) < 1.3 ? 1.0 : 0.0);
+			sparkle += domeParams[5].z * 0.33 * (hc < 0.45 ? 1.0 : 0.0) * taper * exp(-dE * dE) * mix(0.3, 1.0, hc2 * hc2) * max(Fr, 0.2) * tint * facing * (1.0 - capW);
+		}
+		else if (hF2 < 0.5)
+		{
+			const float dN = dEdge / 0.04;
+			const float Ln = Hb * mix(0.5, 1.0, hF3);
+			const float mid = 1.5 + (Hb - min(Ln, Hb)) * hF0 + 0.5 * Ln;
+			const float lin = saturate(1.0 - abs(Pin.y - mid) / (0.5 * Ln));
+			const float hcN = mid + 0.5 * Ln * clamp(viewShift - 1.12, -1.0, 1.0);
+			const float slide = exp(-pow((Pin.y - hcN) / (0.3 * Ln), 2.0));
+			const float br = mix(0.35, 1.0, domeHash(idx * 5.13 + 1.1));
+			const vec3 nCol = mix(tint, vec3(1.0, 0.6, 0.45) * tint.r, 0.8 * lin * lin * slide);
+			sparkle += domeParams[5].z * 4.0 * lin * mix(0.3, 1.0, slide) * exp(-dN * dN) * br * max(Fr, 0.2) * nCol * facing * mix(1.0, 0.3, capW);
+		}
+		sparkle *= domeParams[4].w;
+	}
+
+	vec3 result = (body + bars + core + cap + white) * domeParams[7].x + sparkle;
+	if (domeParams[7].y > 0.5)
+		result = domeParams[7].y < 1.5 ? (bars + core + cap) * domeParams[7].x : (domeParams[7].y < 2.5 ? body * domeParams[7].x : (domeParams[7].y < 3.5 ? sparkle : bars * domeParams[7].x));
+	gl_FragColor = vec4(result, 1.0);
+}

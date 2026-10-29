@@ -303,6 +303,9 @@ public:
    // transparency probe render target used for the transmission term of transparent parts.
    Shader::PBRTextureSet GetPBRTextureSet(const BaseProperty& partData, const Vertex3Ds& center, const float radius, const bool inShaderSpecular, const bool transparent,
       const unsigned int renderMask, RenderTarget* const refrProbe = nullptr);
+#if defined(ENABLE_BGFX)
+   const class Light* m_vsmShadowLight = nullptr; // light whose shadow map pages are being rendered (a flasher dome stays out of its own lamp's map)
+#endif
 
 private:
    void SetSpaceReference(PartGroupData::SpaceReference spaceReference, bool force);

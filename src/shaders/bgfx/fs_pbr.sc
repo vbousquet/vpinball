@@ -356,7 +356,8 @@ vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV, const float rou
 // frame and packs it into tex_pbr_lights (RGBA32F, 256 texels wide, texel fetch):
 // [0,512)    light records, 2 texels each: (pos.xyz, range) then (radiance.rgb, mode)
 // [512,1024) grid cells: (start, count) into the index list
-// [1024,+)   light index list: (light index, light source sphere radius, upward emitter flag, -)
+// [1024,+)   light index list: (light index, light source sphere radius, upward emitter flag or -dome cut elevation,
+//            flasher dome cookie: flute count + groove root angle / 2pi, 0 = none)
 // World-space evaluation (v_tablePos): view independent, a single grid serves both stereo eyes.
 vec4 pbr_light_texel(const int idx)
 {
@@ -404,6 +405,15 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNg, const vec3 wV, const vec3 w
       // onto nearby walls as a sphere would
       if (lIdx.z > 0.0)
          lCol *= saturate(-dl.z * inversesqrt(max(dot(dl, dl), 1e-6)));
+      // Flasher dome lamp: one soft band per flute (brightest through the thin wall at the groove roots, ~24 % banding as
+      // measured on a real dome) and the dome base cutting the light below its rim (8 deg soft edge)
+      BRANCH if (lIdx.w > 0.0)
+      {
+         const float flutes = floor(lIdx.w);
+         const float band = pow(0.5 + 0.5 * cos(flutes * (atan2(-dl.y, -dl.x) - fract(lIdx.w) * (2.0 * PI))), 10.0);
+         const float elevation = degrees(asin(clamp(-dl.z * inversesqrt(max(dot(dl, dl), 1e-6)), -1.0, 1.0)));
+         lCol *= mix(0.76, 1.0, band) * smoothstep(lIdx.z - 4.0, lIdx.z + 4.0, elevation);
+      }
       const float NdotL = saturate(dot(wN, l));
       if (NdotL <= 0.0)
          continue;
