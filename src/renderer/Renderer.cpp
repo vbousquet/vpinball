@@ -2917,6 +2917,7 @@ void Renderer::UpdateVirtualShadowMaps()
       bool dynamicTier;
       VSM::LightMap* map;
       int index; // shadow slot (per-light uniform array index)
+      const Light* light;
    };
    vector<PageJob> jobs;
    vector<uint8_t> markTmp;
@@ -3211,6 +3212,7 @@ void Renderer::UpdateVirtualShadowMaps()
          job.dynamicTier = dynamicTier;
          job.map = &map;
          job.index = index;
+         job.light = light;
          if (map.layout == VSM::LAYOUT_CUBE)
          {
             const int face = vp / (map.gridW * map.gridH);
@@ -3268,6 +3270,7 @@ void Renderer::UpdateVirtualShadowMaps()
          m_mvp.SetProj(eye, job.proj);
       }
       m_render_mask = SHADOW_MAP | (job.dynamicTier ? 0u : static_cast<unsigned int>(STATIC_ONLY));
+      m_vsmShadowLight = job.light;
       for (const Caster& caster : casters)
          RenderItem(caster.part, true);
       // Translucent casters (PBR plastics with a transmission, clear parts) do not block: they tint and attenuate the light
@@ -3301,6 +3304,7 @@ void Renderer::UpdateVirtualShadowMaps()
          m_vsmPageTableData[(job.map->ptBase + job.vpage) * 4] = (float)(job.layer + 1);
          m_vsmPageTableDirty = true;
       }
+      m_vsmShadowLight = nullptr;
       job.map->dirty[job.vpage] = 0;
       m_vsmTouchedRTs.push_back(pageRT);
    }
@@ -3367,10 +3371,22 @@ void Renderer::BuildPBRLightList()
       float radius;
       bool upward;
       int index;
+      float cookie = 0.f; // flasher dome light: flute count + root angle / 2pi (0 = none)
+      float cut = 0.f; // flasher dome light: elevation below which the dome base blocks the light (deg)
    };
    LightEntry entries[maxLights];
    int lightCount = 0;
    vector<uint8_t> counts(cellCount, 0);
+   // Flasher dome lamps: the dome's flutes band their light, its base cuts it below the filament
+   std::unordered_map<const Light*, vec3> domeCookies;
+   for (IEditable* const part : m_table->GetParts())
+      if (part->GetItemType() == eItemPrimitive)
+      {
+         Primitive* const prim = static_cast<Primitive*>(part);
+         vec3 cookie;
+         if (prim->GetLightmap() != nullptr && prim->m_d.m_visible && prim->IsFlasherDome() && prim->GetFlasherDomeCookie(cookie))
+            domeCookies[prim->GetLightmap()] = cookie;
+      }
    for (IEditable* const part : m_table->GetParts())
    {
       if (part->GetItemType() != eItemLight)
@@ -3407,6 +3423,12 @@ void Renderer::BuildPBRLightList()
       e.radius = max(light->m_d.m_bulbRadius, 0.f);
       e.upward = false;
       e.index = lightCount;
+      if (const auto dome = domeCookies.find(light); dome != domeCookies.end())
+      {
+         float phase = dome->second.y * (float)(0.5 / M_PI);
+         e.cookie = dome->second.x + (phase - floorf(phase)) * 0.999f;
+         e.cut = dome->second.z;
+      }
       lightCount++;
    }
 
@@ -3502,7 +3524,8 @@ void Renderer::BuildPBRLightList()
                {
                   texData[(indexBase + idx) * 4] = (float)e.index;
                   texData[(indexBase + idx) * 4 + 1] = e.radius;
-                  texData[(indexBase + idx) * 4 + 2] = e.upward ? 1.f : 0.f;
+                  texData[(indexBase + idx) * 4 + 2] = e.upward ? 1.f : -e.cut;
+                  texData[(indexBase + idx) * 4 + 3] = e.cookie;
                }
             }
          }

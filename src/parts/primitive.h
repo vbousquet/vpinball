@@ -299,6 +299,16 @@ public:
    void setInPlayState(const bool newVal);
    Light *GetLightmap() const { return m_lightmap; } // Light driving the lightmap (or Traced insert), resolved at render setup
 
+   // Flasher dome: a primitive whose image name starts with 'dome_' is a fluted flasher dome lit by its 'lightmap' lamp. Its
+   // PBR body draws as usual, then an additive dome layer (fs_flasher_dome.sc) on top; the lamp never shadows its own dome.
+   // VPX_T9=0 disables it (A/B), VPX_T9_TUNE="glow=.. bars=.. needle=.. white=.. halo=.. spot=.. flash=.. room=.. gain=.. fil=.."
+   bool IsFlasherDome() const;
+   // Table space position of the dome's bulb filament (where its burst light belongs), false if the mesh is not a dome
+   bool GetFlasherDomeBulb(Vertex3Ds &pos);
+   // The dome's light cookie: x flute count, y angle of a groove root around table z (rad), z where the dome base cuts the
+   // light below the filament horizon (deg)
+   bool GetFlasherDomeCookie(vec3 &cookie);
+
    Mesh m_mesh;
 
    PrimitiveData m_d;
@@ -310,6 +320,19 @@ private:
    Renderer *m_renderer = nullptr;
 
    Light * m_lightmap = nullptr;
+
+   // Flasher dome shape, measured once from the mesh (object space, z = dome axis)
+   struct FlasherDomeShape
+   {
+      bool measured = false, valid = false;
+      float cx = 0.f, cy = 0.f, baseZ = 0.f; // base centre
+      float radius = 0.f, height = 0.f; // outer skin
+      float rootR = 0.f, ridgeR = 0.f, capZ = 0.f; // inner flutes: radius at the groove roots (thin wall) and ridge tips, cap underside (from the base)
+      int flutes = 0;
+      float phase = 0.f; // angle of a groove root (rad, object space around +z from +x)
+      unsigned int outerIndices = 0; // the outer skin's triangles come first in the index list: the body draws only those
+   } m_dome;
+   const FlasherDomeShape &MeasureFlasherDome();
 
    bool m_useAsPlayfield = false;
 
