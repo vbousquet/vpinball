@@ -338,6 +338,7 @@ colorFormat RenderDevice::BGFXtoVPXTextureFormat(bgfx::TextureFormat::Enum forma
 
 
 static const string& bgfxRendererName(const bgfx::RendererType::Enum type);
+extern std::atomic<int> g_perfVsmPages;
 
 void RenderDevice::RenderThread(RenderDevice* rd, bgfx::Init init)
 {
@@ -1022,6 +1023,35 @@ void RenderDevice::BGFXDesktopRenderLoop(const bgfx::Init& init)
             for (const uint64_t length : gpuLengths)
                avg += length;
             avgGPUFrameLength = avg / gpuLengths.size();
+
+            // VPX_PERF_LOG: once per second, log frame interval and GPU time (avg/max) and the VSM shadow pages rendered
+            static const bool perfLog = getenv("VPX_PERF_LOG") != nullptr;
+            static uint64_t perfStart = 0, perfLastSync = 0, perfFrameSum = 0, perfFrameMax = 0, perfGpuSum = 0, perfGpuMax = 0;
+            static int perfFrames = 0;
+            if (perfLog)
+            {
+               if (perfLastSync != 0)
+               {
+                  const uint64_t frame = lastSyncTimestamp - perfLastSync;
+                  perfFrameSum += frame;
+                  perfFrameMax = max(perfFrameMax, frame);
+                  perfGpuSum += m_lastGPUFrameLength;
+                  perfGpuMax = max(perfGpuMax, m_lastGPUFrameLength);
+                  perfFrames++;
+               }
+               perfLastSync = lastSyncTimestamp;
+               if (perfStart == 0)
+                  perfStart = lastSyncTimestamp;
+               if (lastSyncTimestamp - perfStart >= 1000000 && perfFrames > 0)
+               {
+                  PLOGI << "PERF fps=" << perfFrames * 1000000ull / (lastSyncTimestamp - perfStart) << " frame_ms avg=" << perfFrameSum / perfFrames / 1000.f << " max=" << perfFrameMax / 1000.f
+                        << " gpu_ms avg=" << perfGpuSum / perfFrames / 1000.f << " max=" << perfGpuMax / 1000.f << " vsm_pages=" << g_perfVsmPages.exchange(0)
+                        << " backbuffer=" << GetOutputBackBuffer()->GetWidth() << "x" << GetOutputBackBuffer()->GetHeight();
+                  perfStart = lastSyncTimestamp;
+                  perfFrameSum = perfFrameMax = perfGpuSum = perfGpuMax = 0;
+                  perfFrames = 0;
+               }
+            }
          }
       }
 

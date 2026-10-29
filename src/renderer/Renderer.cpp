@@ -51,6 +51,8 @@ using namespace Concurrency::diagnostic;
 extern marker_series series;
 #endif
 
+std::atomic<int> g_perfVsmPages { 0 }; // VSM shadow pages rendered since the last VPX_PERF_LOG line (see RenderDevice)
+
 #define MAX_BALL_SHADOW 8
 
 #if defined(ENABLE_BGFX)
@@ -3213,6 +3215,7 @@ void Renderer::UpdateVirtualShadowMaps()
       m_vsmTouchedRTs.push_back(pageRT);
    }
 
+   g_perfVsmPages += rendered;
    if (!jobs.empty() || !m_vsmTouchedRTs.empty())
    {
       // Restore the camera matrices (the parts' RenderItem calls re-applied the space reference during the passes)
