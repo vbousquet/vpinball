@@ -1602,6 +1602,9 @@ void Renderer::UpdateVirtualShadowMaps()
       case eItemPlunger:
       case eItemTrigger:
       {
+         // Invisible walls never draw in the shadow pass (see Surface::Render): keep their whole-table bounds from marking pages
+         if (part->GetItemType() == eItemSurface && !static_cast<const Surface*>(part)->m_d.m_sideVisible && !static_cast<const Surface*>(part)->m_d.m_topBottomVisible)
+            break;
          Caster c;
          c.part = part;
          c.isStatic = IsStaticShadowCaster(part);
@@ -1711,7 +1714,12 @@ void Renderer::UpdateVirtualShadowMaps()
          lightProj = Matrix3D::MatrixOrthoOffCenterRH(l, r, b, t, zn, zf);
          const Matrix3D& proj = lightProj;
          const float side = std::max(r - l, t - b);
-         const float pageWorld = side * VSM::PAGE_DIM / (float)m_vsmVirtRes;
+         float pageWorld = side * VSM::PAGE_DIM / (float)m_vsmVirtRes;
+         // Fair share of the pool: a full virtual resolution ortho map over the table (2000+ pages at 8192) would take every
+         // physical page, leaving the other shadowed lights (GI cube maps) without any and so unshadowed. Coarser pages then.
+         const float orthoPages = (r - l) * (t - b) / (pageWorld * pageWorld), orthoBudget = (float)std::max(16, m_vsmPoolPages / 8);
+         if (orthoPages > orthoBudget)
+            pageWorld *= sqrtf(orthoPages / orthoBudget);
          const int gridW = std::clamp((int)ceilf((r - l) / pageWorld), 1, VSM::MAX_ORTHO_GRID);
          const int gridH = std::clamp((int)ceilf((t - b) / pageWorld), 1, VSM::MAX_ORTHO_GRID);
 
@@ -1741,7 +1749,11 @@ void Renderer::UpdateVirtualShadowMaps()
          for (const Caster& caster : casters)
          {
             std::fill(markTmp.begin(), markTmp.end(), uint8_t(0));
-            VSM::MarkOrthoPages(view, l, r, b, t, caster.boundsMin, caster.boundsMax, gridW, gridH, 1, markTmp.data());
+            // PCF taps reach up to 0.02 of the map (see fs_pbr filterRadius clamp); non-resident pages
+            // count as lit, so the marked band must cover caster bounds + max penumbra or the soft edge
+            // is clipped to the page grid
+            const int dilate = 1 + (int)ceilf(0.02f * std::max(gridW, gridH));
+            VSM::MarkOrthoPages(view, l, r, b, t, caster.boundsMin, caster.boundsMax, gridW, gridH, dilate, markTmp.data());
             const bool dynDirty = dynamicTier && !caster.isStatic;
             for (int i = 0; i < (int)map.needed.size(); i++)
             {
@@ -1813,7 +1825,7 @@ void Renderer::UpdateVirtualShadowMaps()
             if (layer >= 0)
             {
                map.phys[vp] = layer + 1;
-               map.dirty[vp] = 1;
+               map.dirty[vp] = 2; // fresh page: not visible through the page table until rendered (holds another page's depth)
                ptChanged = true;
             }
          }
@@ -1830,7 +1842,7 @@ void Renderer::UpdateVirtualShadowMaps()
       {
          float* const base = m_vsmPageTableData.data() + map.ptBase * 4;
          for (int vp = 0; vp < map.EntryCount(); vp++)
-            base[vp * 4] = (float)map.phys[vp];
+            base[vp * 4] = (map.dirty[vp] & 2) ? 0.f : (float)map.phys[vp];
          m_vsmPageTableDirty = true;
       }
       for (int vp = 0; vp < map.EntryCount(); vp++)
@@ -1907,6 +1919,12 @@ void Renderer::UpdateVirtualShadowMaps()
       m_render_mask = SHADOW_MAP | (job.dynamicTier ? 0u : static_cast<unsigned int>(STATIC_ONLY));
       for (const Caster& caster : casters)
          RenderItem(caster.part, true);
+      if (job.map->dirty[job.vpage] & 2)
+      {
+         // Fresh page now rendered: publish it in the page table
+         m_vsmPageTableData[(job.map->ptBase + job.vpage) * 4] = (float)(job.layer + 1);
+         m_vsmPageTableDirty = true;
+      }
       job.map->dirty[job.vpage] = 0;
       m_vsmTouchedRTs.push_back(pageRT);
    }
