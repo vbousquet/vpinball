@@ -756,6 +756,14 @@ void PropertiesPanel::MaterialProperties(PropertyPane &props, Material *material
             material, "Emission Intensity"s, //
             [](const Material *material) { return material->m_fEmissionIntensity; }, //
             [](Material *material, float v) { material->m_fEmissionIntensity = v; }, PropertyPane::Unit::None, 2);
+         props.InputFloat<Material>(
+            material, "Clear Coat"s, //
+            [](const Material *material) { return material->m_fClearcoat; }, //
+            [](Material *material, float v) { material->m_fClearcoat = v; }, PropertyPane::Unit::None, 2);
+         props.InputFloat<Material>(
+            material, "Clear Coat Roughness"s, //
+            [](const Material *material) { return material->m_fClearcoatRoughness; }, //
+            [](Material *material, float v) { material->m_fClearcoatRoughness = v; }, PropertyPane::Unit::None, 2);
       }
       props.EndSection();
    }

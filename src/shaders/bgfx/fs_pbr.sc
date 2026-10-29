@@ -12,6 +12,10 @@
 // - specular sideband output for the resolve pass (attachment 1: L_probe+W_probe, attachment 2: W+mask;
 //   the march's roughness & PBR flag come from the depth prepass)
 // - TRANSPARENT variant outputs premultiplied radiance (ONE/INVSRC_ALPHA blend state)
+// - optional clear coat layer (pbrCoat): a smooth dielectric shell (IOR 1.5) over the base, following Filament's model: a
+//   second GGX lobe on the geometric normal, the base attenuated by (1 - coat * Fc) and its F0 seen from inside the coat.
+//   With a coat, the specular sideband carries the coat lobe (resolved with SSR/probes at the coat roughness) and the
+//   base indirect specular is shaded in place. A zero coat strength skips it all (uniform branches).
 //
 // Defines: TEX (base color texture), AT (alpha test), TRANSPARENT (premultiplied blend output),
 //          INSHADERSPEC (in-shader envmap specular, used in probe contexts and before the resolve pass),
@@ -101,6 +105,10 @@ uniform vec4 pbrMapFlags; // x: ORM map bound, y: emission map bound, z: thin su
 #define hasORMMap      (pbrMapFlags.x != 0.0)
 #define hasEmissionMap (pbrMapFlags.y != 0.0)
 #define pbrTransmission (pbrMapFlags.z)
+
+uniform vec4 pbrCoat; // x: clear coat strength (0 = off), y: clear coat perceptual roughness
+#define coatStrength  (pbrCoat.x)
+#define coatRoughness (pbrCoat.y)
 
 uniform vec4 pbrLightGrid;  // xy: cluster grid origin (table pos), z: inverse cell size, w: cell count x
 uniform vec4 pbrLightGrid2; // x: cell count y, y: light count
@@ -255,6 +263,15 @@ vec3 pbr_normal_map(const vec3 N, const vec3 V, const vec2 uv)
    return normalize(mul(TBN_trafo(N, V, uv), tn).xyz);
 }
 
+// Base layer F0 seen through a clear coat of IOR 1.5 instead of air (Filament's f0ClearCoatToSurface): a dielectric
+// base (F0 0.04, IOR 1.5) loses its own reflection under the coat, which is what makes printed art read matte
+vec3 pbr_f0_under_coat(const vec3 f0)
+{
+   const vec3 s = sqrt(f0);
+   const vec3 t = (vec3_splat(1.0) - 5.0 * s) / (vec3_splat(5.0) - s);
+   return t * t;
+}
+
 // Lambertian diffuse split-sum weight: the irradiance is preconvolved with /PI baked in
 #ifdef STEREO
 vec3 pbr_indirect_diffuse(const vec3 N, const vec3 albedo, const vec3 kd, const float ao, const float v_eye)
@@ -295,10 +312,12 @@ vec3 pbr_specular_weight(const vec3 N, const vec3 V, const vec3 F0, const float 
 // Automated planar probe specular: the bound probes are sampled in screen space and weighted per
 // pixel by the fragment's distance to their reflection plane, faded by their influence range.
 // Returns (blended probe radiance, aggregate coverage). No bound probe => coverage 0 => envmap fallback.
+// alphaCoverage: the probe's alpha (cleared to 0, written 1 by the reflected parts) is the coverage, so the envmap shows
+// where the probe reflects nothing (the room above the table); used by the clear coat lobe.
 #ifdef STEREO
-vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv, const float roughness, const float v_eye)
+vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv, const float roughness, const bool alphaCoverage, const float v_eye)
 #else
-vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv, const float roughness)
+vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv, const float roughness, const bool alphaCoverage)
 #endif
 {
    // Rough surfaces sample the probe's mip chain: each mip is a Kaiser filtered downscale of the
@@ -321,8 +340,9 @@ vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv, const float roughness)
       // Fade at the probe frustum border (and behind the mirrored camera): no valid content there
       const float inFrustum = saturate(min(uv.x, min(uv.y, min(1.0 - uv.x, 1.0 - uv.y))) * 16.0);
       const float w = saturate(1.0 - d / pbrProbeParams.x) * inFrustum;
-      Lp += w * texStereoLod(tex_pbr_probe0, uv, roughness * pbrProbeLods.x).rgb;
-      wSum += w;
+      const vec4 t = texStereoLod(tex_pbr_probe0, uv, roughness * pbrProbeLods.x);
+      Lp += w * t.rgb;
+      wSum += alphaCoverage ? w * t.a : w;
    }
    BRANCH if (pbrProbeParams.y > 0.0)
    {
@@ -336,8 +356,9 @@ vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv, const float roughness)
       #endif
       const float inFrustum = saturate(min(uv.x, min(uv.y, min(1.0 - uv.x, 1.0 - uv.y))) * 16.0);
       const float w = saturate(1.0 - d / pbrProbeParams.y) * inFrustum;
-      Lp += w * texStereoLod(tex_pbr_probe1, uv, roughness * pbrProbeLods.y).rgb;
-      wSum += w;
+      const vec4 t = texStereoLod(tex_pbr_probe1, uv, roughness * pbrProbeLods.y);
+      Lp += w * t.rgb;
+      wSum += alphaCoverage ? w * t.a : w;
    }
    return vec4(Lp / max(wSum, 1e-6), saturate(wSum));
 }
@@ -380,9 +401,9 @@ vec4 pbr_light_texel(const int idx)
    return texelFetch(tex_pbr_lights, ivec2(idx & 255, idx >> 8), 0);
 }
 
-// Returns the diffuse direct light; the specular reflection is accumulated apart in specOut, since a see-through part
-// reflects it whatever its coverage (it is not modulated by alpha like the diffuse, as the indirect specular)
-vec3 pbr_direct_light(const vec3 wN, const vec3 wNg, const vec3 wV, const vec3 wPos, const vec3 diffuse, const vec3 F0, const float roughness, const float alpha, out vec3 specOut)
+// Returns the diffuse (and transmitted) direct light; the specular reflection is accumulated apart in specOut, since a
+// see-through part reflects it whatever its coverage (it is not modulated by alpha like the diffuse, as the indirect specular)
+vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 wV, const vec3 wPos, const vec3 diffuse, const vec3 F0, const float roughness, const float alpha, out vec3 specOut)
 {
    specOut = vec3_splat(0.0);
    const vec2 cellf = clamp((wPos.xy - pbrLightGrid.xy) * pbrLightGrid.z, vec2_splat(0.0),
@@ -398,6 +419,19 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNg, const vec3 wV, const vec3 w
    const float NdotV = saturate(dot(wN, wV));
    const float aAA = sqrt(a2);
    const vec3 wR = reflect(-wV, wN);
+   // Clear coat lobe on the geometric normal wNc, with its own specular AA; transmitted light leaves through the coat
+   // (attenuated by the coat's Fresnel toward the viewer)
+   float ca2 = 0.0, caAA = 0.0, cNdotV = 0.0, coatExit = 1.0;
+   vec3 cwR = wR;
+   BRANCH if (coatStrength > 0.0)
+   {
+      const float ca = coatRoughness * coatRoughness;
+      ca2 = min(ca * ca + 0.5 * max(dot(dFdx(wNc), dFdx(wNc)), dot(dFdy(wNc), dFdy(wNc))), 0.25);
+      caAA = sqrt(ca2);
+      cNdotV = saturate(dot(wNc, wV));
+      cwR = reflect(-wV, wNc);
+      coatExit = 1.0 - coatStrength * (0.04 + 0.96 * pow(1.0 - cNdotV, 5.0));
+   }
    vec3 acc = vec3_splat(0.0);
    for (int i = 0; i < count; i++)
    {
@@ -433,7 +467,8 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNg, const vec3 wV, const vec3 w
       // Thin surface translucency (printed plastics): a light behind the surface transmits through it, see below
       const float NdotLraw = dot(wN, l);
       const float NdotL = saturate(NdotLraw);
-      if (NdotL <= 0.0 && (NdotLraw >= 0.0 || pbrTransmission <= 0.0))
+      const float cNdotLraw = dot(wNc, l); // wNc = wN without a coat
+      if (NdotL <= 0.0 && cNdotLraw <= 0.0 && (NdotLraw >= 0.0 || pbrTransmission <= 0.0))
          continue;
       // The geometric normal wNg (no normal map) decides the side of the surface a light is on. An opaque surface (alpha 1)
       // without a transmission gets nothing from a light behind it, however the shading normal leans (faded over ~3 deg so
@@ -475,6 +510,32 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNg, const vec3 wV, const vec3 w
       // HDR values after specular AA. A continuous compressor (no plateau) preserves ordering
       // inside the clipped region so the bloom blob edge moves smoothly as the view moves
       vec3 spec = D * F * G * (lCol * (x * x / dist2)) * sNdotL * step(0.0, NdotLraw);
+      // Clear coat lobe: same GGX/Smith model and sphere light representative point at the coat roughness, F0 0.04. The base
+      // (diffuse and specular) under it receives what the coat does not reflect: (1 - coat * Fc)
+      float coatAtt = 1.0;
+      BRANCH if (coatStrength > 0.0 && cNdotLraw > 0.0)
+      {
+         vec3 csl = l;
+         float cSphereNorm = 1.0;
+         BRANCH if (sphereRadius > 0.0)
+         {
+            const vec3 centerToRay = dot(dl, cwR) * cwR - dl;
+            csl = normalize(dl + centerToRay * saturate(sphereRadius * inversesqrt(max(dot(centerToRay, centerToRay), 1e-6))));
+            const float aSphere = saturate(caAA + sphereRadius * 0.5 * inversesqrt(dist2));
+            cSphereNorm = (caAA / aSphere) * (caAA / aSphere);
+         }
+         const float cNdotL = saturate(dot(wNc, csl));
+         const vec3 ch = normalize(csl + wV);
+         const float cNdotH = saturate(dot(wNc, ch));
+         const float cdenom = cNdotH * cNdotH * (ca2 - 1.0) + 1.0;
+         const float cD = ca2 / (PI * cdenom * cdenom) * cSphereNorm;
+         const float Fc = coatStrength * (0.04 + 0.96 * pow(1.0 - saturate(dot(wV, ch)), 5.0));
+         const float cgv = cNdotL * sqrt(cNdotV * cNdotV * (1.0 - ca2) + ca2);
+         const float cgl = cNdotV * sqrt(cNdotL * cNdotL * (1.0 - ca2) + ca2);
+         const float cG = 0.5 / max(cgv + cgl, 1e-6);
+         coatAtt = 1.0 - Fc;
+         spec = spec * coatAtt + (cD * Fc * cG * cNdotL) * (lCol * (x * x / dist2));
+      }
       spec /= 1.0 + dot(spec, vec3(0.176204, 0.812985, 0.0108109)) * (1.0 / 1024.0);
 
       // Shadowed light record: w packs mode (bits 0-3), VSM index + 1 (bits 4-11, 0 = no map),
@@ -578,7 +639,7 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNg, const vec3 wV, const vec3 w
       // ink scatters wider: a wrapped lobe lets grazing light through, spreading the glow away from the bulb.
       const float wrap = 0.4 * dot(diffuse, vec3(0.2126, 0.7152, 0.0722));
       const float transmitted = NdotLraw < 0.0 ? pbrTransmission * saturate((wrap - NdotLraw) / (1.0 + wrap)) : 0.0;
-      acc += (gFade * shadow) * (diffuse * ((vec3_splat(1.0) - F) * NdotL + transmitted) * (1.0 / PI) * (lCol * (x * x / dist2)));
+      acc += (gFade * shadow) * (diffuse * ((vec3_splat(1.0) - F) * (NdotL * coatAtt) + transmitted * coatExit) * (1.0 / PI) * (lCol * (x * x / dist2)));
       specOut += (gFade * shadow) * spec;
    }
    return acc;
@@ -629,7 +690,7 @@ void main() {
          orm = texture2D(tex_pbr_orm, v_texcoord0).xyz;
    }
    const float metallic = saturate(orm.z * pbrMetallicFactor);
-   const float roughness = clamp(orm.y * pbrRoughnessFactor, 0.045, 1.0);
+   float roughness = clamp(orm.y * pbrRoughnessFactor, 0.045, 1.0);
    float occlusion = saturate(orm.x * pbrOcclusionFactor);
    BRANCH if (pbrAOEnabled > 0.0)
       occlusion *= texStereoNoLod(tex_pbr_ao, gl_FragCoord.xy * w_h_height.xy).x;
@@ -648,8 +709,20 @@ void main() {
       Ng = -Ng;
 
    const vec3 albedo = base.rgb;
-   const vec3 F0 = mix(vec3_splat(0.04), albedo, metallic);
+   vec3 F0 = mix(vec3_splat(0.04), albedo, metallic);
    const vec3 diffuse = albedo * (1.0 - metallic);
+
+   // Clear coat: the coat follows the geometric normal (a smooth shell over the normal mapped base). The base is seen from
+   // inside the coat (its F0 relative to IOR 1.5) and is at least as rough as the coat (Filament)
+   vec3 Nc = N;
+   BRANCH if (coatStrength > 0.0)
+   {
+      Nc = normalize(v_normal);
+      if (dot(Nc, V) < 0.0)
+         Nc = -Nc;
+      F0 = mix(F0, pbr_f0_under_coat(F0), coatStrength);
+      roughness = mix(roughness, max(roughness, coatRoughness), coatStrength);
+   }
 
    // Indirect specular weight (envmap evaluated in-shader for INSHADERSPEC, otherwise deferred to the resolve pass)
    vec3 envSpec;
@@ -663,15 +736,40 @@ void main() {
    // contexts (INSHADERSPEC without bound probes) the weights are 0 leaving envmap only.
    const vec2 suv = gl_FragCoord.xy * w_h_height.xy;
    #ifdef STEREO
-      const vec4 probe = pbr_probe_specular(v_tablePos, suv, roughness, v_eye);
+      const vec4 probe = pbr_probe_specular(v_tablePos, suv, roughness, false, v_eye);
    #else
-      const vec4 probe = pbr_probe_specular(v_tablePos, suv, roughness);
+      const vec4 probe = pbr_probe_specular(v_tablePos, suv, roughness, false);
    #endif
    // Same soft luminance knee as the direct specular: bound hot probe/envmap radiance (e.g. a
    // bulb inside a probe) before it feeds in-shader specular, the sideband and the resolve's
    // firefly clamp reference
    vec3 specSrc = mix(envSpec, probe.rgb, probe.a);
    specSrc /= 1.0 + dot(specSrc, vec3(0.176204, 0.812985, 0.0108109)) * (1.0 / 1024.0);
+
+   // Clear coat indirect specular: split-sum at the coat roughness on the coat normal (F0 0.04), the base receiving
+   // (1 - coat * Fc(NdotV)). The resolve sideband (W, radiance, probe coverage) then carries the coat lobe.
+   float coatIBL = 1.0;
+   vec3 sideSrc = specSrc;
+   float sideCoverage = probe.a;
+   vec3 sideW = W;
+   vec3 coatSpecInd = vec3_splat(0.0);
+   BRANCH if (coatStrength > 0.0)
+   {
+      vec3 envCoat;
+      #ifdef STEREO
+         const vec3 Wc = coatStrength * pbr_specular_weight(Nc, V, vec3_splat(0.04), coatRoughness, occlusion, v_eye, envCoat);
+         const vec4 probeCoat = pbr_probe_specular(v_tablePos, suv, coatRoughness, true, v_eye);
+      #else
+         const vec3 Wc = coatStrength * pbr_specular_weight(Nc, V, vec3_splat(0.04), coatRoughness, occlusion, envCoat);
+         const vec4 probeCoat = pbr_probe_specular(v_tablePos, suv, coatRoughness, true);
+      #endif
+      coatIBL = 1.0 - coatStrength * (0.04 + 0.96 * pow(1.0 - saturate(dot(Nc, V)), 5.0));
+      sideSrc = mix(envCoat, probeCoat.rgb, probeCoat.a);
+      sideSrc /= 1.0 + dot(sideSrc, vec3(0.176204, 0.812985, 0.0108109)) * (1.0 / 1024.0);
+      sideCoverage = probeCoat.a;
+      sideW = Wc;
+      coatSpecInd = Wc * sideSrc;
+   }
 
    vec3 color = vec3_splat(0.0);
    vec3 spec = vec3_splat(0.0);
@@ -683,14 +781,18 @@ void main() {
    }
    else
    {
-      const vec3 kd = saturate(vec3_splat(1.0) - W);
+      const vec3 kd = saturate(vec3_splat(1.0) - W) * coatIBL;
       #ifdef STEREO
          color += pbr_indirect_diffuse(N, diffuse, kd, occlusion, v_eye);
       #else
          color += pbr_indirect_diffuse(N, diffuse, kd, occlusion);
       #endif
       #if defined(INSHADERSPEC)
-         spec = W * specSrc;
+         spec = W * coatIBL * specSrc + coatSpecInd;
+      #else
+         // Clear coat: the resolve carries the coat lobe, the base indirect specular is shaded here
+         BRANCH if (coatStrength > 0.0)
+            color += W * coatIBL * specSrc;
       #endif
 
       // Forward+ clustered direct lighting (world space: the light grid is built over the table XY plane)
@@ -698,8 +800,8 @@ void main() {
       {
          const vec3 wN = mul(vec4(N, 0.0), mView).xyz; // trafo back to world (orthonormal, no renormalize needed)
          const vec3 wV = normalize(cCameraPosWorld - v_tablePos);
-         const vec3 wNg = mul(vec4(Ng, 0.0), mView).xyz;
-         color += pbr_direct_light(wN, wNg, wV, v_tablePos, diffuse, F0, roughness, base.a * staticColor_Alpha.a, directSpec);
+         const vec3 wNc = coatStrength > 0.0 ? mul(vec4(Nc, 0.0), mView).xyz : wN;
+         color += pbr_direct_light(wN, wNc, mul(vec4(Ng, 0.0), mView).xyz, wV, v_tablePos, diffuse, F0, roughness, base.a * staticColor_Alpha.a, directSpec);
       }
    }
 
@@ -742,9 +844,9 @@ void main() {
          const vec3 wN = mul(vec4(N, 0.0), mView).xyz; // trafo back to world (orthonormal, no renormalize needed)
          const vec3 wV = normalize(cCameraPosWorld - v_tablePos);
          #ifdef STEREO
-            const vec3 behind = pbr_transmit(v_tablePos, wN, wV, roughness, gl_FragCoord.xyz, v_eye) * staticColor_Alpha.rgb;
+            const vec3 behind = pbr_transmit(v_tablePos, wN, wV, roughness, gl_FragCoord.xyz, v_eye) * (staticColor_Alpha.rgb * coatIBL);
          #else
-            const vec3 behind = pbr_transmit(v_tablePos, wN, wV, roughness, gl_FragCoord.xyz) * staticColor_Alpha.rgb;
+            const vec3 behind = pbr_transmit(v_tablePos, wN, wV, roughness, gl_FragCoord.xyz) * (staticColor_Alpha.rgb * coatIBL);
          #endif
          gl_FragData[0] = vec4(color.rgb * alpha + behind * (1.0 - alpha) + spec, 1.0);
       }
@@ -763,8 +865,8 @@ void main() {
          gl_FragData[1] = vec4(0.0, 0.0, 0.0, alpha);
          gl_FragData[2] = vec4(0.0, 0.0, 0.0, alpha);
       #else
-         gl_FragData[1] = vec4(specSrc, probe.a); // probe radiance (envmap fallback mix) + probe coverage
-         gl_FragData[2] = vec4(fDisableLighting_top_below.x != 0.0 ? vec3_splat(0.0) : W, 1.0); // specular weight (0 for unlit) + PBR mask flag
+         gl_FragData[1] = vec4(sideSrc, sideCoverage); // probe radiance (envmap fallback mix) + probe coverage (coat lobe when coated)
+         gl_FragData[2] = vec4(fDisableLighting_top_below.x != 0.0 ? vec3_splat(0.0) : sideW, 1.0); // specular weight (0 for unlit) + PBR mask flag
       #endif
    #endif
 }
