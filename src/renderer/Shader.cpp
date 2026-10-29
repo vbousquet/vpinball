@@ -157,6 +157,8 @@ Shader::TechniqueDef Shader::shaderTechniqueNames[static_cast<unsigned int>(Shad
    SHADER_TECHNIQUE(pbr_is),
    SHADER_TECHNIQUE(pbr_is_at),
    SHADER_TECHNIQUE(pbr_is_notex),
+   SHADER_TECHNIQUE(pbr_shadow_trans),
+   SHADER_TECHNIQUE(pbr_shadow_trans_notex),
    // Lottes-CRT
    SHADER_TECHNIQUE(display_CRT_world),
    // Same as above but built with the Nuance-CRT filter, the renderer picking between them per display (see Renderer::SetupCRTRender)
@@ -384,6 +386,7 @@ ShaderUniformDef ShaderUniformDef::coreUniforms[static_cast<unsigned int>(Shader
    SHADER_SAMPLER(tex_pbr_refr, 15, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // screen space refraction probe (transparent parts)
    SHADER_SAMPLER(tex_vsm_pool, 3, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // VSM physical page pool (one 128^2 page per layer)
    SHADER_SAMPLER(tex_vsm_pagetables, 5, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_NONE), // VSM virtual->physical page table per light
+   SHADER_SAMPLER(tex_vsm_trans, 6, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // VSM page pool transmittance (translucent casters: absorbance + nearness)
    SHADER_SAMPLER(tex_pbr_mask, 7, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP,
       SamplerFilter::SF_BILINEAR), // PBR pixel mask (sideband attachment alpha), masks the tonemap AO application
    SHADER_SAMPLER(tex_pbr_att1, 8, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // sideband att1: probe radiance + coverage
@@ -1620,6 +1623,8 @@ void Shader::Load()
       BGFX_EMBEDDED_SHADER_ST_CLIP(fs_pbr_is_tex_noat),
       BGFX_EMBEDDED_SHADER_ST_CLIP(fs_pbr_is_tex_at),
       BGFX_EMBEDDED_SHADER_ST_CLIP(fs_pbr_is_notex),
+      BGFX_EMBEDDED_SHADER_ST_CLIP(fs_pbr_st_tex),
+      BGFX_EMBEDDED_SHADER_ST_CLIP(fs_pbr_st_notex),
       // Ball shaders
       BGFX_EMBEDDED_SHADER_ST_CLIP(vs_ball),
       BGFX_EMBEDDED_SHADER_ST_CLIP(vs_ball_mv),
@@ -1788,6 +1793,8 @@ void Shader::Load()
       loadProgram(embeddedShaders, ShaderTechnique::pbr_is, STEREO(vs_pbr_noclip), STEREO(fs_pbr_is_tex_noat_noclip));
       loadProgram(embeddedShaders, ShaderTechnique::pbr_is_at, STEREO(vs_pbr_noclip), STEREO(fs_pbr_is_tex_at_noclip));
       loadProgram(embeddedShaders, ShaderTechnique::pbr_is_notex, STEREO(vs_pbr_noclip), STEREO(fs_pbr_is_notex_noclip));
+      loadProgram(embeddedShaders, ShaderTechnique::pbr_shadow_trans, STEREO(vs_pbr_noclip), STEREO(fs_pbr_st_tex_noclip));
+      loadProgram(embeddedShaders, ShaderTechnique::pbr_shadow_trans_notex, STEREO(vs_pbr_noclip), STEREO(fs_pbr_st_notex_noclip));
       // Variants with a clipping plane
       loadProgram(embeddedShaders, ShaderTechnique::basic_with_texture,       STEREO(vs_basic_tex_clip),           STEREO(fs_basic_tex_noat_clip), true);
       loadProgram(embeddedShaders, ShaderTechnique::basic_with_texture_at,    STEREO(vs_basic_tex_clip),           STEREO(fs_basic_tex_at_clip), true);
@@ -1826,6 +1833,8 @@ void Shader::Load()
       loadProgram(embeddedShaders, ShaderTechnique::pbr_is, STEREO(vs_pbr_clip), STEREO(fs_pbr_is_tex_noat_clip), true);
       loadProgram(embeddedShaders, ShaderTechnique::pbr_is_at, STEREO(vs_pbr_clip), STEREO(fs_pbr_is_tex_at_clip), true);
       loadProgram(embeddedShaders, ShaderTechnique::pbr_is_notex, STEREO(vs_pbr_clip), STEREO(fs_pbr_is_notex_clip), true);
+      loadProgram(embeddedShaders, ShaderTechnique::pbr_shadow_trans, STEREO(vs_pbr_clip), STEREO(fs_pbr_st_tex_clip), true);
+      loadProgram(embeddedShaders, ShaderTechnique::pbr_shadow_trans_notex, STEREO(vs_pbr_clip), STEREO(fs_pbr_st_notex_clip), true);
       // VR masking
       if (m_isStereo)
          loadProgram(embeddedShaders, ShaderTechnique::vr_mask, "vs_vr_mask", "fs_unshaded_notex_noclip");

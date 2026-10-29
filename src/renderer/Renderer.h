@@ -268,6 +268,7 @@ public:
       UI_EDGES = 1 << 5,          // Render as wireframe
       UI_FILL = 1 << 6,           // Render filled interior
       SHADOW_MAP = 1 << 7,        // PBR shadow map pass, only render shadow casting geometry
+      SHADOW_TRANS = 1 << 8,      // With SHADOW_MAP: translucent casters into the transmittance layer (opaque ones otherwise)
    };
    unsigned int m_render_mask = DEFAULT; // Active pass render bit mask
    bool IsRenderPass(const RenderMask pass_mask) const { return (m_render_mask & pass_mask) != 0; }
@@ -325,6 +326,8 @@ private:
    int m_vsmPoolTexLayers = 0; // layer count the pool texture was created with (framebuffers are created transiently per page job)
    bgfx::TextureHandle m_vsmPoolTex = BGFX_INVALID_HANDLE; // depth texture array backing the pool
    std::shared_ptr<Sampler> m_vsmPoolSampler;
+   bgfx::TextureHandle m_vsmTransTex = BGFX_INVALID_HANDLE; // RGBA8 texture array parallel to the pool: translucent casters' absorbance + nearness
+   std::shared_ptr<Sampler> m_vsmTransSampler;
    bgfx::TextureHandle m_vsmPageTableTex = BGFX_INVALID_HANDLE; // CPU-generated page table (physical layer+1 per virtual page)
    std::shared_ptr<Sampler> m_vsmPageTableSampler;
    std::vector<float> m_vsmPageTableData; // CPU mirror of the page-table texture
@@ -332,7 +335,7 @@ private:
    std::vector<VSM::LightMap> m_vsmLights; // per-shadowIndex virtual maps
    Matrix3D m_vsmShadowVP[VSM::MAX_LIGHTS]; // ortho light view-projection per shadowed light
    vec4 m_vsmParams[VSM::MAX_LIGHTS]; // x: page-table texel base, y: pages across (face grid for cube), z: pages down, w: ortho depth range
-   vec4 m_vsmBox[VSM::MAX_LIGHTS]; // x: 1/boxW, y: 1/boxH, z/w: unused
+   vec4 m_vsmBox[VSM::MAX_LIGHTS]; // x: 1/boxW, y: 1/boxH, z: ortho near depth, w: unused
    std::vector<RenderTarget*> m_vsmTouchedRTs; // page RTs written this frame (scene pass dependencies)
    uint64_t m_vsmFrame = 0; // marking frame stamp for pool LRU
    int m_vsmPoolPages = 1024; // physical pool size in pages (Player_PBRShadowPoolPages)

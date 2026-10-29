@@ -1019,9 +1019,27 @@ void Primitive::Render(const unsigned int renderMask)
 #endif
       if (m_d.m_visible && !m_skipRendering && m_meshBuffer != nullptr && ((renderMask & Renderer::STATIC_ONLY) == 0 || m_d.m_staticRendering))
       {
+         // Translucent casters (PBR materials with a transmission, or with opacity) tint the light instead of blocking it:
+         // they draw in the transmittance pass only, with their base colour, image and alpha
+         const Material* const mat = m_ptable->GetMaterial(m_d.m_szMaterial);
+         const bool translucent = m_renderer->m_renderDevice->m_pbrActive && mat->m_type == Material::MaterialType::PBR && (mat->m_fWrapLighting > 0.f || mat->m_bOpacityActive);
+         if (translucent != ((renderMask & Renderer::SHADOW_TRANS) != 0))
+            return;
+         Shader* const shader = m_renderer->m_renderDevice->m_basicShader;
+         if (translucent)
+         {
+#if defined(ENABLE_BGFX)
+            Texture* const image = m_ptable->GetImage(m_d.m_szImage);
+            shader->SetTechnique(image ? ShaderTechnique::pbr_shadow_trans : ShaderTechnique::pbr_shadow_trans_notex);
+            if (image)
+               shader->SetTexture(ShaderUniform::tex_base_color, image, false);
+            shader->SetMaterial(mat, image != nullptr && !image->IsOpaque());
+            shader->SetVector(ShaderUniform::pbrMapFlags, 0.f, 0.f, saturate(mat->m_fWrapLighting), 0.f);
+            shader->SetVector(ShaderUniform::staticColor_Alpha, 1.f, 1.f, 1.f, m_d.m_alpha / 100.f);
+#endif
+         }
          m_renderer->UpdateBasicShaderMatrix(RecalculateMatrices());
-         m_renderer->m_renderDevice->DrawMesh(
-            m_renderer->m_renderDevice->m_basicShader, false, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, (uint32_t)m_mesh.NumIndices());
+         m_renderer->m_renderDevice->DrawMesh(shader, false, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, (uint32_t)m_mesh.NumIndices());
       }
       return;
    }

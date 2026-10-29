@@ -112,11 +112,12 @@ uniform vec4 pbrProbeLods;   // x/y: max mip level of probe0/1, z: max mip level
 
 SAMPLER2DARRAY(tex_vsm_pool, 3);     // VSM physical page pool: depth texture array, one 128^2 page per layer
 SAMPLER2D     (tex_vsm_pagetables, 5); // VSM page table: physical layer+1 per virtual page (0 = not resident)
+SAMPLER2DARRAY(tex_vsm_trans, 6);    // VSM page pool transmittance: translucent casters' absorbance (rgb) and nearness (a)
 
 uniform mat4 matShadowVP[32];   // ortho virtual map view-projection per shadowed light
 uniform vec4 pbrVSMParams[32];  // x: page-table texel base, y: pages across (face grid for cube), z: pages down, w: ortho depth range
-uniform vec4 pbrVSMBox[32];     // x/y: world->virtual-uv scale (1/ortho box extents)
-uniform vec4 pbrShadowParams;   // x: 1/page size, y: slope-scaled depth bias, z/w: unused
+uniform vec4 pbrVSMBox[32];     // x/y: world->virtual-uv scale (1/ortho box extents), z: ortho near depth (used CPU side)
+uniform vec4 pbrShadowParams;   // x: 1/page size, y: slope-scaled depth bias, z/w: page render linear depth start + 1/range (SHADOW_TRANS)
 
 #ifdef TRANSPARENT
 uniform vec4 refractionTint_thickness;
@@ -167,6 +168,20 @@ float pbr_vsm_fetch(const int idx, const vec2 luv)
    #else
       return d;
    #endif
+}
+
+// Coloured transmittance of the translucent casters (printed and clear plastics) between the light and a receiver: the
+// page holds the strongest absorbance per channel and the nearness (1 - normalized linear depth) of the nearest
+// translucent caster, so receivers behind it get the plastic's colour while those in front of it (or none) stay white
+vec3 pbr_vsm_tint(const int idx, const vec2 luv, const float receiverNearness)
+{
+   if (idx < 0)
+      return vec3_splat(1.0);
+   const float phys = texelFetch(tex_vsm_pagetables, ivec2(idx & 511, idx >> 9), 0).x;
+   if (phys <= 0.0)
+      return vec3_splat(1.0);
+   const vec4 t = texture2DArrayLod(tex_vsm_trans, vec3(luv, phys - 1.0), 0.0);
+   return receiverNearness < t.a ? vec3_splat(1.0) - t.rgb : vec3_splat(1.0);
 }
 
 // Linear virtual-page index of a virtual-map uv, or -1 when outside the grid
@@ -464,7 +479,7 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNg, const vec3 wV, const vec3 w
 
       // Shadowed light record: w packs mode (bits 0-3), VSM index + 1 (bits 4-11, 0 = no map),
       // layout (bits 12-15, 0 = ortho, 2 = cube) and the penumbra radius quantized in 0.5 VPU units (bits 16+)
-      float shadow = 1.0;
+      vec3 shadow = vec3_splat(1.0);
       const int shadowInfo = int(floor(lRad.w + 0.5));
       const int shadowMode = shadowInfo & 15;
       const int shadowIndex = ((shadowInfo >> 4) & 255) - 1;
@@ -501,7 +516,9 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNg, const vec3 wV, const vec3 w
                      shadowAcc += d < 0.0 ? 1.0 : step(sc.z - bias, d);
                   }
                }
-               shadow = shadowAcc * (1.0 / 9.0);
+               // Translucent casters: one bilinear tap at the centre (receiver 2 VPU behind them at least)
+               const float nearness = 1.0 - sc.z + 2.0 / max(vsmP.w, 1.0);
+               shadow = shadowAcc * (1.0 / 9.0) * pbr_vsm_tint(pbr_vsm_index(vsmP.x, grid, suv), fract(suv * grid), nearness);
             }
          }
       }
@@ -548,7 +565,10 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNg, const vec3 wV, const vec3 w
                   shadowAcc += tapBlocker < 0.0 ? 1.0 : step(dist * tl.w - bias, tapBlocker);
                }
             }
-            shadow = shadowAcc * (1.0 / 9.0);
+            const int g = int(faceGrid + 0.5);
+            const vec2 pg = floor(cl.xy * vec2_splat(faceGrid));
+            const int cidx = int(vsmP.x + 0.5) + int(cl.z + 0.5) * g * g + int(pg.y) * g + int(pg.x);
+            shadow = shadowAcc * (1.0 / 9.0) * pbr_vsm_tint(cidx, fract(cl.xy * vec2_splat(faceGrid)), 1.0 - (dist * cl.w - 2.0) / zF);
          }
       }
       BRANCH if (shadowMode == 1 || shadowMode >= 3) // RAYTRACED_BALL_SHADOWS or PBR ball shadow tiers
@@ -587,6 +607,16 @@ void main() {
       const vec4 base = pixel * cBase_Alpha;
    #else
       const vec4 base = cBase_Alpha;
+   #endif
+
+   #ifdef SHADOW_TRANS
+      // Translucent shadow caster (max blended into the page's transmittance layer): absorbance = 1 - transmittance, the
+      // transmitted part (material transmission) filtered by the colour where the part covers (clear plastic: its alpha)
+      const float coverage = saturate(base.a * staticColor_Alpha.a);
+      const vec3 transmittance = mix(vec3_splat(1.0), saturate(pbrTransmission * base.rgb), coverage);
+      const float nearness = 1.0 - saturate((-v_worldPos.z - pbrShadowParams.z) * pbrShadowParams.w);
+      gl_FragData[0] = vec4(vec3_splat(1.0) - transmittance, coverage > 0.004 ? nearness : 0.0);
+      return;
    #endif
 
    // Occlusion / roughness / metallic
