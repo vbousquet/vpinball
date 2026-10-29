@@ -304,6 +304,7 @@ static const ankerl::unordered_dense::map<int, FieldMap>& GetFieldMaps()
          { FID(BMSC), "mesh_radius" },
          { FID(BMVA), "modulate_vs_add" },
          { FID(BPAT), "blink_pattern" },
+         { FID(BRAD), "bulb_radius" },
          { FID(BULT), "bulb_light" },
          { FID(BWTH), "intensity" },
          { FID(COL2), "color2" },
