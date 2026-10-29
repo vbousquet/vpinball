@@ -137,6 +137,9 @@
     <ClCompile Include="../../tests/parts/test-lightseq.cpp">
       <Filter>parts</Filter>
     </ClCompile>
+    <ClCompile Include="../../tests/parts/test-pbr-conversion.cpp">
+      <Filter>parts</Filter>
+    </ClCompile>
     <ClCompile Include="../../tests/parts/test-partgroup.cpp">
       <Filter>parts</Filter>
     </ClCompile>

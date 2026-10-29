@@ -7442,6 +7442,12 @@ void PinTable::ShowWhereMaterialUsed(vector<WhereUsedInfo> &vWhereUsed, Material
          insertUser(pTrigger->m_d.m_szMaterial, "Material"s);
          break;
       }
+      case eItemGate:
+      {
+         const Gate *const pGate = (const Gate *)pEdit;
+         insertUser(pGate->m_d.m_szMaterial, "Material"s);
+         break;
+      }
       default:
       {
          break;

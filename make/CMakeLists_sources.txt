@@ -163,6 +163,8 @@ set(VPX_SOURCES
    src/parts/lightseq.h
    src/parts/PartGroup.cpp
    src/parts/PartGroup.h
+   src/parts/PBRConversion.cpp
+   src/parts/PBRConversion.h
    src/parts/pintable.cpp
    src/parts/pintable.h
    src/parts/plunger.cpp
@@ -345,6 +347,8 @@ set(VPX_SOURCES
    src/ui/live/editor/PropertyPane.cpp
    src/ui/live/editor/RampUIPart.h
    src/ui/live/editor/RampUIPart.cpp
+   src/ui/live/editor/ConvertToPBRModal.h
+   src/ui/live/editor/ConvertToPBRModal.cpp
    src/ui/live/editor/RendererInspectionModal.h
    src/ui/live/editor/RendererInspectionModal.cpp
    src/ui/live/editor/ResURIPicker.h
