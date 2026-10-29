@@ -332,7 +332,7 @@ private:
    vec4 m_vsmBox[VSM::MAX_LIGHTS]; // x: 1/boxW, y: 1/boxH, z/w: unused
    std::vector<RenderTarget*> m_vsmTouchedRTs; // page RTs written this frame (scene pass dependencies)
    uint64_t m_vsmFrame = 0; // marking frame stamp for pool LRU
-   int m_vsmPoolPages = 256; // physical pool size in pages (Player_PBRShadowPoolPages)
+   int m_vsmPoolPages = 1024; // physical pool size in pages (Player_PBRShadowPoolPages)
    int m_vsmVirtRes = 8192; // ortho virtual map edge in texels (Player_PBRShadowMapSize)
    int m_vsmMaxLights = VSM::MAX_LIGHTS; // shadowed-light cap (Player_PBRShadowMaxLights)
    SaveDirtyState m_vsmLastTableDirty = SaveDirtyState::Clean; // table dirty state sampled per VSM frame
