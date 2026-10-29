@@ -14,6 +14,7 @@
 #include "editor/PartLibraryPanel.h"
 #include "editor/PropertiesPanel.h"
 #include "editor/RendererInspectionModal.h"
+#include "editor/ConvertToPBRModal.h"
 #include "editor/ScriptPanel.h"
 #include "math/matrix.h"
 #include "renderer/Renderer.h"
@@ -49,6 +50,7 @@ class EditorUI final
    friend class OutlinerPanel;
    friend class PropertiesPanel;
    friend class RendererInspectionModal;
+   friend class ConvertToPBRModal;
    friend class PartLibraryPanel;
    friend class ScriptPanel;
 
@@ -86,6 +88,7 @@ private:
    OutlinerPanel m_outliner;
    PropertiesPanel m_properties;
    RendererInspectionModal m_inspectionModal;
+   ConvertToPBRModal m_pbrConvertModal;
    PartLibraryPanel m_partLibrary;
    ScriptPanel m_scriptPanel;
 

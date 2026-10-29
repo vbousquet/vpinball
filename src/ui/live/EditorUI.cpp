@@ -64,6 +64,7 @@ EditorUI::EditorUI(LiveUI &liveUI)
    , m_outliner(*this)
    , m_properties(*this)
    , m_inspectionModal(*this)
+   , m_pbrConvertModal(*this)
    , m_partLibrary(*this)
    , m_scriptPanel(*this)
    , m_undo(m_player->m_ptable)
@@ -133,6 +134,7 @@ void EditorUI::Close()
    ExitPointEditMode(false);
    RestorePartsVisibility();
    m_inspectionModal.Close();
+   m_pbrConvertModal.Close();
    m_partLibrary.Close();
    m_scriptPanel.Close();
    m_renderer->DisableStaticPrePass(false);
@@ -522,6 +524,7 @@ void EditorUI::RenderUI()
       m_properties.Render(m_chrome.GetTopBarHeight());
    }
    m_inspectionModal.Render();
+   m_pbrConvertModal.Render();
    m_partLibrary.Render();
    m_scriptPanel.Render();
 

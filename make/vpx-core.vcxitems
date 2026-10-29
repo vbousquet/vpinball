@@ -890,6 +890,7 @@
     <ClCompile Include="$(SolutionDir)/../../src/parts/lightseq.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/parts/PartGroup.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/parts/pinbinary.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/parts/PBRConversion.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/parts/pintable.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/parts/plunger.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/parts/primitive.cpp" />
@@ -973,6 +974,7 @@
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/PropertiesPanel.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/PropertyPane.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/RampUIPart.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/ConvertToPBRModal.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/RendererInspectionModal.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/ResURIPicker.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/RubberUIPart.cpp" />
@@ -1844,6 +1846,7 @@
     <ClInclude Include="$(SolutionDir)/../../src/parts/flipper.h" />
     <ClInclude Include="$(SolutionDir)/../../src/parts/gate.h" />
     <ClInclude Include="$(SolutionDir)/../../src/parts/hittarget.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/parts/PBRConversion.h" />
     <ClInclude Include="$(SolutionDir)/../../src/parts/pintable.h" />
     <ClInclude Include="$(SolutionDir)/../../src/parts/ramp.h" />
     <ClInclude Include="$(SolutionDir)/../../src/parts/plunger.h" />
@@ -1945,6 +1948,7 @@
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/PropertiesPanel.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/PropertyPane.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/RampUIPart.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/ConvertToPBRModal.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/RendererInspectionModal.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/ResURIPicker.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/RubberUIPart.h" />
