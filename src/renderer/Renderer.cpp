@@ -3211,9 +3211,9 @@ void Renderer::UpdateVirtualShadowMaps()
 #if defined(ENABLE_BGFX)
 // Builds the Forward+ light list: a world-space XY cluster grid over the table bounds, packed into a RGBA32F
 // texture (256x32 texels): [0,512) light records ((pos,range) then (radiance,mode)), [512,1024) grid cells
-// (start,count), [1024,+) the light index list (light index, light source sphere radius). The upload runs inside
-// RenderFrame::Execute through a begin-of-frame command so it lands on the render thread.
-// VPX_T11=0 disables the light source sphere radius (punctual specular) for A/B tests.
+// (start,count), [1024,+) the light index list (light index, light source sphere radius, upward emitter flag). The
+// upload runs inside RenderFrame::Execute through a begin-of-frame command so it lands on the render thread.
+// VPX_T11=0 disables the sphere light radius (punctual specular) and the Traced insert proxy lights (A/B tests).
 void Renderer::BuildPBRLightList()
 {
    constexpr int texW = 256, texH = 32;
@@ -3239,6 +3239,7 @@ void Renderer::BuildPBRLightList()
       float range;
       vec4 radiance;
       float radius;
+      bool upward;
       int index;
    };
    static const bool areaLights = std::getenv("VPX_T11") == nullptr || std::string(std::getenv("VPX_T11")) != "0";
@@ -3278,10 +3279,52 @@ void Renderer::BuildPBRLightList()
       const int shadowInfo = static_cast<int>(light->m_d.m_shadows) | ((shadowIndex + 1) << 4) | (light->m_pbrShadowLayout << 12) | (4 << 16);
       e.radiance = vec4(tint.x * radiance, tint.y * radiance, tint.z * radiance, (float)shadowInfo);
       e.radius = areaLights ? max(light->m_d.m_bulbRadius, 0.f) : 0.f;
+      e.upward = false;
       e.index = lightCount;
       lightCount++;
+   }
 
-      // Bucket into all cells overlapped by the light range (cell count caps at maxPerCell lights)
+   // Traced insert proxy lights: each lit Traced insert card adds an unshadowed upward facing sphere light (radius = card,
+   // colour = part colour) just above its top surface, following its lamp, so nearby posts, rubbers and wires pick up the
+   // insert colour.
+   // VPX_T11_INSERT_GAIN is the PBR light intensity of a fully lit insert
+   static const float insertGain = std::getenv("VPX_T11_INSERT_GAIN") ? (float)atof(std::getenv("VPX_T11_INSERT_GAIN")) : 0.025f;
+   if (areaLights && insertGain > 0.f)
+   {
+      for (IEditable* const part : m_table->GetParts())
+      {
+         if (part->GetItemType() != eItemPrimitive)
+            continue;
+         Primitive* const prim = static_cast<Primitive*>(part);
+         const Light* const lamp = prim->GetLightmap();
+         if (lamp == nullptr || !prim->m_d.m_addBlend || !prim->m_d.m_visible || lowerCase(prim->m_d.m_szImage).rfind("traced_", 0) != 0
+            || lamp->m_d.m_intensity * lamp->m_d.m_intensity_scale <= 0.f)
+            continue;
+         const float lit = lamp->m_currentIntensity / (lamp->m_d.m_intensity * lamp->m_d.m_intensity_scale);
+         if (lit <= 0.f)
+            continue;
+         if (lightCount >= maxLights)
+            break;
+         prim->m_mesh.UpdateBounds(); // no-op once valid
+         const Mesh& mesh = prim->m_mesh;
+         const float radius = 0.5f * max((mesh.m_maxAABound.x - mesh.m_minAABound.x) * prim->m_d.m_vSize.x, (mesh.m_maxAABound.y - mesh.m_minAABound.y) * prim->m_d.m_vSize.y);
+         const vec4 tint = convertColor(prim->m_d.m_color, 1.f);
+         const float radiance = insertGain * lit * intensityToLinear;
+         LightEntry& e = entries[lightCount];
+         e.pos = Vertex3Ds(prim->m_d.m_vPosition.x, prim->m_d.m_vPosition.y, prim->m_d.m_vPosition.z + 0.05f * 47.06f);
+         e.range = max(150.f, 4.f * radius);
+         e.radiance = vec4(tint.x * radiance, tint.y * radiance, tint.z * radiance, (float)(4 << 16));
+         e.radius = radius;
+         e.upward = true;
+         e.index = lightCount;
+         lightCount++;
+      }
+   }
+
+   // Bucket into all cells overlapped by the light range (cell count caps at maxPerCell lights)
+   for (int i = 0; i < lightCount; i++)
+   {
+      const LightEntry& e = entries[i];
       const int x0 = clamp(static_cast<int>(floorf((e.pos.x - e.range - m_table->m_left) / cellSize)), 0, cellsX - 1);
       const int x1 = clamp(static_cast<int>(floorf((e.pos.x + e.range - m_table->m_left) / cellSize)), 0, cellsX - 1);
       const int y0 = clamp(static_cast<int>(floorf((e.pos.y - e.range - m_table->m_top) / cellSize)), 0, cellsY - 1);
@@ -3333,6 +3376,7 @@ void Renderer::BuildPBRLightList()
                {
                   texData[(indexBase + idx) * 4] = (float)e.index;
                   texData[(indexBase + idx) * 4 + 1] = e.radius;
+                  texData[(indexBase + idx) * 4 + 2] = e.upward ? 1.f : 0.f;
                }
             }
          }

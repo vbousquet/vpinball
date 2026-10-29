@@ -356,7 +356,7 @@ vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV, const float rou
 // frame and packs it into tex_pbr_lights (RGBA32F, 256 texels wide, texel fetch):
 // [0,512)    light records, 2 texels each: (pos.xyz, range) then (radiance.rgb, mode)
 // [512,1024) grid cells: (start, count) into the index list
-// [1024,+)   light index list: (light index, light source sphere radius, -, -)
+// [1024,+)   light index list: (light index, light source sphere radius, upward emitter flag, -)
 // World-space evaluation (v_tablePos): view independent, a single grid serves both stereo eyes.
 vec4 pbr_light_texel(const int idx)
 {
@@ -389,7 +389,7 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNg, const vec3 wV, const vec3 w
       const float sphereRadius = lIdx.y;
       const vec4 lPos = pbr_light_texel(li * 2);
       const vec4 lRad = pbr_light_texel(li * 2 + 1);
-      const vec3 lCol = lRad.rgb;
+      vec3 lCol = lRad.rgb;
       const vec3 dl = lPos.xyz - wPos;
       // Clamp the distance to ~1 VPU (~0.5mm), or to the light source sphere: a light embedded in
       // geometry would otherwise produce unbounded inverse-square irradiance
@@ -400,6 +400,10 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNg, const vec3 wV, const vec3 w
       if (x <= 0.0)
          continue;
       const vec3 l = dl * inversesqrt(dist2);
+      // Upward facing emitter (a lit insert): Lambertian emission around +z, so the light does not spill sideways
+      // onto nearby walls as a sphere would
+      if (lIdx.z > 0.0)
+         lCol *= saturate(-dl.z * inversesqrt(max(dot(dl, dl), 1e-6)));
       const float NdotL = saturate(dot(wN, l));
       if (NdotL <= 0.0)
          continue;

@@ -297,6 +297,7 @@ public:
    void GetEditorWireframe(vector<Vertex2D> &edges, vector<Vertex2D> &polyline) const;
 
    void setInPlayState(const bool newVal);
+   Light *GetLightmap() const { return m_lightmap; } // Light driving the lightmap (or Traced insert), resolved at render setup
 
    Mesh m_mesh;
 
