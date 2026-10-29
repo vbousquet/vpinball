@@ -7,6 +7,8 @@
 // - tex_base_color (stage 0): the traced light, 4 elevations in RGBA, linear HDR, normalised to its brightest texel.
 // - tex_base_normalmap (stage 4, optional): the bake's facet normals, x and 'up the table' in RG, faceted floor in A.
 // - tex_traced_env (stage 7, optional): the lamp-off look, the 4 elevations in a 2x2 atlas (15 | 45 over 60 | 70), linear HDR.
+// - tex_pbr_orm (stage 8, optional): the table's print map over the table rectangle: rgb the playfield art (sRGB), alpha 1 where
+//   the print leaves an insert clear, 0 where it covers it.
 // - staticColor_Alpha: the lamp's colour x level, as for any additive lightmap primitive.
 //
 // tracedParams (insert space in mm, angles in degrees):
@@ -18,6 +20,12 @@
 // [5] x per-insert seed, y has facets, z mm per table unit, w frost (0 clear top, saturating: 3 about two thirds, 10+ a fully frosted cap)
 // [6] rgb: room light glinting in the facets, lamp on or off, w: lamp-off look gain (0 = no lamp-off atlas)
 // [7] rgb: the plastic's colour, tinting the (neutral) lamp-off look, w: facet blur for the glints in mips (hides a hard-edged facet map)
+// [8] x 1 = spill pass (the card scaled up about its centre), y spill size in card widths, z spill strength,
+//     w spill reach as a print map mip (-1: no print map, a round falloff)
+// [9] table position to print map UV: xy scale, zw offset (x = 0: no print map)
+// [10] xy the print map's texel (UV) at the spill mip, z white leak at the glow's peak (the share of the lamp's white light the
+//      plastic lets through: a hot insert's core goes white, as on camera, while its body, spill and lamp-off look keep the colour),
+//      w how much the plastic's colour tints the room glints (0 white, 1 the plastic's colour)
 
 $input v_worldPos, v_tablePos, v_normal, v_texcoord0
 #ifdef STEREO
@@ -30,7 +38,7 @@ $input v_worldPos, v_tablePos, v_normal, v_texcoord0
 #include "common.sh"
 
 uniform vec4 staticColor_Alpha;
-uniform vec4 tracedParams[8];
+uniform vec4 tracedParams[11];
 
 #ifdef STEREO
 	uniform vec4 cameraPosWorld[2];
@@ -43,6 +51,7 @@ uniform vec4 tracedParams[8];
 SAMPLER2D(tex_base_color, 0);     // traced light
 SAMPLER2D(tex_base_normalmap, 4); // traced facets
 SAMPLER2D(tex_traced_env, 7);     // traced lamp-off atlas
+SAMPLER2D(tex_pbr_orm, 8);        // the table's print map: art in rgb, clear insert windows in alpha
 
 // How much each of the four traced elevations counts at this one: linear between neighbours, held at the ends
 vec4 tracedAngleWeights(float elevation)
@@ -115,6 +124,38 @@ void main()
 	if (v_clipDistance < 0.0)
 		discard;
 	#endif
+
+	// Spill pass: the lit insert's light on the art around it. It leaves the window's edges and falls off fast (the window
+	// mask blurred over the reach, three mips for a soft tail), lights the art under it (dark ink stays dark), never the
+	// windows themselves, and fades out before the scaled card's rim. Without a print map: the old round falloff.
+	if (tracedParams[8].x > 0.5)
+	{
+		const float r = length(v_texcoord0 * 2.0 - 1.0);
+		if (tracedParams[9].x > 0.0 && tracedParams[8].w >= 0.0)
+		{
+			const vec2 t = v_tablePos.xy * tracedParams[9].xy + tracedParams[9].zw;
+			const float lod = tracedParams[8].w;
+			const vec4 here = texture2DLod(tex_pbr_orm, t, 0.0);
+			// each mip read at 4 points half its texel apart (a mip alone is a box: blocky)
+			float spread = 0.0;
+			for (int i = 0; i < 3; i++)
+			{
+				const vec2 o = tracedParams[10].xy * (0.5 * exp2(float(i)));
+				const float l = lod + float(i);
+				const float m = texture2DLod(tex_pbr_orm, t + vec2(o.x, o.y), l).a + texture2DLod(tex_pbr_orm, t + vec2(-o.x, o.y), l).a
+					+ texture2DLod(tex_pbr_orm, t + vec2(o.x, -o.y), l).a + texture2DLod(tex_pbr_orm, t - o, l).a;
+				spread += (i == 0 ? 0.5 : i == 1 ? 0.3 : 0.2) * 0.25 * m;
+			}
+			const float spill = spread * (1.0 - here.a) * saturate((1.0 - r) / 0.4);
+			gl_FragColor = vec4(staticColor_Alpha.rgb * here.rgb * (tracedParams[8].z * spill), 1.0);
+		}
+		else
+		{
+			const float h = exp(-(r / 0.38) * (r / 0.38)) * pow(saturate((1.0 - r) / 0.35), 1.5);
+			gl_FragColor = vec4(staticColor_Alpha.rgb * (tracedParams[8].z * pow(h, 2.2)), 1.0);
+		}
+		return;
+	}
 
 	// Insert frame from the card's UV derivatives: table units per UV along u and v, so the card may be placed, turned
 	// and scaled freely. Table space is z up; the card's u and v are its own x and y.
@@ -223,7 +264,15 @@ void main()
 		lampOff = tracedParams[6].w * tracedParams[7].rgb * tracedEnv(lightUv, weights, 8.0 * frost);
 
 	// The lamp's glow and glints, plus the room glinting in the facets whatever the lamp does
-	vec3 result = staticColor_Alpha.rgb * (tracedParams[2].x * light + 10.0 * tracedParams[3].x * glint) + tracedParams[6].rgb * (10.0 * tracedParams[3].x) * glint + lampOff;
+	// (the white share grows with the glow: the bake's peak (1) gets all of it, the dim body almost none)
+	// The room's light glints off the facets under the plastic, so it comes back through it: tinted by its colour (roomtint)
+	const vec3 roomGlint = tracedParams[6].rgb * mix(vec3_splat(1.0), tracedParams[7].rgb, tracedParams[10].w);
+	const vec3 glowTint = mix(staticColor_Alpha.rgb, vec3_splat(staticColor_Alpha.a), tracedParams[10].z * saturate(light));
+	vec3 result = glowTint * (tracedParams[2].x * light) + staticColor_Alpha.rgb * (10.0 * tracedParams[3].x * glint) + roomGlint * (10.0 * tracedParams[3].x) * glint + lampOff;
+
+	// The print on the playfield covers the insert (its glow, the lamp-off look and the facets alike)
+	if (tracedParams[9].x > 0.0)
+		result *= texture2DLod(tex_pbr_orm, v_tablePos.xy * tracedParams[9].xy + tracedParams[9].zw, 0.0).a;
 
 	// Alignment view: the bake's square in a 2 mm grid, red outside it, the traced light in green
 	if (tracedParams[2].w > 0.5)

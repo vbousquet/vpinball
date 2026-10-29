@@ -40,6 +40,10 @@ public:
 
    float m_elasticityFalloff = 0.43f;
    float m_depthBias = 0.0f; // for determining depth sorting
+   float m_tracedGain = 8.f; // Traced insert: glow gain
+   float m_tracedHaloSize = 0.f; // Traced insert: soft spill drawn around the card, in card widths (0 = none)
+   float m_tracedHaloStrength = 1.5f; // Traced insert: spill level at its centre, relative to the lamp
+   string m_tracedParams; // Traced insert: its bake type's look, as VPX_TRACED ("elev=10,20,35,60 tilt=48.9 turn=-80 ...")
 
    float m_edgeFactorUI = 0.25f; // for drawing the mesh in the editorUI
    float m_collision_reductionFactor = 0.f; // 0=none..1=pow(num_vertices,0.75)
