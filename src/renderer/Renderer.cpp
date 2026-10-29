@@ -3272,7 +3272,8 @@ void Renderer::BuildPBRLightList()
       // w packs the shadow mode (bits 0-3), the VSM shadow index + 1 (bits 4-11, 0 = no virtual map),
       // the map layout (bits 12-15, 0 = ortho, 2 = cube) and the quantized penumbra radius in 0.5 VPU units (bits 16+)
       const int shadowIndex = light->m_pbrShadowSlot;
-      const int shadowInfo = static_cast<int>(light->m_d.m_shadows) | ((shadowIndex + 1) << 4) | (light->m_pbrShadowLayout << 12) | (4 << 16);
+      const int shadowInfo = static_cast<int>(light->m_d.m_shadows) | ((shadowIndex + 1) << 4) | (light->m_pbrShadowLayout << 12)
+         | (clamp(static_cast<int>(light->m_d.m_bulbRadius * 2.f + 0.5f), 4, 255) << 16); // bulb radius as the PCSS penumbra (>= 2 VPU, 255 keeps the float exact)
       e.radiance = vec4(tint.x * radiance, tint.y * radiance, tint.z * radiance, (float)shadowInfo);
       e.index = lightCount;
       lightCount++;
