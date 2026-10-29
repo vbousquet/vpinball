@@ -1965,8 +1965,8 @@ void Renderer::UpdateVirtualShadowMaps()
 #if defined(ENABLE_BGFX)
 // Builds the Forward+ light list: a world-space XY cluster grid over the table bounds, packed into a RGBA32F
 // texture (256x32 texels): [0,512) light records ((pos,range) then (radiance,mode)), [512,1024) grid cells
-// (start,count), [1024,+) the light index list. The upload runs inside RenderFrame::Execute through a
-// begin-of-frame command so it lands on the render thread.
+// (start,count), [1024,+) the light index list (light index, light source sphere radius). The upload runs inside
+// RenderFrame::Execute through a begin-of-frame command so it lands on the render thread.
 void Renderer::BuildPBRLightList()
 {
    constexpr int texW = 256, texH = 32;
@@ -1991,6 +1991,7 @@ void Renderer::BuildPBRLightList()
       Vertex3Ds pos;
       float range;
       vec4 radiance;
+      float radius;
       int index;
    };
    LightEntry entries[maxLights];
@@ -2024,10 +2025,12 @@ void Renderer::BuildPBRLightList()
       // inserts, flashers) keep their intensity, as legacy lights do, so the room darkens or brightens around them
       const float radiance = light->m_currentIntensity * intensityToLinear * (light->m_d.m_roomLight ? m_sceneLighting.GetGlobalEmissionScale() : 1.f);
       // w packs the shadow mode (bits 0-3), the VSM shadow index + 1 (bits 4-11, 0 = no virtual map),
-      // the map layout (bits 12-15, 0 = ortho, 2 = cube)
+      // the map layout (bits 12-15, 0 = ortho, 2 = cube) and the quantized penumbra radius in 0.5 VPU units (bits 16+)
       const int shadowIndex = light->m_pbrShadowSlot;
-      const int shadowInfo = static_cast<int>(light->m_d.m_shadows) | ((shadowIndex + 1) << 4) | (light->m_pbrShadowLayout << 12);
+      const int shadowInfo = static_cast<int>(light->m_d.m_shadows) | ((shadowIndex + 1) << 4) | (light->m_pbrShadowLayout << 12)
+         | (clamp(static_cast<int>(light->m_d.m_bulbRadius * 2.f + 0.5f), 4, 255) << 16); // bulb radius as the PCSS penumbra (>= 2 VPU, 255 keeps the float exact)
       e.radiance = vec4(tint.x * radiance, tint.y * radiance, tint.z * radiance, (float)shadowInfo);
+      e.radius = max(light->m_d.m_bulbRadius, 0.f);
       e.index = lightCount;
       lightCount++;
 
@@ -2080,7 +2083,10 @@ void Renderer::BuildPBRLightList()
             {
                const int idx = static_cast<int>(texData[(gridBase + cell) * 4]) + slot;
                if (idx < maxIndices)
+               {
                   texData[(indexBase + idx) * 4] = (float)e.index;
+                  texData[(indexBase + idx) * 4 + 1] = e.radius;
+               }
             }
          }
    }
