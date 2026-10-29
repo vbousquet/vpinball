@@ -79,7 +79,11 @@ set(VPX_TEST_SOURCES
    tests/render/test-base-render.cpp
    tests/render/test-mirror-render.cpp
    tests/render/test-pbr-shadow-render.cpp
+   tests/render/test-pf-pbr.cpp
    tests/render/test-pf-t11.cpp
+   tests/render/test-pf-t9.cpp
+   tests/render/test-pf-t10.cpp
+   tests/render/test-pf-coat.cpp
    tests/render/test-renderframe.cpp
    tests/render/test-traced-insert-render.cpp
    tests/vpx-test.cpp
