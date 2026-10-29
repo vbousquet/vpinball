@@ -1201,18 +1201,23 @@ void Primitive::Render(const unsigned int renderMask)
       m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::staticColor_Alpha, color.x * color.w, color.y * color.w, color.z * color.w, color.w);
       if (img && tracedInsert)
       {
-         // Look of the AFM 'round 1.19in starburst' type (l63), hard coded for the prototype
+         // Defaults: the look of the AFM 'round 1.19in starburst' type (l63). A part's bake type overrides them with its
+         // traced_params, and VPX_TRACED overrides both for tuning without a rebuild ("gain=4 spread=0.67 glint=1.5 debug=1")
          const float hash = sinf(m_d.m_vPosition.x * 127.1f + m_d.m_vPosition.y * 311.7f) * 43758.5453f;
          const float seed = hash - floorf(hash);
-         vec4 params[8] = {
+         float turn = -78.201f, turnJitter = 14.641f, fadeTint = 1.f, depthK = 1.f;
+         vec4 params[11] = {
             vec4(15.f, 45.f, 60.f, 70.f), // traced elevations
             vec4(4.f, 2.5f, 3.5f, 1.5f), // depths (mm): cover, facets, glow parallax, rim fade
-            vec4(8.f, 0.67f, 1.6f, 0.f), // glow gain (uncalibrated), glow spread, IOR, alignment view
+            vec4(m_d.m_tracedGain, 0.67f, 1.6f, 0.f), // glow gain, glow spread, IOR, alignment view
             vec4(1.5f, 76.648f, 50.938f, 1.62f), // glints: strength, sharpness, facet tilt, fringe
-            vec4(5.f, -78.201f + (seed * 2.f - 1.f) * 14.641f, 3.f, 6.f), // glints: keys, turn, waviness (deg), wavelength (mm)
+            vec4(5.f, 0.f, 3.f, 6.f), // glints: keys, turn (below), waviness (deg), wavelength (mm)
             vec4(seed, nMap ? 1.f : 0.f, 0.5396875f, 0.f), // seed, has facets, mm per table unit, frost
             vec4(0.3f, 0.29f, 0.27f, 0.f), // room light glinting in the facets, lamp-off look gain
-            convertColor(m_d.m_color, 0.f) }; // the plastic's colour
+            convertColor(m_d.m_color, 0.f), // the plastic's colour
+            vec4(0.f, m_d.m_tracedHaloSize, m_d.m_tracedHaloStrength, 0.f), // spill pass, size, strength
+            vec4(0.f, 0.f, 0.f, 0.f), // table position to ink mask UV (scale, offset), 0 = no mask
+            vec4(0.f, 0.f, 0.f, 0.f) }; // print map texel at the spill mip (u, v), white leak through the plastic, room glint tint
          // The lamp-off look atlas, in the Emission Map slot
          Texture *const envMap = m_ptable->GetImage(m_d.m_szEmissionMap);
          if (envMap)
@@ -1220,36 +1225,90 @@ void Primitive::Render(const unsigned int renderMask)
             m_renderer->m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_traced_env, envMap, true, SamplerFilter::SF_TRILINEAR, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP);
             params[6].w = 1.f;
          }
-         // Prototype tuning without a rebuild: VPX_TRACED="gain=4 spread=0.67 glint=1.5 debug=1"
-         static const char *const tuning = std::getenv("VPX_TRACED");
-         if (tuning)
+         // The table's print map, in the ORM Map slot, over the whole table rectangle: alpha = the print covering the insert (0)
+         // or not (1), so the lamp only shows through the unprinted window; rgb = the playfield's art, which the spill lights
+         Texture *const inkMap = m_ptable->GetImage(m_d.m_szORMMap);
+         float spillMm = 3.f;
+         if (inkMap)
          {
-            float v;
+            m_renderer->m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_pbr_orm, inkMap, false, SamplerFilter::SF_TRILINEAR, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP);
+            const float sx = 1.f / (m_ptable->m_right - m_ptable->m_left), sy = 1.f / (m_ptable->m_bottom - m_ptable->m_top);
+            params[9] = vec4(sx, sy, -m_ptable->m_left * sx, -m_ptable->m_top * sy);
+         }
+         const auto tune = [&](const char *const tuning)
+         {
+            float v, e[4];
             const char *p;
+            if ((p = strstr(tuning, "elev=")) && sscanf(p + 5, "%f,%f,%f,%f", &e[0], &e[1], &e[2], &e[3]) == 4) params[0] = vec4(e[0], e[1], e[2], e[3]);
             if ((p = strstr(tuning, "gain=")) && sscanf(p + 5, "%f", &v) == 1) params[2].x = v;
             if ((p = strstr(tuning, "spread=")) && sscanf(p + 7, "%f", &v) == 1) params[2].y = v;
+            if ((p = strstr(tuning, "ior=")) && sscanf(p + 4, "%f", &v) == 1) params[2].z = v;
             if ((p = strstr(tuning, "debug=")) && sscanf(p + 6, "%f", &v) == 1) params[2].w = v;
             if ((p = strstr(tuning, "glint=")) && sscanf(p + 6, "%f", &v) == 1) params[3].x = v;
             if ((p = strstr(tuning, "sharp=")) && sscanf(p + 6, "%f", &v) == 1) params[3].y = v;
+            if ((p = strstr(tuning, "tilt=")) && sscanf(p + 5, "%f", &v) == 1) params[3].z = v;
+            if ((p = strstr(tuning, "fringe=")) && sscanf(p + 7, "%f", &v) == 1) params[3].w = v;
+            if ((p = strstr(tuning, "keys=")) && sscanf(p + 5, "%f", &v) == 1) params[4].x = v;
+            if ((p = strstr(tuning, "turn=")) && sscanf(p + 5, "%f", &v) == 1) turn = v;
+            if ((p = strstr(tuning, "turnjit=")) && sscanf(p + 8, "%f", &v) == 1) turnJitter = v;
+            if ((p = strstr(tuning, "wavy=")) && sscanf(p + 5, "%f", &v) == 1) params[4].z = v;
+            if ((p = strstr(tuning, "wavelen=")) && sscanf(p + 8, "%f", &v) == 1) params[4].w = v;
             if ((p = strstr(tuning, "frost=")) && sscanf(p + 6, "%f", &v) == 1) params[5].w = v;
             if ((p = strstr(tuning, "room=")) && sscanf(p + 5, "%f", &v) == 1) params[6] = vec4(v, v * 0.96f, v * 0.9f, params[6].w);
             if (envMap && (p = strstr(tuning, "env=")) && sscanf(p + 4, "%f", &v) == 1) params[6].w = v;
             if ((p = strstr(tuning, "facetblur=")) && sscanf(p + 10, "%f", &v) == 1) params[7].w = v;
-         }
+            if ((p = strstr(tuning, "halo=")) && sscanf(p + 5, "%f", &v) == 1) params[8].y = v;
+            if ((p = strstr(tuning, "halostr=")) && sscanf(p + 8, "%f", &v) == 1) params[8].z = v;
+            if ((p = strstr(tuning, "fadetint=")) && sscanf(p + 9, "%f", &v) == 1) fadeTint = v;
+            if ((p = strstr(tuning, "spillmm=")) && sscanf(p + 8, "%f", &v) == 1) spillMm = v;
+            if ((p = strstr(tuning, "depthk=")) && sscanf(p + 7, "%f", &v) == 1) depthK = v;
+            if ((p = strstr(tuning, "leak=")) && sscanf(p + 5, "%f", &v) == 1) params[10].z = v;
+            if ((p = strstr(tuning, "roomtint=")) && sscanf(p + 9, "%f", &v) == 1) params[10].w = v;
+         };
+         if (!m_d.m_tracedParams.empty())
+            tune(m_d.m_tracedParams.c_str());
+         static const char *const tuning = std::getenv("VPX_TRACED");
+         if (tuning)
+            tune(tuning);
+         params[4].y = turn + (seed * 2.f - 1.f) * turnJitter;
+         // The spill's reach, as the print map mip whose texel is that wide (-1 = no print map: the old round falloff)
+         params[8].w = (inkMap && inkMap->m_width > 0) ? log2f(max(spillMm / ((m_ptable->m_right - m_ptable->m_left) * params[5].z / (float)inkMap->m_width), 1.f)) : -1.f;
+         if (params[8].w >= 0.f)
+            params[10] = vec4(exp2f(params[8].w) / (float)inkMap->m_width, exp2f(params[8].w) / (float)max(inkMap->m_height.load(), 1u), params[10].z, params[10].w);
+         // A bake scaled onto a smaller (or bigger) insert: its cover, facet and glow depths scale with it (depthk = the scale)
+         params[1].x *= depthK;
+         params[1].y *= depthK;
+         params[1].z *= depthK;
          m_renderer->m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_base_color, img, true, SamplerFilter::SF_TRILINEAR, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP);
          if (nMap)
             m_renderer->m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_base_normalmap, nMap, true, SamplerFilter::SF_TRILINEAR, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP);
-         // An incandescent lamp glows red-orange as its filament heats and cools, as the light's own draw does
-         if (m_lightmap && m_lightmap->m_d.m_fader == FADER_INCANDESCENT)
+         // An incandescent lamp glows red-orange as its filament heats and cools, as the light's own draw does. A lamp with no
+         // fader is faded by its driver (PinMAME's physical bulb model): its filament temperature follows from the card's level
+         // (1 = the lamp fully on), as Light::get_FilamentTemperature does. fadetint=0 turns that off.
+         const bool driverFaded = m_lightmap && m_lightmap->m_d.m_fader == FADER_NONE && fadeTint > 0.f && alpha > 0.f;
+         if (m_lightmap && (m_lightmap->m_d.m_fader == FADER_INCANDESCENT || driverFaded))
          {
             float tint2700[3], tint[3];
             bulb_filament_temperature_to_tint(2700.f, tint2700);
-            bulb_filament_temperature_to_tint((float)m_lightmap->m_currentFilamentTemperature, tint);
+            bulb_filament_temperature_to_tint(driverFaded ? (float)bulb_emission_to_filament_temperature(min(alpha * 0.01f, 2.f))
+                                                          : (float)m_lightmap->m_currentFilamentTemperature, tint);
             m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::staticColor_Alpha, color.x * color.w * tint[0] / tint2700[0],
                color.y * color.w * tint[1] / tint2700[1], color.z * color.w * tint[2] / tint2700[2], color.w);
          }
-         m_renderer->m_renderDevice->m_basicShader->SetFloat4v(ShaderUniform::tracedParams, params, 8);
+         m_renderer->m_renderDevice->m_basicShader->SetFloat4v(ShaderUniform::tracedParams, params, 11);
          m_renderer->m_renderDevice->m_basicShader->SetTechnique(ShaderTechnique::insert_traced);
+         // The lit insert's soft spill onto the art and coat around it: the same card, scaled up about its centre, drawn
+         // first by the same technique in its spill mode. Not in reflections, and not with the lamp off.
+         if (params[8].y > 0.f && params[8].z > 0.f && alpha > 0.f && !isReflectionPass)
+         {
+            params[8].x = 1.f;
+            m_renderer->m_renderDevice->m_basicShader->SetFloat4v(ShaderUniform::tracedParams, params, 11);
+            m_renderer->UpdateBasicShaderMatrix(Matrix3D::MatrixScale(params[8].y, params[8].y, 1.f) * m_fullMatrix);
+            m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, true, m_d.m_vPosition, m_d.m_depthBias + 0.1f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_groupdRendering ? m_numGroupIndices : (uint32_t)m_mesh.NumIndices());
+            m_renderer->UpdateBasicShaderMatrix(m_fullMatrix, m_prevFullMatrixValid ? &m_prevFullMatrix : nullptr);
+            params[8].x = 0.f;
+            m_renderer->m_renderDevice->m_basicShader->SetFloat4v(ShaderUniform::tracedParams, params, 11);
+         }
       }
       else
       {
@@ -1567,6 +1626,10 @@ void Primitive::Save(IObjectWriter& writer, const bool saveForUndo)
       }
    }
    writer.WriteFloat(FID(PIDB), m_d.m_depthBias);
+   writer.WriteFloat(FID(TRGN), m_d.m_tracedGain);
+   writer.WriteFloat(FID(TRHS), m_d.m_tracedHaloSize);
+   writer.WriteFloat(FID(TRHG), m_d.m_tracedHaloStrength);
+   writer.WriteString(FID(TRPS), m_d.m_tracedParams);
    writer.WriteBool(FID(ADDB), m_d.m_addBlend);
    writer.WriteBool(FID(ZMSK), m_d.m_useDepthMask);
    writer.WriteFloat(FID(FALP), m_d.m_alpha);
@@ -1793,6 +1856,10 @@ void Primitive::Load(IObjectReader& reader)
          }
 #endif
          case FID(PIDB): m_d.m_depthBias = reader.AsFloat(); break;
+         case FID(TRGN): m_d.m_tracedGain = reader.AsFloat(); break;
+         case FID(TRHS): m_d.m_tracedHaloSize = reader.AsFloat(); break;
+         case FID(TRHG): m_d.m_tracedHaloStrength = reader.AsFloat(); break;
+         case FID(TRPS): m_d.m_tracedParams = reader.AsString(); break;
          case FID(OSNM): m_d.m_objectSpaceNormalMap = reader.AsBool(); break;
          case FID(ADDB): m_d.m_addBlend = reader.AsBool(); break;
          case FID(ZMSK): m_d.m_useDepthMask = reader.AsBool(); break;
