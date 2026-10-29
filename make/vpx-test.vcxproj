@@ -83,6 +83,7 @@
     <ClCompile Include="../../tests/parts/test-kicker.cpp" />
     <ClCompile Include="../../tests/parts/test-light.cpp" />
     <ClCompile Include="../../tests/parts/test-lightseq.cpp" />
+    <ClCompile Include="../../tests/parts/test-pbr-conversion.cpp" />
     <ClCompile Include="../../tests/parts/test-partgroup.cpp" />
     <ClCompile Include="../../tests/parts/test-plunger.cpp" />
     <ClCompile Include="../../tests/parts/test-primitive.cpp" />

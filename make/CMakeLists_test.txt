@@ -47,6 +47,7 @@ set(VPX_TEST_SOURCES
    tests/parts/test-kicker.cpp
    tests/parts/test-light.cpp
    tests/parts/test-lightseq.cpp
+   tests/parts/test-pbr-conversion.cpp
    tests/parts/test-partgroup.cpp
    tests/parts/test-plunger.cpp
    tests/parts/test-primitive.cpp
