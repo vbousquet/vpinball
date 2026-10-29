@@ -2992,7 +2992,11 @@ void Renderer::UpdateVirtualShadowMaps()
          for (const Caster& caster : casters)
          {
             std::fill(markTmp.begin(), markTmp.end(), uint8_t(0));
-            VSM::MarkOrthoPages(view, l, r, b, t, caster.boundsMin, caster.boundsMax, gridW, gridH, 1, markTmp.data());
+            // PCF taps reach up to 0.02 of the map (see fs_pbr filterRadius clamp); non-resident pages
+            // count as lit, so the marked band must cover caster bounds + max penumbra or the soft edge
+            // is clipped to the page grid
+            const int dilate = 1 + (int)ceilf(0.02f * std::max(gridW, gridH));
+            VSM::MarkOrthoPages(view, l, r, b, t, caster.boundsMin, caster.boundsMax, gridW, gridH, dilate, markTmp.data());
             const bool dynDirty = dynamicTier && !caster.isStatic;
             for (int i = 0; i < (int)map.needed.size(); i++)
             {
