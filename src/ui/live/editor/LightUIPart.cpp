@@ -193,6 +193,10 @@ void LightUIPart::UpdatePropertyPane(PropertyPane& props)
          }
          else if (light->m_d.m_type == LightType::PBR)
          {
+            props.InputFloat<Light>(
+               m_part, "Source Radius"s, //
+               [](const Light* light) { return light->m_d.m_bulbRadius; }, //
+               [](Light* light, float v) { light->m_d.m_bulbRadius = v; }, PropertyPane::Unit::VPLength, 1);
             props.Checkbox<Light>(
                m_part, "Room Light"s, //
                [](const Light* light) { return light->m_d.m_roomLight; }, //
