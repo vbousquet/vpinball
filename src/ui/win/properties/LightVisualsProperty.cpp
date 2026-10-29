@@ -20,6 +20,7 @@ LightVisualsProperty::LightVisualsProperty(const vector<IWinUIPart *> *pvsel) : 
     m_scaleMeshEdit.SetDialog(this);
     m_modulateEdit.SetDialog(this);
     m_transmitEdit.SetDialog(this);
+    m_bulbRadiusEdit.SetDialog(this);
     m_posXEdit.SetDialog(this);
     m_posYEdit.SetDialog(this);
     m_posZEdit.SetDialog(this);
@@ -41,6 +42,8 @@ void LightVisualsProperty::UpdateLightType(const int mode)
     GetDlgItem(IDC_BULB_MODULATE_VS_ADD).ShowWindow(SW_HIDE);
     GetDlgItem(IDC_TRANSMIT_LABEL).ShowWindow(SW_HIDE);
     GetDlgItem(IDC_TRANSMISSION_SCALE).ShowWindow(SW_HIDE);
+    GetDlgItem(IDC_BULB_RADIUS_LABEL).ShowWindow(SW_HIDE);
+    GetDlgItem(IDC_BULB_RADIUS).ShowWindow(SW_HIDE);
     GetDlgItem(IDC_REFLECT_ENABLED_CHECK).ShowWindow(SW_HIDE);
     GetDlgItem(IDC_DEPTHBIAS_LABEL).ShowWindow(SW_HIDE);
     GetDlgItem(IDC_DEPTH_BIAS).ShowWindow(SW_HIDE);
@@ -64,6 +67,11 @@ void LightVisualsProperty::UpdateLightType(const int mode)
        GetDlgItem(IDC_DEPTHBIAS_LABEL).ShowWindow(SW_SHOWNORMAL);
        GetDlgItem(IDC_DEPTH_BIAS).ShowWindow(SW_SHOWNORMAL);
        GetDlgItem(IDC_REFLECT_ENABLED_CHECK).ShowWindow(SW_SHOWNORMAL);
+    }
+    else if (mode == 3)
+    {
+       GetDlgItem(IDC_BULB_RADIUS_LABEL).ShowWindow(SW_SHOWNORMAL);
+       GetDlgItem(IDC_BULB_RADIUS).ShowWindow(SW_SHOWNORMAL);
     }
 }
 
@@ -108,6 +116,8 @@ void LightVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
             PropertyDialog::SetFloatTextbox(m_modulateEdit, light->m_d.m_modulate_vs_add);
         if (dispid == IDC_TRANSMISSION_SCALE || dispid == -1)
             PropertyDialog::SetFloatTextbox(m_transmitEdit, light->m_d.m_transmissionScale);
+        if (dispid == IDC_BULB_RADIUS || dispid == -1)
+           PropertyDialog::SetFloatTextbox(m_bulbRadiusEdit, light->m_d.m_bulbRadius);
 
         if (dispid == IDC_IMAGE_MODE || dispid == -1)
             PropertyDialog::SetCheckboxState(m_hPassThroughCheck, light->m_d.m_imageMode);
@@ -211,6 +221,7 @@ void LightVisualsProperty::UpdateProperties(const int dispid)
             case IDC_TRANSMISSION_SCALE:
                 CHECK_UPDATE_ITEM(light->m_d.m_transmissionScale, PropertyDialog::GetFloatTextbox(m_transmitEdit), light);
                 break;
+            case IDC_BULB_RADIUS: CHECK_UPDATE_ITEM(light->m_d.m_bulbRadius, PropertyDialog::GetFloatTextbox(m_bulbRadiusEdit), light); break;
 
             case IDC_SHOW_BULB_MESH:
                 CHECK_UPDATE_ITEM(light->m_d.m_showBulbMesh, PropertyDialog::GetCheckboxState(m_hShowMeshCheck), light);
@@ -375,6 +386,9 @@ BOOL LightVisualsProperty::OnInitDialog()
     m_resizer.AddChild(GetDlgItem(IDC_TRANSMIT_LABEL), CResizer::topleft, 0);
     m_transmitEdit.AttachItem(IDC_TRANSMISSION_SCALE);
     m_resizer.AddChild(m_transmitEdit, CResizer::topleft, RD_STRETCH_WIDTH);
+    m_resizer.AddChild(GetDlgItem(IDC_BULB_RADIUS_LABEL), CResizer::topleft, 0);
+    m_bulbRadiusEdit.AttachItem(IDC_BULB_RADIUS);
+    m_resizer.AddChild(m_bulbRadiusEdit, CResizer::topleft, RD_STRETCH_WIDTH);
 
     m_resizer.AddChild(GetDlgItem(IDC_IMAGE_LABEL), CResizer::topleft, 0);
     m_baseImageCombo = &m_imageCombo;

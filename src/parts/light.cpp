@@ -774,6 +774,7 @@ void Light::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteBool(FID(SHRB), m_d.m_showReflectionOnBall);
    writer.WriteFloat(FID(BMSC), m_d.m_meshRadius);
    writer.WriteBool(FID(ROOM), m_d.m_roomLight);
+   writer.WriteFloat(FID(BRAD), m_d.m_bulbRadius);
    writer.WriteFloat(FID(BMVA), m_d.m_modulate_vs_add);
    writer.WriteFloat(FID(BHHI), m_d.m_bulbHaloHeight);
    writer.WriteInt(FID(SHDW), m_d.m_shadows);
@@ -861,6 +862,7 @@ void Light::Load(IObjectReader& reader)
          case FID(SHRB): m_d.m_showReflectionOnBall = reader.AsBool(); break;
          case FID(BMSC): m_d.m_meshRadius = reader.AsFloat(); break;
          case FID(ROOM): m_d.m_roomLight = reader.AsBool(); break;
+         case FID(BRAD): m_d.m_bulbRadius = reader.AsFloat(); break;
          case FID(BMVA): m_d.m_modulate_vs_add = reader.AsFloat(); break;
          case FID(BHHI): m_d.m_bulbHaloHeight = reader.AsFloat(); break;
          case FID(SHDW): m_d.m_shadows = static_cast<ShadowMode>(reader.AsInt()); break;

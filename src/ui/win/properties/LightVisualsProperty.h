@@ -42,6 +42,7 @@ private:
     EditBox     m_scaleMeshEdit;
     EditBox     m_modulateEdit;
     EditBox     m_transmitEdit;
+    EditBox m_bulbRadiusEdit;
     EditBox     m_posXEdit;
     EditBox     m_posYEdit;
     EditBox     m_posZEdit;

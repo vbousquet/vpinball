@@ -356,7 +356,7 @@ vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV, const float rou
 // frame and packs it into tex_pbr_lights (RGBA32F, 256 texels wide, texel fetch):
 // [0,512)    light records, 2 texels each: (pos.xyz, range) then (radiance.rgb, mode)
 // [512,1024) grid cells: (start, count) into the index list
-// [1024,+)   light index list
+// [1024,+)   light index list: (light index, light source sphere radius, -, -)
 // World-space evaluation (v_tablePos): view independent, a single grid serves both stereo eyes.
 vec4 pbr_light_texel(const int idx)
 {
@@ -379,17 +379,21 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNg, const vec3 wV, const vec3 w
    // Only the direct term is widened: indirect paths mip-filter by the material roughness.
    const float a2 = min(a * a + 0.5 * max(dot(dFdx(wN), dFdx(wN)), dot(dFdy(wN), dFdy(wN))), 0.25);
    const float NdotV = saturate(dot(wN, wV));
+   const float aAA = sqrt(a2);
+   const vec3 wR = reflect(-wV, wN);
    vec3 acc = vec3_splat(0.0);
    for (int i = 0; i < count; i++)
    {
-      const int li = int(pbr_light_texel(1024 + start + i).x);
+      const vec4 lIdx = pbr_light_texel(1024 + start + i);
+      const int li = int(lIdx.x);
+      const float sphereRadius = lIdx.y;
       const vec4 lPos = pbr_light_texel(li * 2);
       const vec4 lRad = pbr_light_texel(li * 2 + 1);
       const vec3 lCol = lRad.rgb;
       const vec3 dl = lPos.xyz - wPos;
-      // Clamp the distance to ~1 VPU (~0.5mm): a light embedded in geometry would otherwise
-      // produce unbounded inverse-square irradiance
-      const float dist2 = max(dot(dl, dl), 1.0);
+      // Clamp the distance to ~1 VPU (~0.5mm), or to the light source sphere: a light embedded in
+      // geometry would otherwise produce unbounded inverse-square irradiance
+      const float dist2 = max(dot(dl, dl), max(sphereRadius * sphereRadius, 1.0));
       // Windowed inverse square attenuation: (1 - (d/r)^4)^2 / d^2 gives a smooth cutoff at the light range
       const float rangeRatio = dist2 / (lPos.w * lPos.w);
       const float x = saturate(1.0 - rangeRatio * rangeRatio);
@@ -410,20 +414,34 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNg, const vec3 wV, const vec3 w
       // surface lit at grazing incidence otherwise compared against the caster right under it, and the result flipped
       // from shadow texel to shadow texel (stair-step stripes)
       const float NdotLs = max(abs(gNdotLraw), 1e-3);
-      const vec3 h = normalize(l + wV);
+      // Sphere light specular (Karis 2013, representative point): light from the point of the bulb sphere
+      // closest to the reflection ray, the GGX lobe energy renormalized by (a / a')^2, a' = a + radius / (2 dist).
+      // a is the specular AA widened alpha so a highlight already spread by the AA is not dimmed twice.
+      // Diffuse stays punctual. A zero radius gives back the punctual light.
+      vec3 sl = l;
+      float sphereNorm = 1.0;
+      BRANCH if (sphereRadius > 0.0)
+      {
+         const vec3 centerToRay = dot(dl, wR) * wR - dl;
+         sl = normalize(dl + centerToRay * saturate(sphereRadius * inversesqrt(max(dot(centerToRay, centerToRay), 1e-6))));
+         const float aSphere = saturate(aAA + sphereRadius * 0.5 * inversesqrt(dist2));
+         sphereNorm = (aAA / aSphere) * (aAA / aSphere);
+      }
+      const float sNdotL = saturate(dot(wN, sl));
+      const vec3 h = normalize(sl + wV);
       const float NdotH = saturate(dot(wN, h));
       const float VdotH = saturate(dot(wV, h));
       // GGX D + Schlick F + height-correlated Smith visibility (already includes the 1/(4 NdotL NdotV) term)
       const float denom = NdotH * NdotH * (a2 - 1.0) + 1.0;
-      const float D = a2 / (PI * denom * denom);
+      const float D = a2 / (PI * denom * denom) * sphereNorm;
       const vec3 F = F0 + (vec3_splat(1.0) - F0) * pow(1.0 - VdotH, 5.0);
-      const float gv = NdotL * sqrt(NdotV * NdotV * (1.0 - a2) + a2);
-      const float gl = NdotV * sqrt(NdotL * NdotL * (1.0 - a2) + a2);
+      const float gv = sNdotL * sqrt(NdotV * NdotV * (1.0 - a2) + a2);
+      const float gl = NdotV * sqrt(sNdotL * sNdotL * (1.0 - a2) + a2);
       const float G = 0.5 / max(gv + gl, 1e-6);
       // Soft luminance knee on the specular term: a sub-pixel GGX spike can still reach extreme
       // HDR values after specular AA. A continuous compressor (no plateau) preserves ordering
       // inside the clipped region so the bloom blob edge moves smoothly as the view moves
-      vec3 spec = D * F * G * (lCol * (x * x / dist2)) * NdotL;
+      vec3 spec = D * F * G * (lCol * (x * x / dist2)) * sNdotL;
       spec /= 1.0 + dot(spec, vec3(0.176204, 0.812985, 0.0108109)) * (1.0 / 1024.0);
 
       // Shadowed light record: w packs mode (bits 0-3), VSM index + 1 (bits 4-11, 0 = no map),

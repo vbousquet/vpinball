@@ -723,6 +723,8 @@
 #define IDC_IMAGE_LABEL                 908
 #define IDC_DEPTHBIAS_LABEL             909
 #define IDC_REFLECT_ENABLED_CHECK       910
+#define IDC_BULB_RADIUS 911
+#define IDC_BULB_RADIUS_LABEL 912
 #define IDC_AR_LABEL                    914
 #define IDC_TONEMAPPER                  923
 #define IDC_AR_LABEL2                   924
