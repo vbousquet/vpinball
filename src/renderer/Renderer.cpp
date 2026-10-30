@@ -2899,42 +2899,104 @@ void Renderer::UpdateVirtualShadowMaps()
    vector<uint8_t> markTmp;
    bool indexUsed[VSM::MAX_LIGHTS] = {};
 
-   for (IEditable* const part : m_table->GetParts())
+   // A shadowed light that goes dark (a flasher between fires, a lamp in an off phase) keeps its index and its resident
+   // static pages ('parked'): its casters did not move, so the next fire costs nothing instead of re-rendering the whole
+   // map (Police Force 2026-10-30: every flasher fire re-rendered its cube map, 600 pages a second, the same drop at any
+   // resolution). Parked lights are also warmed once (their pages built while off, after the lit lights' pages, within
+   // the page budget) when the pool has room. Lit lights go first, may take a free index, and only take a parked light's
+   // index (dropping its pages) when none is free.
+   const auto shadowCapable = [](const Light* l)
+   { return l->m_d.m_type == LightType::PBR && l->m_d.m_visible && !l->m_desktopBackdrop && l->m_d.m_shadows >= ShadowMode::PBR_STATIC_SHADOWS; };
+   vector<Light*> lights;
+   Light* reservedBy[VSM::MAX_LIGHTS] = {};
+   for (int pass = 0; pass < 3; pass++) // lit, parked, then the others (released)
+      for (IEditable* const part : m_table->GetParts())
+         if (part->GetItemType() == eItemLight)
+         {
+            Light* const l = static_cast<Light*>(part);
+            const int kind = !shadowCapable(l) ? 2 : l->m_currentIntensity > 0.f ? 0 : 1;
+            if (kind != pass)
+               continue;
+            lights.push_back(l);
+            if (kind < 2 && l->m_pbrShadowSlot >= 0 && l->m_pbrShadowSlot < m_vsmMaxLights && !reservedBy[l->m_pbrShadowSlot])
+               reservedBy[l->m_pbrShadowSlot] = l;
+         }
+   const auto releaseSlot = [this, &reservedBy](Light* l)
    {
-      if (part->GetItemType() != eItemLight)
-         continue;
-      Light* const light = static_cast<Light*>(part);
-      const bool eligible = light->m_d.m_type == LightType::PBR && light->m_d.m_visible && light->m_currentIntensity > 0.f && !light->m_desktopBackdrop
-         && light->m_d.m_shadows >= ShadowMode::PBR_STATIC_SHADOWS;
-      if (!eligible)
+      // Frees the map only when the index is this light's (a stale index of a light that lost it keeps the new owner's pages)
+      if (l->m_pbrShadowSlot >= 0 && l->m_pbrShadowSlot < VSM::MAX_LIGHTS && (!reservedBy[l->m_pbrShadowSlot] || reservedBy[l->m_pbrShadowSlot] == l))
+      {
+         VSM::LightMap& dead = m_vsmLights[l->m_pbrShadowSlot];
+         for (const int phys : dead.phys)
+            if (phys > 0)
+               m_vsmPool.Free(phys - 1);
+         dead = VSM::LightMap {};
+      }
+      l->m_pbrShadowSlot = -1;
+      l->m_pbrShadowBakedSlot = -1;
+   };
+   constexpr int warmFreePages = 64; // pool headroom kept for the lit lights before a parked light is warmed
+
+   for (Light* const light : lights)
+   {
+      if (!shadowCapable(light))
       {
          // Release the index and any resident pages: re-marked from scratch when it comes back
-         if (light->m_pbrShadowSlot >= 0 && light->m_pbrShadowSlot < VSM::MAX_LIGHTS)
-         {
-            VSM::LightMap& dead = m_vsmLights[light->m_pbrShadowSlot];
-            for (const int phys : dead.phys)
-               if (phys > 0)
-                  m_vsmPool.Free(phys - 1);
-            dead = VSM::LightMap {};
-         }
-         light->m_pbrShadowSlot = -1;
-         light->m_pbrShadowBakedSlot = -1;
+         releaseSlot(light);
          continue;
       }
+      const bool lit = light->m_currentIntensity > 0.f;
+      const int held = light->m_pbrShadowSlot;
+      const bool holds = held >= 0 && held < m_vsmMaxLights && reservedBy[held] == light && !indexUsed[held];
+      if (!lit)
+      {
+         bool warm = holds && light->m_pbrShadowBakedSlot == held && m_vsmLights[held].EntryCount() > 0;
+         if (warm)
+         {
+            const VSM::LightMap& m = m_vsmLights[held];
+            for (int vp = 0; vp < m.EntryCount() && warm; vp++)
+               warm = !m.needed[vp] || (m.phys[vp] != 0 && !m.dirty[vp]);
+         }
+         if (holds && (warm || m_vsmPool.FreeCount() < warmFreePages))
+         {
+            indexUsed[held] = true; // parked: index and pages kept, nothing rendered or touched (evictable under pressure)
+            continue;
+         }
+         if (!holds)
+         {
+            if (held >= 0)
+               releaseSlot(light); // its index went to a lit light
+            if (m_vsmPool.FreeCount() < warmFreePages)
+               continue;
+         }
+         // else: warm up through the regular path below (its jobs queue after the lit lights')
+      }
 
-      // Stable index assignment: keep the light's current index, else take the first free one
-      int index = light->m_pbrShadowSlot;
-      if (index < 0 || index >= m_vsmMaxLights || indexUsed[index])
+      // Stable index assignment: keep the light's current index, else take the first free one (one no parked light
+      // holds; a lit light takes a parked light's index when nothing else is free)
+      int index = held;
+      if (!holds)
       {
          index = -1;
          for (int i = 0; i < m_vsmMaxLights && index < 0; i++)
-            if (!indexUsed[i])
+            if (!indexUsed[i] && !reservedBy[i])
                index = i;
+         for (int i = 0; lit && i < m_vsmMaxLights && index < 0; i++)
+            if (!indexUsed[i])
+            {
+               index = i;
+               if (reservedBy[i] && reservedBy[i] != light)
+               {
+                  releaseSlot(reservedBy[i]);
+                  reservedBy[i] = nullptr;
+               }
+            }
          if (index < 0)
          {
             light->m_pbrShadowBakedSlot = -1; // index-starved light: shadow=1 through the missing map
             continue;
          }
+         reservedBy[index] = light;
       }
       indexUsed[index] = true;
       light->m_pbrShadowSlot = index;
