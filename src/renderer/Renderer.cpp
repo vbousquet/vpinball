@@ -3197,7 +3197,7 @@ void Renderer::BuildPBRLightList()
 {
    constexpr int texW = 256, texH = 32;
    constexpr int maxLights = 256, gridBase = 512, indexBase = 1024;
-   constexpr int maxIndices = texW * texH - indexBase, maxPerCell = 16;
+   constexpr int maxIndices = texW * texH - indexBase, maxPerCell = 32; // maxPerCell must match fs_pbr's cell count clamp
 
    // Cell size adapts to the table bounds (>= 64 units) so any playfield fits the fixed 32x16 grid capacity
    const float tableW = m_table->m_right - m_table->m_left;
@@ -3271,7 +3271,8 @@ void Renderer::BuildPBRLightList()
    for (int cell = 0; cell < cellCount; cell++)
    {
       const int start = indexCount;
-      const int count = min(static_cast<int>(counts[cell]), maxPerCell);
+      // Never promise more indices than the list holds: past its end the shader would read unwritten entries (light 0)
+      const int count = min(static_cast<int>(counts[cell]), min(maxPerCell, maxIndices - start));
       indexCount += count;
       float* const cellTexel = texData.data() + (gridBase + cell) * 4;
       cellTexel[0] = (float)start;
@@ -3299,7 +3300,7 @@ void Renderer::BuildPBRLightList()
          {
             const int cell = y * cellsX + x;
             const int slot = counts[cell]++;
-            if (slot < maxPerCell)
+            if (slot < static_cast<int>(texData[(gridBase + cell) * 4 + 1])) // the cell's (capped) count
             {
                const int idx = static_cast<int>(texData[(gridBase + cell) * 4]) + slot;
                if (idx < maxIndices)
