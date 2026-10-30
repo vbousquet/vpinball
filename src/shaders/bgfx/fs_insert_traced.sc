@@ -27,7 +27,7 @@
 //      plastic lets through: a hot insert's core goes white, as on camera, while its body, spill and lamp-off look keep the colour),
 //      w how much the plastic's colour tints the room glints (0 white, 1 the plastic's colour)
 // [11] x print map tint (inktint): an insert under printed art (Police Force's jackpot car and character patches) shows
-//      through the print by its alpha (the print's transmission) tinted by its colour; 0 = alpha only, as a cut-out window
+//      through the print by its alpha (the print's transmission) tinted by its hue; 0 = alpha only, as a cut-out window
 
 $input v_worldPos, v_tablePos, v_normal, v_texcoord0
 #ifdef STEREO
@@ -276,7 +276,9 @@ void main()
 	if (tracedParams[9].x > 0.0)
 	{
 		const vec4 ink = texture2DLod(tex_pbr_orm, v_tablePos.xy * tracedParams[9].xy + tracedParams[9].zw, 0.0);
-		result *= ink.a * mix(vec3_splat(1.0), mix(ink.rgb, vec3_splat(1.0), ink.a), tracedParams[11].x);
+		// the print as a colour filter: its hue (rgb over its brightest channel), its strength in the alpha
+		const vec3 hue = ink.rgb / max(max(ink.r, ink.g), max(ink.b, 1e-3));
+		result *= ink.a * mix(vec3_splat(1.0), mix(hue, vec3_splat(1.0), ink.a), tracedParams[11].x);
 	}
 
 	// Alignment view: the bake's square in a 2 mm grid, red outside it, the traced light in green
