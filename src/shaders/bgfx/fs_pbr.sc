@@ -316,8 +316,11 @@ vec4 pbr_light_texel(const int idx)
    return texelFetch(tex_pbr_lights, ivec2(idx & 255, idx >> 8), 0);
 }
 
-vec3 pbr_direct_light(const vec3 wN, const vec3 wV, const vec3 wPos, const vec3 diffuse, const vec3 F0, const float roughness)
+// Returns the diffuse direct light; the specular reflection is accumulated apart in specOut, since a see-through part
+// reflects it whatever its coverage (it is not modulated by alpha like the diffuse, as the indirect specular)
+vec3 pbr_direct_light(const vec3 wN, const vec3 wNg, const vec3 wV, const vec3 wPos, const vec3 diffuse, const vec3 F0, const float roughness, const float alpha, out vec3 specOut)
 {
+   specOut = vec3_splat(0.0);
    const vec2 cellf = clamp((wPos.xy - pbrLightGrid.xy) * pbrLightGrid.z, vec2_splat(0.0),
       vec2(pbrLightGrid.w - 1.0, pbrLightGrid2.x - 1.0));
    const vec4 cell = pbr_light_texel(512 + int(cellf.y) * int(pbrLightGrid.w) + int(cellf.x));
@@ -349,6 +352,17 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wV, const vec3 wPos, const vec3 
       const float NdotL = saturate(dot(wN, l));
       if (NdotL <= 0.0)
          continue;
+      // The geometric normal wNg (no normal map) decides the side of the surface a light is on. An opaque surface (alpha 1)
+      // gets nothing from a light behind it, however the shading normal leans (faded over ~3 deg so no terminator seam
+      // shows). See-through surfaces keep the light from behind, with their shadow lookup on the light's side below.
+      const float gNdotLraw = dot(wNg, l);
+      const float gFade = alpha < 1.0 ? 1.0 : saturate(gNdotLraw * 20.0);
+      if (gFade <= 0.0)
+         continue;
+      // Shadow lookups on the light's side of the geometric surface, slope bias from the geometric normal: a normal mapped
+      // surface lit at grazing incidence otherwise compared against the caster right under it, and the result flipped
+      // from shadow texel to shadow texel (stair-step stripes)
+      const float NdotLs = max(abs(gNdotLraw), 1e-3);
       const vec3 h = normalize(l + wV);
       const float NdotH = saturate(dot(wN, h));
       const float VdotH = saturate(dot(wV, h));
@@ -389,7 +403,7 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wV, const vec3 wPos, const vec3 
          {
             const vec2 grid = vsmP.yz;
             // Slope-scaled depth bias plus a constant term to fight self-shadowing acne
-            const float bias = pbrShadowParams.y * (1.0 - NdotL) / max(NdotL, 0.1) + 0.25 * pbrShadowParams.x;
+            const float bias = pbrShadowParams.y * (1.0 - NdotLs) / max(NdotLs, 0.1) + 0.25 * pbrShadowParams.x;
             const float blocker = pbr_vsm_depth(vsmP.x, grid, suv);
             if (blocker >= 0.0)
             {
@@ -420,7 +434,7 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wV, const vec3 wPos, const vec3 
          // the light->fragment direction, so the cube lookup samples deeper inside the caster
          // silhouette instead of grazing its edge (removes light leaks at caster contact points)
          const float faceGrid = vsmP.y;
-         const vec3 shadowPos = wPos + wN * (0.5 + 0.04 * sqrt(dist2));
+         const vec3 shadowPos = wPos + (gNdotLraw < 0.0 ? -wNg : wNg) * (0.5 + 0.04 * sqrt(dist2));
          const vec3 sdl = lPos.xyz - shadowPos;
          const float sdist = inversesqrt(dot(sdl, sdl));
          const vec3 ldir = -sdl * sdist; // normalized light -> fragment direction
@@ -437,7 +451,7 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wV, const vec3 wPos, const vec3 
             // the face's virtual texel size is 1/(faceGrid * PAGE_DIM) of a direction unit
             const float invFaceRes = 1.0 / (faceGrid * 128.0);
             const float filterRadius = clamp(lightRadius * worldGap / max(blocker, 1.0) * invFaceRes * 2.0, invFaceRes, 8.0 * invFaceRes);
-            const float bias = min(0.5 + 2.0 * (1.0 - NdotL) / max(NdotL, 0.05), 8.0);
+            const float bias = min(0.5 + 2.0 * (1.0 - NdotLs) / max(NdotLs, 0.05), 8.0);
             const vec3 upRef = abs(ldir.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
             const vec3 tX = normalize(cross(upRef, ldir));
             const vec3 tY = cross(ldir, tX);
@@ -458,7 +472,8 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wV, const vec3 wPos, const vec3 
       }
       BRANCH if (shadowMode == 1 || shadowMode >= 3) // RAYTRACED_BALL_SHADOWS or PBR ball shadow tiers
          shadow *= get_light_ball_shadow(lPos.xyz, -dl, sqrt(dist2));
-      acc += shadow * (diffuse * (vec3_splat(1.0) - F) * (1.0 / PI) * (lCol * (x * x / dist2)) * NdotL + spec);
+      acc += (gFade * shadow) * (diffuse * (vec3_splat(1.0) - F) * (1.0 / PI) * (lCol * (x * x / dist2)) * NdotL);
+      specOut += (gFade * shadow) * spec;
    }
    return acc;
 }
@@ -511,6 +526,10 @@ void main() {
    // Flip normal in case of backside lighting (same as legacy shading)
    if (dot(N, V) < 0.0)
       N = -N;
+   // Geometric normal (no normal map), facing the viewer: it tells which side of the surface a direct light is on
+   vec3 Ng = normalize(v_normal);
+   if (dot(Ng, V) < 0.0)
+      Ng = -Ng;
 
    const vec3 albedo = base.rgb;
    const vec3 F0 = mix(vec3_splat(0.04), albedo, metallic);
@@ -540,6 +559,7 @@ void main() {
 
    vec3 color = vec3_splat(0.0);
    vec3 spec = vec3_splat(0.0);
+   vec3 directSpec = vec3_splat(0.0);
 
    if (fDisableLighting_top_below.x != 0.0)
    { // Lighting disabled: fully emissive backward compatible behavior (unlit, twice the albedo)
@@ -562,7 +582,8 @@ void main() {
       {
          const vec3 wN = mul(vec4(N, 0.0), mView).xyz; // trafo back to world (orthonormal, no renormalize needed)
          const vec3 wV = normalize(cCameraPosWorld - v_tablePos);
-         color += pbr_direct_light(wN, wV, v_tablePos, diffuse, F0, roughness);
+         const vec3 wNg = mul(vec4(Ng, 0.0), mView).xyz;
+         color += pbr_direct_light(wN, wNg, wV, v_tablePos, diffuse, F0, roughness, base.a * staticColor_Alpha.a, directSpec);
       }
    }
 
@@ -570,8 +591,15 @@ void main() {
    {
       const vec3 light_dir = v_tablePos.xyz - lightCenter_doShadow.xyz;
       const float light_dist = length(light_dir);
-      color.rgb *= get_light_ball_shadow(lightCenter_doShadow.xyz, light_dir, light_dist);
+      const float ballShadow = get_light_ball_shadow(lightCenter_doShadow.xyz, light_dir, light_dist);
+      color.rgb *= ballShadow;
+      directSpec *= ballShadow;
    }
+   #ifdef TRANSPARENT
+      spec += directSpec; // reflects at full strength on a see-through part, like the indirect specular
+   #else
+      color += directSpec;
+   #endif
 
    // Emission
    vec3 emission = pbrEmission.rgb * pbrEmission.w;
