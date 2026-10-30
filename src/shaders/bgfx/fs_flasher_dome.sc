@@ -25,6 +25,9 @@
 // [6] gains: x bulb halo, y cap spot, z peak flash, w OFF bulb envelope and base ring (relative to the room)
 // [7] x emission scale (nit to linear), y debug (1 bars + core + cap, 2 glow, 3 sparkle, 4 bars only), z absorption scale (plastic colour),
 //     w pass: 0 additive layer over an opaque body, 1 transmittance (ZERO / INVSRC_COLOR blending), 2 additive layer over a see-through body
+// [8] x white leak at the peak: the share of the filament's own white light that the hottest parts (the coil's image, the
+//     cap spot, the shell facing the viewer) pass at full flash, so they roll off to white in the tonemapper while the
+//     edges, the flood and the bloom keep the red (0 = the 10-29 look, red-orange throughout)
 
 $input v_worldPos, v_tablePos, v_normal, v_texcoord0
 #ifdef STEREO
@@ -36,7 +39,7 @@ $input v_worldPos, v_tablePos, v_normal, v_texcoord0
 
 #include "common.sh"
 
-uniform vec4 domeParams[8];
+uniform vec4 domeParams[9];
 
 #ifdef STEREO
 	uniform mat4 matView[2];
@@ -314,7 +317,8 @@ void main()
 		const float tp = saturate(1.0 - abs(yh) / 2.2);         // parabolic taper: pointed ends, not round beads
 		const float coreX = (1.0 - smoothstep(0.025, 0.045, eRoot)) * pow(tp, 1.5) * (hb1 > 0.5 ? 1.0 : 0.0);
 		const float heat = mix(1.0, 3.0, heatW * (1.0 - 0.5 * capW));
-		const vec3 col = mix(bb * trN, vec3(1.0, 0.62, 0.10), 0.9);
+		vec3 col = mix(bb * trN, vec3(1.0, 0.62, 0.10), 0.9);
+		col = mix(col, bb, domeParams[8].x * pk * saturate(coreX * tp + 0.35 * tp)); // the hot coil's image goes white at the peak
 		bars = domeParams[5].y * lvlG * (sB * 0.2) * across * brk * prof * mix(0.35, 1.0, tp) * heat * (1.0 + 15.0 * coreX * tp) * col * flash * (1.0 - capW);
 		// Small orange bulb halo where the view ray passes the coil, carried by the flute edges
 		bars += 0.5 * domeParams[6].x * lvlG * exp(-(dvF * dvF + 3.0 * dhF * dhF) / (2.5 * 2.5)) * edge * edge * edge * bb * vec3(1.0, 0.35, 0.06) * heat;
@@ -329,7 +333,7 @@ void main()
 		const float lobe = exp(-(1.0 - saturate(c)) / 0.02) * (1.0 - capW);
 		// broken into the flutes: brighter along the groove roots, per-flank strength
 		const float streak = (0.25 + 0.75 * exp(-(eRoot / 0.12) * (eRoot / 0.12))) * (0.5 + domeHash(flankId * 5.31 + 0.7));
-		core = domeParams[6].x * lvlG * lobe * streak * mix(bb * trN, vec3(1.0, 0.62, 0.10), 0.6 * lobe) * mix(1.0, 3.0, heatW) * flash;
+		core = domeParams[6].x * lvlG * lobe * streak * mix(mix(bb * trN, vec3(1.0, 0.62, 0.10), 0.6 * lobe), bb, domeParams[8].x * pk * lobe) * mix(1.0, 3.0, heatW) * flash;
 	}
 
 	// Cap: the coil seen down through the flat cap (parallax correct: where the cavity ray crosses the coil)
@@ -345,7 +349,8 @@ void main()
 	// the silhouette stays red
 	const float nv = saturate(dot(Ns, V));
 	const float whS = (1.0 - 0.45 * edge) * (0.05 + 0.95 * nv * nv) * fall;
-	const vec3 white = domeParams[5].w * pk * whS * vec3(1.0, 0.05, 0.018);
+	// at the peak the shell facing the viewer passes some of the filament's white (the leak), its silhouette stays red
+	const vec3 white = domeParams[5].w * pk * whS * mix(vec3(1.0, 0.05, 0.018), bb * vec3(1.0, 0.8, 0.65), domeParams[8].x * nv * nv * fall / (1.0 + fall));
 
 	// OFF sparkle: the view ray reflects off the (hash-tilted) inner facet with Fresnel, goes back out through the skin and
 	// picks up a fixed studio room. Deep red: two passes through the wall. Ridge glints and needles on the flute edges.

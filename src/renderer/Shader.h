@@ -336,7 +336,7 @@ enum class ShaderUniform : unsigned int
    SHADER_UNIFORM(ShaderUniformType::Float4v, balls, 8), // Basic & Flasher (for ball shadows)
    SHADER_UNIFORM(ShaderUniformType::Float4, staticColor_Alpha, 1), // Basic & Flasher
    SHADER_UNIFORM(ShaderUniformType::Float4v, tracedParams, 12), // Basic (traced insert parameters, see fs_insert_traced.sc)
-   SHADER_UNIFORM(ShaderUniformType::Float4v, domeParams, 8), // Basic (flasher dome parameters, see fs_flasher_dome.sc)
+   SHADER_UNIFORM(ShaderUniformType::Float4v, domeParams, 9), // Basic (flasher dome parameters, see fs_flasher_dome.sc)
    SHADER_UNIFORM(ShaderUniformType::Float4, w_h_height, 1), // Post process & Basic (for screen space reflection/refraction)
 
    // Shared material for Ball, Basic and Classic light shaders
