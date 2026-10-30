@@ -319,6 +319,7 @@ static const ankerl::unordered_dense::map<int, FieldMap>& GetFieldMaps()
          { FID(LINK), "state_src_link" },
          { FID(TYPE), "type" },
          { FID(RADI), "radius" },
+         { FID(ROOM), "room_light" },
          { FID(SHAP), "shape" },
          { FID(SHBM), "show_bulb_mesh" },
          { FID(SHDW), "shadows" },

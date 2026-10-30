@@ -288,6 +288,13 @@ void LightUIPart::UpdatePropertyPane(PropertyPane& props)
                [](const Light* light) { return light->m_d.m_szImage; }, //
                [](Light* light, const string& v) { light->m_d.m_szImage = v; });
          }
+         else if (light->m_d.m_type == LightType::PBR)
+         {
+            props.Checkbox<Light>(
+               m_part, "Room Light"s, //
+               [](const Light* light) { return light->m_d.m_roomLight; }, //
+               [](Light* light, bool v) { light->m_d.m_roomLight = v; });
+         }
       }
       props.EndSection();
    }
