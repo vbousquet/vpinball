@@ -101,10 +101,11 @@ uniform vec4 pbrFactors;
 #define pbrAOEnabled       (pbrFactors.w)
 
 uniform vec4 pbrEmission; // rgb: emission color, w: emission intensity
-uniform vec4 pbrMapFlags; // x: ORM map bound, y: emission map bound, z: thin surface transmission (material wrap lighting)
+uniform vec4 pbrMapFlags; // x: ORM map bound, y: emission map bound, z: thin surface transmission (material wrap lighting), w: own dome lamp radius
 #define hasORMMap      (pbrMapFlags.x != 0.0)
 #define hasEmissionMap (pbrMapFlags.y != 0.0)
 #define pbrTransmission (pbrMapFlags.z)
+#define pbrOwnLampRadius (pbrMapFlags.w) // a flasher dome body is not lit by its own dome lamp (its dome layer draws that)
 
 uniform vec4 pbrCoat; // x: clear coat strength (0 = off), y: clear coat perceptual roughness
 #define coatStrength  (pbrCoat.x)
@@ -460,7 +461,7 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 
       // Windowed inverse square attenuation: (1 - (d/r)^4)^2 / d^2 gives a smooth cutoff at the light range
       const float rangeRatio = dist2 / (lPos.w * lPos.w);
       const float x = saturate(1.0 - rangeRatio * rangeRatio);
-      if (x <= 0.0)
+      if (x <= 0.0 || (lIdx.w > 0.0 && dist2 < pbrOwnLampRadius * pbrOwnLampRadius))
          continue;
       const vec3 l = dl * inversesqrt(dist2);
       // Upward facing emitter (a lit insert): Lambertian emission around +z, so the light does not spill sideways

@@ -1103,6 +1103,38 @@ void Primitive::Render(const unsigned int renderMask)
          alpha = 0.f;
    }
 
+   // Flasher dome parameters (fs_flasher_dome.sc) for one of its passes: 0 the layer over an opaque body, 1 the transmittance
+   // pass under a see-through body, 2 the layer over a see-through body
+   const auto flasherDomeParams = [this](vec4 *params, const float pass)
+   {
+      const FlasherDomeShape &d = m_dome;
+      const Matrix3D &mat3 = m_fullMatrix;
+      const Vertex3Ds base = mat3 * Vertex3Ds(d.cx, d.cy, d.baseZ);
+      Vertex3Ds axis = mat3.MultiplyVectorNoTranslate(Vertex3Ds(0.f, 0.f, 1.f));
+      const float scale = axis.Length(); // object to table units
+      axis.Normalize();
+      // The coil lies along the dome's object x; the flute phase is measured from it
+      Vertex3Ds coil = mat3.MultiplyVectorNoTranslate(Vertex3Ds(1.f, 0.f, 0.f));
+      coil -= axis * coil.Dot(axis);
+      coil.Normalize();
+      const float mm = VPUTOMM(1.f);
+      float level = 0.f;
+      if (m_lightmap && m_lightmap->m_d.m_intensity * m_lightmap->m_d.m_intensity_scale > 0.f)
+         level = m_lightmap->m_currentIntensity / (m_lightmap->m_d.m_intensity * m_lightmap->m_d.m_intensity_scale);
+      // The OFF glints are lit by the room: they follow the scene lighting level, relative to the table's default level
+      const float roomLevel = m_renderer->m_sceneLighting.GetGlobalEmissionScale() / max(m_ptable->m_globalEmissionScale, 0.01f);
+      const vec4 p[8] = {
+         vec4(base.x, base.y, base.z, mm),
+         vec4(axis.x, axis.y, axis.z, d.radius * scale * mm),
+         vec4(coil.x, coil.y, coil.z, d.height * scale * mm),
+         vec4(FlasherDomeTune("fil=", 0.47f) * d.height * scale * mm, (float)d.flutes, d.phase, level),
+         vec4(d.rootR * scale * mm, d.ridgeR * scale * mm, d.capZ * scale * mm, FlasherDomeTune("room=", 1.5f) * roomLevel),
+         vec4(FlasherDomeTune("glow=", 300.f), FlasherDomeTune("bars=", 30000.f), FlasherDomeTune("needle=", 1.f), FlasherDomeTune("white=", 6000.f)),
+         vec4(FlasherDomeTune("halo=", 2500.f), FlasherDomeTune("spot=", 2000.f), FlasherDomeTune("flash=", 8.f), FlasherDomeTune("bulb=", 1.f)),
+         vec4(FlasherDomeTune("gain=", 1.f / 170.f), FlasherDomeTune("debug=", 0.f), FlasherDomeTune("sigma=", 1.f), pass) };
+      std::copy(p, p + 8, params);
+   };
+
    // Traced insert prototype: an additive card whose image is a multi-view traced bake ('TRACED_' image name prefix). It is
    // drawn with the lamp off too, since the room still glints in its facets
    const bool tracedInsert = m_d.m_addBlend && lowerCase(m_d.m_szImage).rfind("traced_", 0) == 0;
@@ -1326,12 +1358,34 @@ void Primitive::Render(const unsigned int renderMask)
    else
    {
       // Default lit primitive rendering
+      // A flasher dome with a see-through body: first its transmittance pass, which filters what lies behind the dome through
+      // the plastic (it multiplies the framebuffer: ZERO / INVSRC_COLOR blending), then the body over it (same sort key,
+      // submitted after it)
+      if (flasherDome && mat->m_bOpacityActive && isPBR && MeasureFlasherDome().valid)
+      {
+         vec4 params[8];
+         flasherDomeParams(params, 1.f);
+         const RenderState saved = m_renderer->m_renderDevice->GetRenderState();
+         m_renderer->m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_TRUE);
+         m_renderer->m_renderDevice->SetRenderState(RenderState::SRCBLEND, RenderState::ZERO);
+         m_renderer->m_renderDevice->SetRenderState(RenderState::DESTBLEND, RenderState::INVSRC_COLOR);
+         m_renderer->m_renderDevice->SetRenderState(RenderState::BLENDOP, RenderState::BLENDOP_ADD);
+         m_renderer->m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
+         m_renderer->m_renderDevice->m_basicShader->SetFloat4v(ShaderUniform::domeParams, params, 8);
+         m_renderer->m_renderDevice->m_basicShader->SetTechnique(ShaderTechnique::flasher_dome);
+         m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, true, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, bodyIndices);
+         m_renderer->m_renderDevice->GetRenderState() = saved;
+      }
       m_renderer->m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, depthMask ? RenderState::RS_TRUE : RenderState::RS_FALSE);
       const vec4 color = convertColor(m_d.m_color, alpha * (float)(1.0 / 100.0));
       m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::staticColor_Alpha, &color);
-      const Shader::PBRTextureSet pbrMaps = isPBR
+      Shader::PBRTextureSet pbrMaps = isPBR
          ? m_renderer->GetPBRTextureSet(m_d, m_d.m_vPosition, -1.f, isReflectionPass, mat->m_bOpacityActive, renderMask, mat->m_bOpacityActive ? refractions : nullptr)
          : Shader::PBRTextureSet();
+      // A flasher dome body is lit by the table's lights (a translucent red body glows from the GI bulbs behind it) but not
+      // by its own lamp inside it: the dome layer draws that, and the lit look is tuned on it alone
+      if (flasherDome && m_dome.valid)
+         pbrMaps.ownLampRadius = 1.5f * max(m_dome.height, m_dome.radius) * m_fullMatrix.MultiplyVectorNoTranslate(Vertex3Ds(0.f, 0.f, 1.f)).Length();
       m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(img ? ShaderTechnique::basic_with_texture : ShaderTechnique::basic_without_texture, *mat,
          img ? pinAlphaTest >= 0.f && !img->IsOpaque() : false, nMap, reflections, refractions, isPBR ? &pbrMaps : nullptr);
 
@@ -1434,29 +1488,8 @@ void Primitive::Render(const unsigned int renderMask)
    // Flasher dome layer: additive over the body just drawn (same sort key, submitted after it), outer skin only (depth equal)
    if (flasherDome && !is_reflection_only_pass && MeasureFlasherDome().valid)
    {
-      const FlasherDomeShape &d = m_dome;
-      const Matrix3D &mat3 = m_fullMatrix;
-      const Vertex3Ds base = mat3 * Vertex3Ds(d.cx, d.cy, d.baseZ);
-      Vertex3Ds axis = mat3.MultiplyVectorNoTranslate(Vertex3Ds(0.f, 0.f, 1.f));
-      const float scale = axis.Length(); // object to table units
-      axis.Normalize();
-      // The coil lies along the dome's object x; the flute phase is measured from it
-      Vertex3Ds coil = mat3.MultiplyVectorNoTranslate(Vertex3Ds(1.f, 0.f, 0.f));
-      coil -= axis * coil.Dot(axis);
-      coil.Normalize();
-      const float mm = VPUTOMM(1.f);
-      float level = 0.f;
-      if (m_lightmap && m_lightmap->m_d.m_intensity * m_lightmap->m_d.m_intensity_scale > 0.f)
-         level = m_lightmap->m_currentIntensity / (m_lightmap->m_d.m_intensity * m_lightmap->m_d.m_intensity_scale);
-      const vec4 params[8] = {
-         vec4(base.x, base.y, base.z, mm),
-         vec4(axis.x, axis.y, axis.z, d.radius * scale * mm),
-         vec4(coil.x, coil.y, coil.z, d.height * scale * mm),
-         vec4(FlasherDomeTune("fil=", 0.47f) * d.height * scale * mm, (float)d.flutes, d.phase, level),
-         vec4(d.rootR * scale * mm, d.ridgeR * scale * mm, d.capZ * scale * mm, FlasherDomeTune("room=", 1.5f)),
-         vec4(FlasherDomeTune("glow=", 300.f), FlasherDomeTune("bars=", 30000.f), FlasherDomeTune("needle=", 1.f), FlasherDomeTune("white=", 6000.f)),
-         vec4(FlasherDomeTune("halo=", 2500.f), FlasherDomeTune("spot=", 2000.f), FlasherDomeTune("flash=", 8.f), 0.f),
-         vec4(FlasherDomeTune("gain=", 1.f / 170.f), FlasherDomeTune("debug=", 0.f), FlasherDomeTune("sigma=", 1.f), 0.f) };
+      vec4 params[8];
+      flasherDomeParams(params, mat->m_bOpacityActive ? 2.f : 0.f);
       m_renderer->m_renderDevice->ResetRenderState();
       m_renderer->m_renderDevice->EnableAlphaBlend(true);
       m_renderer->m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);

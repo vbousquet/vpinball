@@ -545,6 +545,7 @@ public:
       Texture* emissionMap = nullptr;
       bool inShaderSpecular = false;
       bool transparent = false;
+      float ownLampRadius = 0.f; // a flasher dome body: its own dome lamp (closer than this, table units) does not light it
    };
    void SetTechniqueMaterial(ShaderTechnique technique, const Material& mat, const bool doAlphaTest = false, const bool doNormalMapping = false, const bool doReflection = false,
       const bool doRefraction = false, const PBRTextureSet* const pbrMaps = nullptr);

@@ -915,7 +915,7 @@ void Shader::SetTechniqueMaterial(
       const vec4 emission = convertColor(mat.m_cEmission, mat.m_fEmissionIntensity);
       SetVector(ShaderUniform::pbrEmission, &emission);
       // PBR materials use the (legacy) wrap lighting as their thin surface transmission (back lit translucency)
-      SetVector(ShaderUniform::pbrMapFlags, pbrMaps->ormMap != nullptr ? 1.f : 0.f, pbrMaps->emissionMap != nullptr ? 1.f : 0.f, saturate(mat.m_fWrapLighting), 0.f);
+      SetVector(ShaderUniform::pbrMapFlags, pbrMaps->ormMap != nullptr ? 1.f : 0.f, pbrMaps->emissionMap != nullptr ? 1.f : 0.f, saturate(mat.m_fWrapLighting), pbrMaps->ownLampRadius);
       // Clear coat layer (on by default, VPX_COAT=0 disables it for A/B tests): a zero strength skips the coat lobe in the shaders
       static const bool coatEnabled = []() { const char* const v = std::getenv("VPX_COAT"); return v == nullptr || v[0] != '0'; }();
       SetVector(ShaderUniform::pbrCoat, coatEnabled ? saturate(mat.m_fClearcoat) : 0.f, clamp(mat.m_fClearcoatRoughness, 0.02f, 1.f), 0.f, 0.f);
