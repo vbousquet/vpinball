@@ -312,6 +312,10 @@ public:
    // The dome's light cookie: x flute count, y angle of a groove root around table z (rad), z where the dome base cuts the
    // light below the filament horizon (deg)
    bool GetFlasherDomeCookie(vec3 &cookie);
+   // The table's light (PBR lights other than dome lamps) arriving at the dome's bulb, unshadowed irradiance (linear), set
+   // each frame by the PBR light list build: the plastic scatters it (the dome layer's GI glow)
+   vec3 m_domeGI = vec3(0.f, 0.f, 0.f);
+   vec4 m_domeGIDir = vec4(0.f, 0.f, 1.f, 0.f); // where it comes from (table space, unit), w its directionality (0..1)
 
    Mesh m_mesh;
 

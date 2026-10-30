@@ -23,11 +23,14 @@
 // [4] x inner radius at the groove roots, y at the ridge tips, z cap underside height, w room light (OFF sparkle, linear)
 // [5] gains: x body glow, y bars (nit), z needles and ridge glints (relative to the room), w white-hot peak (nit)
 // [6] gains: x bulb halo, y cap spot, z peak flash, w OFF bulb envelope and base ring (relative to the room)
-// [7] x emission scale (nit to linear), y debug (1 bars + core + cap, 2 glow, 3 sparkle, 4 bars only), z absorption scale (plastic colour),
+// [7] x emission scale (nit to linear), y debug (1 bars + core + cap, 2 glow, 3 sparkle, 4 bars only, 5 GI glow), z absorption scale (plastic colour),
 //     w pass: 0 additive layer over an opaque body, 1 transmittance (ZERO / INVSRC_COLOR blending), 2 additive layer over a see-through body
 // [8] x white leak at the peak: the share of the filament's own white light that the hottest parts (the coil's image, the
 //     cap spot, the shell facing the viewer) pass at full flash, so they roll off to white in the tonemapper while the
 //     edges, the flood and the bloom keep the red (0 = the 10-29 look, red-orange throughout)
+//     yzw the table's light at the dome (GI bulbs, inserts: irradiance at the bulb through a soft knee, linear), which the
+//     plastic scatters: the GI glow (OFF and dim levels; over a see-through body only)
+// [9] xyz where that light comes from (table space, unit), w how much the glow follows it (a lit side and a dark side)
 
 $input v_worldPos, v_tablePos, v_normal, v_texcoord0
 #ifdef STEREO
@@ -39,7 +42,7 @@ $input v_worldPos, v_tablePos, v_normal, v_texcoord0
 
 #include "common.sh"
 
-uniform vec4 domeParams[9];
+uniform vec4 domeParams[10];
 
 #ifdef STEREO
 	uniform mat4 matView[2];
@@ -225,7 +228,7 @@ void main()
 		// The flutes are a row of cylindrical lenses: what lies behind reads in vertical bands, brighter through the thin
 		// groove roots, each flank its own strength (not on the cap: one moulding, only its ribs)
 		const float band = mix((0.55 + 0.45 * cos(2.0 * DOME_PI * eP)) * (0.45 + 0.55 * domeHash(flankId * 3.71 + 0.9)), 1.0, capW);
-		vec3 tr = exp(-sigma * (thN / max(dot(-VrIn, Ns), 0.3) + 1.2 * wallB)) * band * (0.5 - 0.3 * edge);
+		vec3 tr = exp(-sigma * (thN / max(dot(-VrIn, Ns), 0.3) + 1.2 * wallB)) * band * (0.5 - mix(0.3, 0.12, capW) * edge);
 		vec3 nb;
 		const float tb = tir ? -1.0 : domeBulb(Pin, d2, Fc, rbulb, nb);
 		if (tb > 0.0)
@@ -357,10 +360,14 @@ void main()
 	vec3 sparkle = vec3_splat(0.0);
 	BRANCH if (domeParams[4].w > 0.0)
 	{
+		// The new OFF look (seamless cap, bulb envelope and base ring) is opt-in: over a see-through body only (mode 2), an
+		// opaque body keeps the 10-29 look exactly
+		const float newLook = mode > 1.5 ? 1.0 : 0.0;
+		const float capN = capW * newLook;
 		// The cap underside is one moulding (a starburst of thin ribs), not facets: no per-flank tilt or gain there, which drew
 		// the cap as a fan of light and dark wedges (the 'seams')
-		const float hA = mix(domeHash(flankId * 78.233 + 1.7), 0.5, capW);
-		const float hB = mix(domeHash(flankId * 12.9898 + 7.3), 0.5, capW);
+		const float hA = mix(domeHash(flankId * 78.233 + 1.7), 0.5, capN);
+		const float hB = mix(domeHash(flankId * 12.9898 + 7.3), 0.5, capN);
 		const vec3 nJ = normalize(nIn + tg * (hB - 0.5) * 0.25 + vec3(0.0, (hA - 0.5) * 0.15, 0.0));
 		const float ci = saturate(dot(VrIn, nJ));
 		const float st2 = 1.49 * 1.49 * (1.0 - ci * ci);
@@ -373,10 +380,10 @@ void main()
 		const vec3 wd = ro.x * ex + ro.y * up + ro.z * ez;
 		const vec3 tint = exp(-sigma * 2.0 * thN);
 		const float facetGain = mix(0.05, 2.5, hA * hA * hA);
-		const float side = mix(s > 0.0 ? 1.0 : 0.25, 1.0, capW);
+		const float side = mix(s > 0.0 ? 1.0 : 0.25, 1.0, capN);
 		const float facing = smoothstep(-0.15, 0.35, dot(V, s * tg));
-		const float spark = mix(mix(0.12, 2.2, pow(domeHash(idx * 12.9898 + 4.1), 8.0)), 0.5, capW); // a few hot facets, most dim
-		sparkle = Fr * min(domeStudio(wd), mix(8.0, 1.0, capW)) * tint * facetGain * side * spark * mix(1.0, 0.3 + 1.5 * edge, capW);
+		const float spark = mix(mix(0.12, 2.2, pow(domeHash(idx * 12.9898 + 4.1), 8.0)), 0.5, capN); // a few hot facets, most dim
+		sparkle = Fr * min(domeStudio(wd), mix(8.0, 1.0, capW)) * tint * facetGain * side * spark * mix(1.0, 0.6 + 0.8 * edge, capN);
 		// The room seen through the dome (into the cavity, out through the far wall): deep red, lensed by the flutes. Over a
 		// see-through body, which shows the real scene behind (transmittance pass), it stays as the room light the flutes
 		// scatter (the plastic's own ruby glow), weaker
@@ -390,13 +397,13 @@ void main()
 		const vec3 tint2 = exp(-sigma * (thN + 1.2 * wallB));
 		vec3 nb;
 		const float tb = tir ? -1.0 : domeBulb(Pin, d2, Fc, rbulb, nb);
-		if (tb > 0.0 && Pin.y + d2.y * tb >= ySock)
+		if (newLook > 0.0 && tb > 0.0 && Pin.y + d2.y * tb >= ySock)
 		{
 			const float Fg = 0.04 + 0.96 * pow(1.0 - saturate(dot(-d2, nb)), 5.0);
 			const vec3 rbv = reflect(d2, nb);
 			sparkle += domeParams[6].w * Fg * min(domeStudio(rbv.x * ex + rbv.y * up + rbv.z * ez), 6.0) * tint2;
 		}
-		if (!tir && d2.y < -0.05)
+		if (newLook > 0.0 && !tir && d2.y < -0.05)
 		{
 			const float tR = (0.6 - Pin.y) / d2.y;
 			const vec3 B = Pin + d2 * tR;
@@ -447,8 +454,18 @@ void main()
 		sparkle *= domeParams[4].w;
 	}
 
-	vec3 result = (body + bars + core + cap + white) * domeParams[7].x + sparkle;
+	// GI glow: the table's light scattered in the red plastic (deep red: the hemispherical path through the wall), banded by
+	// the flutes and their edges, a little stronger low (the light comes in from below, through the base and the plastic it
+	// stands on) and on the cap's ribs; it gives way to the lamp's own glow as the lamp comes up
+	// The side facing the light glows, the far side much less (a wrapped lobe: the light spreads round in the plastic)
+	const float giSide = mix(1.0, 1.8 * saturate((dot(wN, domeParams[9].xyz) + 0.35) / 1.35), domeParams[9].w);
+	const vec3 giGlow = (mode > 1.5 ? 1.0 : 0.0) * domeParams[8].yzw * trH * mix(facet * (0.7 + 0.6 * edge), 0.85 + 0.3 * edge, capW)
+		* giSide * (1.15 - 0.3 * saturate(P.y / max(H, 1.0))) * (1.0 - lvlG) * (1.0 / DOME_PI);
+
+	vec3 result = (body + bars + core + cap + white) * domeParams[7].x + sparkle + giGlow;
 	if (domeParams[7].y > 0.5)
 		result = domeParams[7].y < 1.5 ? (bars + core + cap) * domeParams[7].x : (domeParams[7].y < 2.5 ? body * domeParams[7].x : (domeParams[7].y < 3.5 ? sparkle : bars * domeParams[7].x));
+	if (domeParams[7].y > 4.5)
+		result = giGlow;
 	gl_FragColor = vec4(result, 1.0);
 }
