@@ -111,7 +111,7 @@ uniform vec4 pbrCoat; // x: clear coat strength (0 = off), y: clear coat percept
 #define coatRoughness (pbrCoat.y)
 
 uniform vec4 pbrLightGrid;  // xy: cluster grid origin (table pos), z: inverse cell size, w: cell count x
-uniform vec4 pbrLightGrid2; // x: cell count y, y: light count
+uniform vec4 pbrLightGrid2; // x: cell count y, y: light count, z: specular AA strength (VPX_SPEC_AA, 1 = default, 0 = off)
 
 uniform vec4 pbrProbes0; // reflection plane of the first bound probe (dot(n,p) + w = 0)
 uniform vec4 pbrProbes1; // reflection plane of the second bound probe
@@ -401,6 +401,15 @@ vec4 pbr_light_texel(const int idx)
    return texelFetch(tex_pbr_lights, ivec2(idx & 255, idx >> 8), 0);
 }
 
+// Geometric specular AA: the GGX roughness widened by the screen-space variance of the normal n (Tokuyoshi & Kaplanyan
+// 2019: sigma^2 = 1/2pi, kappa = 0.18). Fragment derivatives: call from uniform control flow only.
+float pbr_aa_roughness(const vec3 n, const float roughness)
+{
+   const vec3 dx = dFdx(n), dy = dFdy(n);
+   const float a = roughness * roughness;
+   return sqrt(sqrt(min(a * a + min(pbrLightGrid2.z * 0.31831 * (dot(dx, dx) + dot(dy, dy)), 0.18), 1.0)));
+}
+
 // Returns the diffuse (and transmitted) direct light; the specular reflection is accumulated apart in specOut, since a
 // see-through part reflects it whatever its coverage (it is not modulated by alpha like the diffuse, as the indirect specular)
 vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 wV, const vec3 wPos, const vec3 diffuse, const vec3 F0, const float roughness, const float alpha, out vec3 specOut)
@@ -415,7 +424,7 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 
    // Specular AA: widen the lobe (alpha2) by the screen-space normal variance so a highlight
    // narrower than a pixel spreads its energy instead of strobing single pixels (no TAA in v1).
    // Only the direct term is widened: indirect paths mip-filter by the material roughness.
-   const float a2 = min(a * a + 0.5 * max(dot(dFdx(wN), dFdx(wN)), dot(dFdy(wN), dFdy(wN))), 0.25);
+   const float a2 = min(a * a + pbrLightGrid2.z * 0.5 * max(dot(dFdx(wN), dFdx(wN)), dot(dFdy(wN), dFdy(wN))), 0.25);
    const float NdotV = saturate(dot(wN, wV));
    const float aAA = sqrt(a2);
    const vec3 wR = reflect(-wV, wN);
@@ -426,7 +435,7 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 
    BRANCH if (coatStrength > 0.0)
    {
       const float ca = coatRoughness * coatRoughness;
-      ca2 = min(ca * ca + 0.5 * max(dot(dFdx(wNc), dFdx(wNc)), dot(dFdy(wNc), dFdy(wNc))), 0.25);
+      ca2 = min(ca * ca + pbrLightGrid2.z * 0.5 * max(dot(dFdx(wNc), dFdx(wNc)), dot(dFdy(wNc), dFdy(wNc))), 0.25);
       caAA = sqrt(ca2);
       cNdotV = saturate(dot(wNc, wV));
       cwR = reflect(-wV, wNc);
@@ -727,21 +736,31 @@ void main() {
       roughness = mix(roughness, max(roughness, coatRoughness), coatStrength);
    }
 
+   // Specular AA for the indirect lobes too (the direct lobe has its own in pbr_direct_light): a curved metal part a few
+   // pixels wide (post, standoff, wire) reflects the env's window or a probe's bulb as a sub-pixel stripe that crawls as
+   // the view moves. Widen the GGX alpha^2 by the screen-space variance of the normal (Tokuyoshi & Kaplanyan 2019,
+   // sigma^2 = 1/2pi per axis, kappa 0.18), which picks the env / probe mip as well. Flat parts (playfield) keep theirs.
+   // The variance is taken on the interpolated vertex normal: the surface's curvature, not its normal map (fine scratches
+   // must stay sharp) nor the facing flip (a jump at the silhouette of a double sided sheet)
+   const vec3 Nv = normalize(v_normal);
+   const float roughnessIBL = pbr_aa_roughness(Nv, roughness);
+   const float coatRoughnessIBL = pbr_aa_roughness(Nv, coatRoughness);
+
    // Indirect specular weight (envmap evaluated in-shader for INSHADERSPEC, otherwise deferred to the resolve pass)
    vec3 envSpec;
    #ifdef STEREO
-      const vec3 W = pbr_specular_weight(N, V, F0, roughness, occlusion, v_eye, envSpec);
+      const vec3 W = pbr_specular_weight(N, V, F0, roughnessIBL, occlusion, v_eye, envSpec);
    #else
-      const vec3 W = pbr_specular_weight(N, V, F0, roughness, occlusion, envSpec);
+      const vec3 W = pbr_specular_weight(N, V, F0, roughnessIBL, occlusion, envSpec);
    #endif
    // Planar probe radiance, blended per pixel between the assigned probes by distance to their
    // reflection planes, mixed with the envmap specular over the uncovered range. In probe render
    // contexts (INSHADERSPEC without bound probes) the weights are 0 leaving envmap only.
    const vec2 suv = gl_FragCoord.xy * w_h_height.xy;
    #ifdef STEREO
-      const vec4 probe = pbr_probe_specular(v_tablePos, suv, roughness, false, v_eye);
+      const vec4 probe = pbr_probe_specular(v_tablePos, suv, roughnessIBL, false, v_eye);
    #else
-      const vec4 probe = pbr_probe_specular(v_tablePos, suv, roughness, false);
+      const vec4 probe = pbr_probe_specular(v_tablePos, suv, roughnessIBL, false);
    #endif
    // Same soft luminance knee as the direct specular: bound hot probe/envmap radiance (e.g. a
    // bulb inside a probe) before it feeds in-shader specular, the sideband and the resolve's
@@ -760,11 +779,11 @@ void main() {
    {
       vec3 envCoat;
       #ifdef STEREO
-         const vec3 Wc = coatStrength * pbr_specular_weight(Nc, V, vec3_splat(0.04), coatRoughness, occlusion, v_eye, envCoat);
-         const vec4 probeCoat = pbr_probe_specular(v_tablePos, suv, coatRoughness, true, v_eye);
+         const vec3 Wc = coatStrength * pbr_specular_weight(Nc, V, vec3_splat(0.04), coatRoughnessIBL, occlusion, v_eye, envCoat);
+         const vec4 probeCoat = pbr_probe_specular(v_tablePos, suv, coatRoughnessIBL, true, v_eye);
       #else
-         const vec3 Wc = coatStrength * pbr_specular_weight(Nc, V, vec3_splat(0.04), coatRoughness, occlusion, envCoat);
-         const vec4 probeCoat = pbr_probe_specular(v_tablePos, suv, coatRoughness, true);
+         const vec3 Wc = coatStrength * pbr_specular_weight(Nc, V, vec3_splat(0.04), coatRoughnessIBL, occlusion, envCoat);
+         const vec4 probeCoat = pbr_probe_specular(v_tablePos, suv, coatRoughnessIBL, true);
       #endif
       coatIBL = 1.0 - coatStrength * (0.04 + 0.96 * pow(1.0 - saturate(dot(Nc, V)), 5.0));
       sideSrc = mix(envCoat, probeCoat.rgb, probeCoat.a);
@@ -867,10 +886,10 @@ void main() {
 
    #ifdef SIDEBAND
       #ifdef TRANSPARENT
-         // Alpha-blended sideband attenuation (premultiplied blend): stored L_probe/W_probe/W fade by (1-alpha)
+         // Alpha-blended sideband attenuation (premultiplied blend): stored L_probe/W_probe/W fade by (1-cover)
          // while the mask in each attachment's alpha accumulates the coverage toward 1
-         gl_FragData[1] = vec4(0.0, 0.0, 0.0, alpha);
-         gl_FragData[2] = vec4(0.0, 0.0, 0.0, alpha);
+         gl_FragData[1] = vec4(0.0, 0.0, 0.0, cover);
+         gl_FragData[2] = vec4(0.0, 0.0, 0.0, cover);
       #else
          gl_FragData[1] = vec4(sideSrc, sideCoverage); // probe radiance (envmap fallback mix) + probe coverage (coat lobe when coated)
          gl_FragData[2] = vec4(fDisableLighting_top_below.x != 0.0 ? vec3_splat(0.0) : sideW, 1.0); // specular weight (0 for unlit) + PBR mask flag

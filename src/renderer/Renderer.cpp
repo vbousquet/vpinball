@@ -247,7 +247,7 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
          = std::make_shared<Sampler>(m_renderDevice, "PBR Light List"s, SurfaceType::RT_DEFAULT, m_renderDevice->m_pbrLightListTex, bgfx::TextureFormat::RGBA32F, 256, 32, true);
       m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_pbr_lights, m_renderDevice->m_pbrLightList);
       m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrLightGrid, 0.f, 0.f, 0.f, 1.f);
-      m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrLightGrid2, 1.f, 0.f, 0.f, 0.f);
+      m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrLightGrid2, 1.f, 0.f, std::getenv("VPX_SPEC_AA") ? (float)atof(std::getenv("VPX_SPEC_AA")) : 1.f, 0.f);
    }
 #endif
 
@@ -3441,7 +3441,9 @@ void Renderer::BuildPBRLightList()
    }
 
    m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrLightGrid, m_table->m_left, m_table->m_top, 1.f / cellSize, (float)cellsX);
-   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrLightGrid2, (float)cellsY, (float)lightCount, 0.f, 0.f);
+   // z: specular AA strength (fs_pbr: the normal variance added to the GGX lobes), VPX_SPEC_AA=0 turns it off for A/B
+   static const float specAA = std::getenv("VPX_SPEC_AA") ? (float)atof(std::getenv("VPX_SPEC_AA")) : 1.f;
+   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrLightGrid2, (float)cellsY, (float)lightCount, specAA, 0.f);
    m_renderDevice->AddBeginOfFrameCmd([rd = m_renderDevice, data = std::move(texData)]()
       { bgfx::updateTexture2D(rd->m_pbrLightListTex, 0, 0, 0, 0, 256, 32, bgfx::copy(data.data(), static_cast<uint32_t>(data.size() * sizeof(float)))); });
 }
