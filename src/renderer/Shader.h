@@ -164,6 +164,8 @@ enum class ShaderTechnique : unsigned int
    SHADER_TECHNIQUE(pbr_notex),
    SHADER_TECHNIQUE(pbr_t),
    SHADER_TECHNIQUE(pbr_t_notex),
+   SHADER_TECHNIQUE(pbr_ti),
+   SHADER_TECHNIQUE(pbr_ti_notex),
    SHADER_TECHNIQUE(pbr_is),
    SHADER_TECHNIQUE(pbr_is_at),
    SHADER_TECHNIQUE(pbr_is_notex),
