@@ -8,7 +8,11 @@
 //
 // Layers: body glow (near wall and the far wall seen across the dome), bars (the coil seen through each flute flank, a GGX
 // transmission lobe against a 5-sample line filament), bulb halo and cap spot, the peak (heat, flash, white-hot outer
-// skin), and the OFF sparkle (facet glints of a fixed studio room, ridge glints and needles on the flute edges).
+// skin), and the OFF sparkle (facet glints of a fixed studio room, ridge glints and needles on the flute edges, the bulb's
+// glass envelope and the base ring seen through the plastic).
+// A see-through body (transparent material) is drawn after a transmittance pass of this shader (mode 1): the framebuffer
+// behind the dome is multiplied by the plastic's Beer-Lambert transmission (near wall along the refracted ray + one more
+// wall), dimmed along the flute edges and the cap's starburst ribs, and darkened where the cavity ray meets the bulb's base.
 // Colour is blackbody(T(level)) x the plastic's Beer-Lambert transmission; white appears only where the tonemapper clips.
 //
 // domeParams (dome-local mm unless noted):
@@ -18,8 +22,9 @@
 // [3] x filament height, y flute count, z flute phase (rad, a groove root = thinnest wall), w lamp level (may pass 1)
 // [4] x inner radius at the groove roots, y at the ridge tips, z cap underside height, w room light (OFF sparkle, linear)
 // [5] gains: x body glow, y bars (nit), z needles and ridge glints (relative to the room), w white-hot peak (nit)
-// [6] gains: x bulb halo, y cap spot, z peak flash, w heat at peak
-// [7] x emission scale (nit to linear), y debug (1 bars + core + cap, 2 glow, 3 sparkle, 4 bars only), z absorption scale (plastic colour), w unused
+// [6] gains: x bulb halo, y cap spot, z peak flash, w OFF bulb envelope and base ring (relative to the room)
+// [7] x emission scale (nit to linear), y debug (1 bars + core + cap, 2 glow, 3 sparkle, 4 bars only), z absorption scale (plastic colour),
+//     w pass: 0 additive layer over an opaque body, 1 transmittance (ZERO / INVSRC_COLOR blending), 2 additive layer over a see-through body
 
 $input v_worldPos, v_tablePos, v_normal, v_texcoord0
 #ifdef STEREO
@@ -75,6 +80,40 @@ float domeStudio(const vec3 wd)
 	return env;
 }
 
+// The bulb along the cavity ray o + t d (dome-local mm): a #906 wedge bulb, a glass capsule of radius rb round the dome axis
+// whose round top is centred on Ft, standing on its dark wedge base. Returns the hit distance (< 0: missed) and the normal.
+float domeBulb(const vec3 o, const vec3 d, const vec3 Ft, const float rb, out vec3 n)
+{
+	n = vec3(0.0, 1.0, 0.0);
+	float t = -1.0;
+	const vec3 oc = o - Ft;
+	const float b = dot(oc, d);
+	const float disc = b * b - (dot(oc, oc) - rb * rb);
+	if (disc > 0.0)
+	{
+		const float ts = -b - sqrt(disc);
+		if (ts > 0.0 && o.y + d.y * ts >= Ft.y)
+		{
+			t = ts;
+			n = (oc + d * ts) / rb;
+		}
+	}
+	const float a2 = dot(d.xz, d.xz);
+	const float b2 = dot(o.xz, d.xz);
+	const float disc2 = b2 * b2 - a2 * (dot(o.xz, o.xz) - rb * rb);
+	if (a2 > 1e-5 && disc2 > 0.0)
+	{
+		const float tc = (-b2 - sqrt(disc2)) / a2;
+		const float y = o.y + d.y * tc;
+		if (tc > 0.0 && y < Ft.y && y > 0.0 && (t < 0.0 || tc < t))
+		{
+			t = tc;
+			n = vec3((o.x + d.x * tc) / rb, 0.0, (o.z + d.z * tc) / rb);
+		}
+	}
+	return t;
+}
+
 void main()
 {
 	#ifdef CLIP
@@ -102,9 +141,20 @@ void main()
 	const float capY = domeParams[4].z;
 	const float rxz = length(P.xz);
 
-	// Only the outer skin emits (the inner flutes, base and cap underside are hidden behind it or seen through it)
+	const float mode = domeParams[7].w;
+	const bool transPass = mode > 0.5 && mode < 1.5;
+	const vec3 sigma = vec3(0.100, 1.400, 1.500) * domeParams[7].z; // red acrylic absorption (1/mm)
+	const float wallB = R - 0.5 * (rootR + ridgeR);
+
+	// Only the outer skin emits (the inner flutes, base and cap underside are hidden behind it or seen through it); the base
+	// flange and the tabs still filter what lies under them (in, and the light that lit it, through the flange)
 	if (!((Ns.y > 0.5 && P.y > capY + 0.2) || (dot(Ns.xz, P.xz) > 0.3 * rxz && rxz > rootR + 0.1)))
-		discard;
+	{
+		if (!transPass)
+			discard;
+		gl_FragColor = vec4(vec3_splat(1.0) - exp(-sigma * 2.5 * wallB), 1.0);
+		return;
+	}
 	const float capW = smoothstep(0.55, 0.9, Ns.y) * smoothstep(capY, capY + 0.5, P.y);
 
 	// Lamp level: emission black below 1 %, mid levels lifted (two-segment map), filament temperature from the level
@@ -114,7 +164,6 @@ void main()
 	const float lvlG = lvlE >= 0.45 ? sqrt(lvlE) : sqrt(0.45) * pow(lvlE / 0.45, 1.5);
 	const float T = 2900.0 * pow(max(lvl, 1e-3), 0.1235);
 	const vec3 bb = domeBlackbody(T);
-	const vec3 sigma = vec3(0.100, 1.400, 1.500) * domeParams[7].z; // red acrylic absorption (1/mm)
 	const float pk = smoothstep(0.9, 1.0, level);                    // the 1-2 true peak frames
 	const float heatW = smoothstep(0.85, 1.0, level);
 
@@ -123,7 +172,6 @@ void main()
 	if (dot(VrIn, VrIn) < 1e-4)
 		VrIn = -Ns;
 	VrIn = normalize(VrIn);
-	const float wallB = R - 0.5 * (rootR + ridgeR);
 	const vec3 PinB = P + VrIn * (wallB / max(dot(-VrIn, Ns), 0.25));
 	const vec3 PinC = P + VrIn * (max(P.y - capY, 0.0) / max(-VrIn.y, 0.25));
 	vec3 Pin = mix(PinB, PinC, capW);
@@ -161,6 +209,40 @@ void main()
 
 	// Filament: a horizontal coil along x, 3.2 mm long
 	const vec3 F = vec3(0.0, domeParams[3].x, 0.0);
+	// The bulb's glass envelope (#906, T-3 1/4) round the filament, on its wedge base below ySock
+	const float rbulb = 0.42 * rootR;
+	const vec3 Fc = F + vec3(0.0, 0.25 * rbulb, 0.0);
+	const float ySock = 0.22 * H;
+
+	// Transmittance pass: near wall along the refracted ray, plus one more wall (the far wall, or for the floor inside, the
+	// wall its light came in through); the flute edges (the cap's starburst ribs) bend the light away; the bulb's dark base
+	// blocks it and its clear envelope reflects a little of it away
+	BRANCH if (transPass)
+	{
+		// The flutes are a row of cylindrical lenses: what lies behind reads in vertical bands, brighter through the thin
+		// groove roots, each flank its own strength (not on the cap: one moulding, only its ribs)
+		const float band = mix((0.55 + 0.45 * cos(2.0 * DOME_PI * eP)) * (0.45 + 0.55 * domeHash(flankId * 3.71 + 0.9)), 1.0, capW);
+		vec3 tr = exp(-sigma * (thN / max(dot(-VrIn, Ns), 0.3) + 1.2 * wallB)) * band * (0.5 - 0.3 * edge);
+		vec3 nb;
+		const float tb = tir ? -1.0 : domeBulb(Pin, d2, Fc, rbulb, nb);
+		if (tb > 0.0)
+			tr *= Pin.y + d2.y * tb < ySock ? 0.15 : 0.7;
+		else if (!tir && d2.y < -1e-3)
+		{
+			// The floor inside (when the cavity ray reaches it before the far wall) lies in the shade of the dome and socket
+			const float rMid = 0.5 * (rootR + ridgeR);
+			const float a = dot(d2.xz, d2.xz);
+			const float b = dot(Pin.xz, d2.xz);
+			const float disc = b * b - a * (dot(Pin.xz, Pin.xz) - rMid * rMid);
+			const float tFar = (a > 1e-4 && disc > 0.0) ? (-b + sqrt(disc)) / a : 1e9;
+			if (-Pin.y / d2.y < tFar)
+				tr *= 0.4;
+		}
+		// The lit look was tuned over an opaque body: as the lamp comes up, its scattered light hides what lies behind
+		tr *= (1.0 - lvlG) * (1.0 - lvlG);
+		gl_FragColor = vec4(vec3_splat(1.0) - tr, 1.0);
+		return;
+	}
 	// Where the cavity ray passes the filament: vertical (dvF) and horizontal (dhF) miss distances
 	const float tF = max(dot(F - Pin, d2), 0.0);
 	const vec3 Q = Pin + d2 * tF;
@@ -270,8 +352,10 @@ void main()
 	vec3 sparkle = vec3_splat(0.0);
 	BRANCH if (domeParams[4].w > 0.0)
 	{
-		const float hA = domeHash(flankId * 78.233 + 1.7);
-		const float hB = domeHash(flankId * 12.9898 + 7.3);
+		// The cap underside is one moulding (a starburst of thin ribs), not facets: no per-flank tilt or gain there, which drew
+		// the cap as a fan of light and dark wedges (the 'seams')
+		const float hA = mix(domeHash(flankId * 78.233 + 1.7), 0.5, capW);
+		const float hB = mix(domeHash(flankId * 12.9898 + 7.3), 0.5, capW);
 		const vec3 nJ = normalize(nIn + tg * (hB - 0.5) * 0.25 + vec3(0.0, (hA - 0.5) * 0.15, 0.0));
 		const float ci = saturate(dot(VrIn, nJ));
 		const float st2 = 1.49 * 1.49 * (1.0 - ci * ci);
@@ -284,13 +368,42 @@ void main()
 		const vec3 wd = ro.x * ex + ro.y * up + ro.z * ez;
 		const vec3 tint = exp(-sigma * 2.0 * thN);
 		const float facetGain = mix(0.05, 2.5, hA * hA * hA);
-		const float side = s > 0.0 ? 1.0 : 0.25;
+		const float side = mix(s > 0.0 ? 1.0 : 0.25, 1.0, capW);
 		const float facing = smoothstep(-0.15, 0.35, dot(V, s * tg));
-		const float spark = mix(0.12, 2.2, pow(domeHash(idx * 12.9898 + 4.1), 8.0)); // a few hot facets, most dim
-		sparkle = Fr * min(domeStudio(wd), mix(8.0, 1.0, capW)) * tint * facetGain * side * spark;
-		// The room seen through the dome (into the cavity, out through the far wall): deep red, lensed by the flutes
-		const vec3 wt = d2.x * ex + d2.y * up + d2.z * ez;
-		sparkle += 0.35 * (1.0 - Fr) * domeStudio(wt) * exp(-sigma * (thN + 1.2 * wallB)) * (0.7 + 0.6 * hA);
+		const float spark = mix(mix(0.12, 2.2, pow(domeHash(idx * 12.9898 + 4.1), 8.0)), 0.5, capW); // a few hot facets, most dim
+		sparkle = Fr * min(domeStudio(wd), mix(8.0, 1.0, capW)) * tint * facetGain * side * spark * mix(1.0, 0.3 + 1.5 * edge, capW);
+		// The room seen through the dome (into the cavity, out through the far wall): deep red, lensed by the flutes. Over a
+		// see-through body, which shows the real scene behind (transmittance pass), it stays as the room light the flutes
+		// scatter (the plastic's own ruby glow), weaker
+		{
+			const vec3 wt = d2.x * ex + d2.y * up + d2.z * ez;
+			sparkle += (mode < 1.5 ? 0.35 : 0.2) * (1.0 - Fr) * domeStudio(wt) * exp(-sigma * (thN + 1.2 * wallB)) * (0.7 + 0.6 * hA);
+		}
+
+		// Seen through the plastic (in and out through the walls: deep red): the bulb's glass envelope catches the room as a
+		// small highlight, and the spun metal ring round its base a dim one (a shallow dish, its normal leaning to the axis)
+		const vec3 tint2 = exp(-sigma * (thN + 1.2 * wallB));
+		vec3 nb;
+		const float tb = tir ? -1.0 : domeBulb(Pin, d2, Fc, rbulb, nb);
+		if (tb > 0.0 && Pin.y + d2.y * tb >= ySock)
+		{
+			const float Fg = 0.04 + 0.96 * pow(1.0 - saturate(dot(-d2, nb)), 5.0);
+			const vec3 rbv = reflect(d2, nb);
+			sparkle += domeParams[6].w * Fg * min(domeStudio(rbv.x * ex + rbv.y * up + rbv.z * ez), 6.0) * tint2;
+		}
+		if (!tir && d2.y < -0.05)
+		{
+			const float tR = (0.6 - Pin.y) / d2.y;
+			const vec3 B = Pin + d2 * tR;
+			const float rB = length(B.xz);
+			const float ringW = smoothstep(rbulb, rbulb + 1.0, rB) * (1.0 - smoothstep(rootR - 1.5, rootR - 0.4, rB)) * (tb > 0.0 && tb < tR ? 0.0 : 1.0);
+			if (ringW > 0.0)
+			{
+				const vec3 nR = normalize(vec3(-0.35 * B.x / max(rB, 1e-3), 1.0, -0.35 * B.z / max(rB, 1e-3)));
+				const vec3 rr2 = reflect(d2, nR);
+				sparkle += domeParams[6].w * 0.6 * ringW * (0.75 + 0.25 * sin(rB * 7.0)) * min(domeStudio(rr2.x * ex + rr2.y * up + rr2.z * ez), 6.0) * tint2;
+			}
+		}
 
 		// One edge per flute carries a ridge glint (1-D random cells along the height), a fraction of the flutes a long
 		// needle on the other edge (linear taper to sharp tips); both slide with the view

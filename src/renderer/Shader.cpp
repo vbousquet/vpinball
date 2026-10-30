@@ -918,7 +918,7 @@ void Shader::SetTechniqueMaterial(
       const vec4 emission = convertColor(mat.m_cEmission, mat.m_fEmissionIntensity);
       SetVector(ShaderUniform::pbrEmission, &emission);
       // PBR materials use the (legacy) wrap lighting as their thin surface transmission (back lit translucency)
-      SetVector(ShaderUniform::pbrMapFlags, pbrMaps->ormMap != nullptr ? 1.f : 0.f, pbrMaps->emissionMap != nullptr ? 1.f : 0.f, saturate(mat.m_fWrapLighting), 0.f);
+      SetVector(ShaderUniform::pbrMapFlags, pbrMaps->ormMap != nullptr ? 1.f : 0.f, pbrMaps->emissionMap != nullptr ? 1.f : 0.f, saturate(mat.m_fWrapLighting), pbrMaps->ownLampRadius);
       // Clear coat layer: a zero strength skips the coat lobe in the shaders
       SetVector(ShaderUniform::pbrCoat, saturate(mat.m_fClearcoat), clamp(mat.m_fClearcoatRoughness, 0.02f, 1.f), 0.f, 0.f);
       // See-through parts use the transparent shading (premultiplied: their reflections are not modulated by their
