@@ -368,12 +368,13 @@ vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv, const float roughness, 
 // Transmitted light through a transparent part: refract the view ray by the part thickness, project
 // back to screen space and sample the refraction probe (screen space copy of what's behind the part).
 #ifdef STEREO
-vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV, const float roughness, const vec4 fragCoord, const float v_eye)
+vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wI, const float roughness, const vec4 fragCoord, const float v_eye)
 #else
-vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV, const float roughness, const vec4 fragCoord)
+vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wI, const float roughness, const vec4 fragCoord)
 #endif
 {
-   const vec3 R = refract(-wV, wN, 1.0 / 1.5); // n1 = 1.0 (air), n2 = 1.5 (plastic), eta = n1 / n2
+   // wI: the incident direction (-wV); the legacy refraction passes +wV (VPX_REFR_DEBUG 4, refraction bench)
+   const vec3 R = refract(wI, wN, 1.0 / 1.5); // n1 = 1.0 (air), n2 = 1.5 (plastic), eta = n1 / n2
    const vec3 refracted_pos = wPos + refractionTint_thickness.w * R; // Shift ray by the thickness of the material
    const vec4 proj = mul(mRotViewProj, vec4(refracted_pos - cCameraPosWorld, 1.0));
    #if TEX_V_IS_UP
@@ -878,13 +879,17 @@ void main() {
          const vec3 wV = normalize(cCameraPosWorld - v_tablePos);
          // Blur (a fraction of the probe's mip chain): the roughness, plus a little where the normal map bends away from the
          // surface (scuffs), capped so the probe never collapses to its average colour
-         const float blur = min(roughness + 0.1 * (1.0 - saturate(dot(N, Ng))), 0.08);
+         // VPX_REFR_DEBUG 4/5 (refraction bench vs stock 10.8.1): the legacy composite, mix(refracted, colour, alpha) with no
+         // Fresnel coverage and no blur; 4 also takes the legacy offset direction (refract(+V))
+         const bool legacyMix = pbrLightGrid2.w >= 4.0;
+         const vec3 wI = pbrLightGrid2.w == 4.0 ? wV : -wV;
+         const float blur = legacyMix ? 0.0 : min(roughness + 0.1 * (1.0 - saturate(dot(N, Ng))), 0.08);
          #ifdef STEREO
-            const vec3 behind = pbr_transmit(v_tablePos, wN, wV, blur, gl_FragCoord, v_eye) * (staticColor_Alpha.rgb * coatIBL);
+            const vec3 behind = pbr_transmit(v_tablePos, wN, wI, blur, gl_FragCoord, v_eye) * (staticColor_Alpha.rgb * coatIBL);
          #else
-            const vec3 behind = pbr_transmit(v_tablePos, wN, wV, blur, gl_FragCoord) * (staticColor_Alpha.rgb * coatIBL);
+            const vec3 behind = pbr_transmit(v_tablePos, wN, wI, blur, gl_FragCoord) * (staticColor_Alpha.rgb * coatIBL);
          #endif
-         gl_FragData[0] = vec4(color.rgb * alpha + behind * (1.0 - cover) + spec, 1.0);
+         gl_FragData[0] = vec4(color.rgb * alpha + behind * (1.0 - (legacyMix ? alpha : cover)) + spec, 1.0);
          if (pbrLightGrid2.w == 1.0)
             gl_FragData[0] = vec4(texStereoLod(tex_pbr_refr, gl_FragCoord.xy * w_h_height.xy, 0.0).rgb, 1.0);
          else if (pbrLightGrid2.w == 2.0)
@@ -892,9 +897,9 @@ void main() {
          else if (pbrLightGrid2.w == 3.0)
          {
             #ifdef STEREO
-               gl_FragData[0] = vec4(pbr_transmit(v_tablePos, wN, wV, 0.0, gl_FragCoord, v_eye), 1.0);
+               gl_FragData[0] = vec4(pbr_transmit(v_tablePos, wN, -wV, 0.0, gl_FragCoord, v_eye), 1.0);
             #else
-               gl_FragData[0] = vec4(pbr_transmit(v_tablePos, wN, wV, 0.0, gl_FragCoord), 1.0);
+               gl_FragData[0] = vec4(pbr_transmit(v_tablePos, wN, -wV, 0.0, gl_FragCoord), 1.0);
             #endif
          }
       }
