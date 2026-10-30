@@ -2965,7 +2965,12 @@ void Renderer::UpdateVirtualShadowMaps()
          lightProj = Matrix3D::MatrixOrthoOffCenterRH(l, r, b, t, zn, zf);
          const Matrix3D& proj = lightProj;
          const float side = std::max(r - l, t - b);
-         const float pageWorld = side * VSM::PAGE_SIZE / (float)m_vsmVirtRes;
+         float pageWorld = side * VSM::PAGE_SIZE / (float)m_vsmVirtRes;
+         // Fair share of the pool: a full virtual resolution ortho map over the table (2000+ pages at 8192) would take every
+         // physical page, leaving the other shadowed lights (GI cube maps) without any and so unshadowed. Coarser pages then.
+         const float orthoPages = (r - l) * (t - b) / (pageWorld * pageWorld), orthoBudget = (float)std::max(16, m_vsmPoolPages / 8);
+         if (orthoPages > orthoBudget)
+            pageWorld *= sqrtf(orthoPages / orthoBudget);
          const int gridW = std::clamp((int)ceilf((r - l) / pageWorld), 1, VSM::MAX_ORTHO_GRID);
          const int gridH = std::clamp((int)ceilf((t - b) / pageWorld), 1, VSM::MAX_ORTHO_GRID);
 
