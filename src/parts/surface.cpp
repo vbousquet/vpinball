@@ -776,14 +776,20 @@ void Surface::Render(const unsigned int renderMask)
    assert(m_renderer != nullptr);
    assert(!m_desktopBackdrop);
 
-   // PBR shadow map pass: draw only the caster geometry (top surface + walls) with the light's view-projection
+   // PBR shadow map pass: draw only the caster geometry with the light's view-projection. Only the visible parts cast:
+   // tables are full of invisible collision walls (plastics, lane guides, ball blockers) that would otherwise black out
+   // the lights below them (m_d.m_visible is not loaded for walls, the side and top/bottom flags are their visibility)
    if (renderMask & Renderer::SHADOW_MAP)
    {
-      if (m_d.m_visible && m_meshBuffer != nullptr)
+      if (m_d.m_visible && m_meshBuffer != nullptr && (!m_isDropped || StaticRendering()))
       {
          m_renderer->UpdateBasicShaderMatrix();
-         m_renderer->m_renderDevice->DrawMesh(
-            m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_meshBuffer->m_ib->m_count);
+         if (m_d.m_sideVisible)
+            m_renderer->m_renderDevice->DrawMesh(
+               m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numVertices * 6);
+         if (m_d.m_topBottomVisible)
+            m_renderer->m_renderDevice->DrawMesh(
+               m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, m_numVertices * 6, m_numPolys * 3);
       }
       return;
    }
