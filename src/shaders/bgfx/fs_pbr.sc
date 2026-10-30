@@ -640,20 +640,23 @@ void main() {
    #ifdef TRANSPARENT
       BRANCH if (pbrProbeParams.w > 0.0)
       {
-         // Transmission through a bound refraction probe replaces the shaded term (composited
-         // unblended like legacy refraction parts through the premultiplied blend below)
+         // Bound refraction probe: the part is drawn unblended (like legacy refraction parts), so it composites what lies
+         // behind it itself, as the blend below would: the probe (a copy of the scene behind), refracted through the part's
+         // thickness and tinted, through the uncovered fraction, plus the part's own diffuse & emission by coverage and its
+         // unmodulated specular, written opaque
          const vec3 wN = mul(vec4(N, 0.0), mView).xyz; // trafo back to world (orthonormal, no renormalize needed)
          const vec3 wV = normalize(cCameraPosWorld - v_tablePos);
          #ifdef STEREO
-            color = pbr_transmit(v_tablePos, wN, wV, roughness, v_eye) * staticColor_Alpha.rgb;
+            const vec3 behind = pbr_transmit(v_tablePos, wN, wV, roughness, v_eye) * staticColor_Alpha.rgb;
          #else
-            color = pbr_transmit(v_tablePos, wN, wV, roughness) * staticColor_Alpha.rgb;
+            const vec3 behind = pbr_transmit(v_tablePos, wN, wV, roughness) * staticColor_Alpha.rgb;
          #endif
+         gl_FragData[0] = vec4(color.rgb * alpha + behind * (1.0 - alpha) + spec, 1.0);
       }
-      // Premultiplied output (used with ONE/INVSRC_ALPHA blending): diffuse & emission (or the
-      // transmitted term) are modulated by coverage while specular stays unmodulated (reflects
-      // even on thin glass)
-      gl_FragData[0] = vec4(color.rgb * alpha + spec, alpha);
+      else
+         // Premultiplied output (used with ONE/INVSRC_ALPHA blending): diffuse & emission are modulated by coverage while
+         // specular stays unmodulated (reflects even on thin glass)
+         gl_FragData[0] = vec4(color.rgb * alpha + spec, alpha);
    #else
       gl_FragData[0] = vec4(color.rgb + spec, alpha);
    #endif
