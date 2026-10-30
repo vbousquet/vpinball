@@ -1271,6 +1271,10 @@ void Primitive::Render(const unsigned int renderMask)
          if (tuning)
             tune(tuning);
          params[4].y = turn + (seed * 2.f - 1.f) * turnJitter;
+         // The room's glints and the lamp-off look are lit by the room: they follow the scene lighting level, relative to the
+         // table's default level (which they are tuned at)
+         const float roomLevel = m_renderer->m_sceneLighting.GetGlobalEmissionScale() / max(m_ptable->m_globalEmissionScale, 0.01f);
+         params[6] = vec4(params[6].x * roomLevel, params[6].y * roomLevel, params[6].z * roomLevel, params[6].w * roomLevel);
          // The spill's reach, as the print map mip whose texel is that wide (-1 = no print map: the old round falloff)
          params[8].w = (inkMap && inkMap->m_width > 0) ? log2f(max(spillMm / ((m_ptable->m_right - m_ptable->m_left) * params[5].z / (float)inkMap->m_width), 1.f)) : -1.f;
          if (params[8].w >= 0.f)
