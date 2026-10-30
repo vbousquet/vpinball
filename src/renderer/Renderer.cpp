@@ -3246,7 +3246,9 @@ void Renderer::BuildPBRLightList()
       LightEntry& e = entries[lightCount];
       e.pos = Vertex3Ds(light->m_d.m_vCenter.x, light->m_d.m_vCenter.y, light->GetCurrentHeight());
       e.range = max(light->m_d.m_falloff, 1.f);
-      const float radiance = light->m_currentIntensity * intensityToLinear;
+      // A room light (window, ceiling key) follows the scene lighting level (Day/Night) as the env and ambient do; lamps (GI,
+      // inserts, flashers) keep their intensity, as legacy lights do, so the room darkens or brightens around them
+      const float radiance = light->m_currentIntensity * intensityToLinear * (light->m_d.m_roomLight ? m_sceneLighting.GetGlobalEmissionScale() : 1.f);
       // w packs the shadow mode (bits 0-3), the VSM shadow index + 1 (bits 4-11, 0 = no virtual map),
       // the map layout (bits 12-15, 0 = ortho, 2 = cube) and the quantized penumbra radius in 0.5 VPU units (bits 16+)
       const int shadowIndex = light->m_pbrShadowSlot;
