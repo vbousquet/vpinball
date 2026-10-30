@@ -30,6 +30,7 @@ private:
     HWND        m_hShowMeshCheck;
     HWND        m_hStaticMeshCheck;
     HWND        m_hRelectOnBalls;
+    HWND m_hRoomLightCheck;
     ComboBox m_shadowModeCombo;
 
     EditBox     m_falloffEdit;

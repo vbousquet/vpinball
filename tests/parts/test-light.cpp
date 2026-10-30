@@ -40,6 +40,7 @@ TEST_CASE("Light part")
       light->m_d.m_showBulbMesh = true;
       light->m_d.m_staticBulbMesh = true;
       light->m_d.m_meshRadius = 22.f;
+      light->m_d.m_roomLight = true;
       light->m_d.m_shadows = RAYTRACED_BALL_SHADOWS;
       light->m_d.m_fader = FADER_INCANDESCENT;
       light->m_d.m_szImage = "light.png";
@@ -80,6 +81,7 @@ TEST_CASE("Light part")
       CHECK(copy->m_d.m_showBulbMesh == true);
       CHECK(copy->m_d.m_staticBulbMesh == true);
       CHECK(copy->m_d.m_meshRadius == 22.f);
+      CHECK(copy->m_d.m_roomLight == true);
       CHECK(copy->m_d.m_shadows == RAYTRACED_BALL_SHADOWS);
       CHECK(copy->m_d.m_fader == FADER_INCANDESCENT);
       CHECK(copy->m_d.m_szImage == "light.png");
