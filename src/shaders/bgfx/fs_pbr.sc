@@ -339,8 +339,11 @@ vec4 pbr_light_texel(const int idx)
    return texelFetch(tex_pbr_lights, ivec2(idx & 255, idx >> 8), 0);
 }
 
-vec3 pbr_direct_light(const vec3 wN, const vec3 wNg, const vec3 wV, const vec3 wPos, const vec3 diffuse, const vec3 F0, const float roughness, const float alpha)
+// Returns the diffuse direct light; the specular reflection is accumulated apart in specOut, since a see-through part
+// reflects it whatever its coverage (it is not modulated by alpha like the diffuse, as the indirect specular)
+vec3 pbr_direct_light(const vec3 wN, const vec3 wNg, const vec3 wV, const vec3 wPos, const vec3 diffuse, const vec3 F0, const float roughness, const float alpha, out vec3 specOut)
 {
+   specOut = vec3_splat(0.0);
    const vec2 cellf = clamp((wPos.xy - pbrLightGrid.xy) * pbrLightGrid.z, vec2_splat(0.0),
       vec2(pbrLightGrid.w - 1.0, pbrLightGrid2.x - 1.0));
    const vec4 cell = pbr_light_texel(512 + int(cellf.y) * int(pbrLightGrid.w) + int(cellf.x));
@@ -490,7 +493,8 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNg, const vec3 wV, const vec3 w
       }
       BRANCH if (shadowMode == 1 || shadowMode >= 3) // RAYTRACED_BALL_SHADOWS or PBR ball shadow tiers
          shadow *= get_light_ball_shadow(lPos.xyz, -dl, sqrt(dist2));
-      acc += (gFade * shadow) * (diffuse * (vec3_splat(1.0) - F) * (1.0 / PI) * (lCol * (x * x / dist2)) * NdotL + spec);
+      acc += (gFade * shadow) * (diffuse * (vec3_splat(1.0) - F) * (1.0 / PI) * (lCol * (x * x / dist2)) * NdotL);
+      specOut += (gFade * shadow) * spec;
    }
    return acc;
 }
@@ -576,6 +580,7 @@ void main() {
 
    vec3 color = vec3_splat(0.0);
    vec3 spec = vec3_splat(0.0);
+   vec3 directSpec = vec3_splat(0.0);
 
    if (fDisableLighting_top_below.x != 0.0)
    { // Lighting disabled: fully emissive backward compatible behavior (unlit, twice the albedo)
@@ -599,7 +604,7 @@ void main() {
          const vec3 wN = mul(vec4(N, 0.0), mView).xyz; // trafo back to world (orthonormal, no renormalize needed)
          const vec3 wV = normalize(cCameraPosWorld - v_tablePos);
          const vec3 wNg = mul(vec4(Ng, 0.0), mView).xyz;
-         color += pbr_direct_light(wN, wNg, wV, v_tablePos, diffuse, F0, roughness, base.a * staticColor_Alpha.a);
+         color += pbr_direct_light(wN, wNg, wV, v_tablePos, diffuse, F0, roughness, base.a * staticColor_Alpha.a, directSpec);
       }
    }
 
@@ -607,8 +612,15 @@ void main() {
    {
       const vec3 light_dir = v_tablePos.xyz - lightCenter_doShadow.xyz;
       const float light_dist = length(light_dir);
-      color.rgb *= get_light_ball_shadow(lightCenter_doShadow.xyz, light_dir, light_dist);
+      const float ballShadow = get_light_ball_shadow(lightCenter_doShadow.xyz, light_dir, light_dist);
+      color.rgb *= ballShadow;
+      directSpec *= ballShadow;
    }
+   #ifdef TRANSPARENT
+      spec += directSpec; // reflects at full strength on a see-through part, like the indirect specular
+   #else
+      color += directSpec;
+   #endif
 
    // Emission
    vec3 emission = pbrEmission.rgb * pbrEmission.w;
