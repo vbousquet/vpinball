@@ -74,6 +74,7 @@ public:
    bool m_showBulbMesh;
    bool m_staticBulbMesh;
    float m_meshRadius;
+   bool m_roomLight = false; // PBR light standing for the room (window, ceiling): scaled by the scene lighting level like the env, unlike lamps
 
    ShadowMode m_shadows = ShadowMode::NONE;
    Fader m_fader = Fader::FADER_LINEAR;
