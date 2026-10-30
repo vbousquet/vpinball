@@ -838,6 +838,9 @@ void main() {
    spec *= staticColor_Alpha.rgb;
 
    #ifdef TRANSPARENT
+      // What the surface reflects is not transmitted: the coverage of what lies behind grows with the reflectance
+      // (Fresnel), so clear plastic darkens and reads as a sheet at grazing angles instead of vanishing
+      const float cover = alpha + (1.0 - alpha) * saturate(dot(W * coatIBL, vec3(0.2126, 0.7152, 0.0722)));
       BRANCH if (pbrProbeParams.w > 0.0)
       {
          // Bound refraction probe: the part is drawn unblended (like legacy refraction parts), so it composites what lies
@@ -854,9 +857,10 @@ void main() {
          gl_FragData[0] = vec4(color.rgb * alpha + behind * (1.0 - alpha) + spec, 1.0);
       }
       else
-         // Premultiplied output (used with ONE/INVSRC_ALPHA blending): diffuse & emission are modulated by coverage while
-         // specular stays unmodulated (reflects even on thin glass)
-         gl_FragData[0] = vec4(color.rgb * alpha + spec, alpha);
+         // Premultiplied output (used with ONE/INVSRC_ALPHA blending): diffuse & emission (or the
+         // transmitted term) are modulated by coverage while specular stays unmodulated (reflects
+         // even on thin glass)
+         gl_FragData[0] = vec4(color.rgb * alpha + spec, cover);
    #else
       gl_FragData[0] = vec4(color.rgb + spec, alpha);
    #endif
