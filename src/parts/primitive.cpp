@@ -1123,17 +1123,33 @@ void Primitive::Render(const unsigned int renderMask)
          level = m_lightmap->m_currentIntensity / (m_lightmap->m_d.m_intensity * m_lightmap->m_d.m_intensity_scale);
       // The OFF glints are lit by the room: they follow the scene lighting level, relative to the table's default level
       const float roomLevel = m_renderer->m_sceneLighting.GetGlobalEmissionScale() / max(m_ptable->m_globalEmissionScale, 0.01f);
-      const vec4 p[9] = {
+      // The table's light scattered in the plastic (GI glow): the irradiance at the bulb through a soft knee (a dome right next
+      // to a GI bulb glows more, not flat), as the radiance the dome layer emits (it bands it by the flutes)
+      const auto domeGI = [this](const float leak)
+      {
+         const float gain = FlasherDomeTune("gi=", 0.035f), knee = FlasherDomeTune("giknee=", 15.f);
+         const float lum = 0.2126f * m_domeGI.x + 0.7152f * m_domeGI.y + 0.0722f * m_domeGI.z;
+         const float k = gain / (1.f + lum / max(knee, 1e-6f));
+         static int logged = 0;
+         if (logged < 6 && lum > 0.f)
+         {
+            logged++;
+            PLOGI << "Flasher dome " << GetName() << ": GI irradiance " << m_domeGI.x << ", " << m_domeGI.y << ", " << m_domeGI.z << " (lum " << lum << ")";
+         }
+         return vec4(leak, m_domeGI.x * k, m_domeGI.y * k, m_domeGI.z * k);
+      };
+      const vec4 p[10] = {
          vec4(base.x, base.y, base.z, mm),
          vec4(axis.x, axis.y, axis.z, d.radius * scale * mm),
          vec4(coil.x, coil.y, coil.z, d.height * scale * mm),
          vec4(FlasherDomeTune("fil=", 0.47f) * d.height * scale * mm, (float)d.flutes, d.phase, level),
-         vec4(d.rootR * scale * mm, d.ridgeR * scale * mm, d.capZ * scale * mm, FlasherDomeTune("room=", 1.5f) * roomLevel),
+         vec4(d.rootR * scale * mm, d.ridgeR * scale * mm, d.capZ * scale * mm, FlasherDomeTune("room=", 1.5f) * (pass > 0.5f ? roomLevel : 1.f)),
          vec4(FlasherDomeTune("glow=", 300.f), FlasherDomeTune("bars=", 30000.f), FlasherDomeTune("needle=", 1.f), FlasherDomeTune("white=", 6000.f)),
          vec4(FlasherDomeTune("halo=", 2500.f), FlasherDomeTune("spot=", 2000.f), FlasherDomeTune("flash=", 8.f), FlasherDomeTune("bulb=", 1.f)),
          vec4(FlasherDomeTune("gain=", 1.f / 170.f), FlasherDomeTune("debug=", 0.f), FlasherDomeTune("sigma=", 1.f), pass),
-         vec4(FlasherDomeTune("leak=", 0.6f), 0.f, 0.f, 0.f) };
-      std::copy(p, p + 9, params);
+         domeGI(FlasherDomeTune("leak=", 0.6f)),
+         vec4(m_domeGIDir.x, m_domeGIDir.y, m_domeGIDir.z, m_domeGIDir.w * FlasherDomeTune("gidir=", 1.f)) };
+      std::copy(p, p + 10, params);
    };
 
    // Traced insert prototype: an additive card whose image is a multi-view traced bake ('TRACED_' image name prefix). It is
@@ -1364,7 +1380,7 @@ void Primitive::Render(const unsigned int renderMask)
       // submitted after it)
       if (flasherDome && mat->m_bOpacityActive && isPBR && MeasureFlasherDome().valid)
       {
-         vec4 params[9];
+         vec4 params[10];
          flasherDomeParams(params, 1.f);
          const RenderState saved = m_renderer->m_renderDevice->GetRenderState();
          m_renderer->m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_TRUE);
@@ -1372,7 +1388,7 @@ void Primitive::Render(const unsigned int renderMask)
          m_renderer->m_renderDevice->SetRenderState(RenderState::DESTBLEND, RenderState::INVSRC_COLOR);
          m_renderer->m_renderDevice->SetRenderState(RenderState::BLENDOP, RenderState::BLENDOP_ADD);
          m_renderer->m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
-         m_renderer->m_renderDevice->m_basicShader->SetFloat4v(ShaderUniform::domeParams, params, 9);
+         m_renderer->m_renderDevice->m_basicShader->SetFloat4v(ShaderUniform::domeParams, params, 10);
          m_renderer->m_renderDevice->m_basicShader->SetTechnique(ShaderTechnique::flasher_dome);
          m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, true, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, bodyIndices);
          m_renderer->m_renderDevice->GetRenderState() = saved;
@@ -1385,7 +1401,7 @@ void Primitive::Render(const unsigned int renderMask)
          : Shader::PBRTextureSet();
       // A flasher dome body is lit by the table's lights (a translucent red body glows from the GI bulbs behind it) but not
       // by its own lamp inside it: the dome layer draws that, and the lit look is tuned on it alone
-      if (flasherDome && m_dome.valid)
+      if (flasherDome && m_dome.valid && mat->m_bOpacityActive)
          pbrMaps.ownLampRadius = 1.5f * max(m_dome.height, m_dome.radius) * m_fullMatrix.MultiplyVectorNoTranslate(Vertex3Ds(0.f, 0.f, 1.f)).Length();
       m_renderer->m_renderDevice->m_basicShader->SetTechniqueMaterial(img ? ShaderTechnique::basic_with_texture : ShaderTechnique::basic_without_texture, *mat,
          img ? pinAlphaTest >= 0.f && !img->IsOpaque() : false, nMap, reflections, refractions, isPBR ? &pbrMaps : nullptr);
@@ -1489,13 +1505,13 @@ void Primitive::Render(const unsigned int renderMask)
    // Flasher dome layer: additive over the body just drawn (same sort key, submitted after it), outer skin only (depth equal)
    if (flasherDome && !is_reflection_only_pass && MeasureFlasherDome().valid)
    {
-      vec4 params[9];
+      vec4 params[10];
       flasherDomeParams(params, mat->m_bOpacityActive ? 2.f : 0.f);
       m_renderer->m_renderDevice->ResetRenderState();
       m_renderer->m_renderDevice->EnableAlphaBlend(true);
       m_renderer->m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
       m_renderer->m_renderDevice->SetRenderState(RenderState::CULLMODE, cullMode);
-      m_renderer->m_renderDevice->m_basicShader->SetFloat4v(ShaderUniform::domeParams, params, 9);
+      m_renderer->m_renderDevice->m_basicShader->SetFloat4v(ShaderUniform::domeParams, params, 10);
       m_renderer->m_renderDevice->m_basicShader->SetTechnique(ShaderTechnique::flasher_dome);
       m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, true, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, bodyIndices);
    }

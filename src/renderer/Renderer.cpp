@@ -3440,6 +3440,46 @@ void Renderer::BuildPBRLightList()
       }
    }
 
+   // Flasher domes: the table's light arriving at each dome (GI bulbs, inserts, room keys; not the dome lamps), unshadowed,
+   // with the shader's windowed inverse square falloff, at the bulb: the dome layer scatters it in the red plastic
+   for (IEditable* const part : m_table->GetParts())
+   {
+      if (part->GetItemType() != eItemPrimitive)
+         continue;
+      Primitive* const prim = static_cast<Primitive*>(part);
+      Vertex3Ds c;
+      if (!prim->m_d.m_visible || !prim->IsFlasherDome() || !prim->GetFlasherDomeBulb(c))
+         continue;
+      vec3 E(0.f, 0.f, 0.f);
+      Vertex3Ds dir(0.f, 0.f, 0.f);
+      float sum = 0.f;
+      for (int i = 0; i < lightCount; i++)
+      {
+         const LightEntry& e = entries[i];
+         if (e.cookie > 0.f)
+            continue;
+         const Vertex3Ds dl = e.pos - c;
+         const float d2 = dl.Dot(dl);
+         const float dist2 = max(d2, max(e.radius * e.radius, 1.f));
+         const float rr = dist2 / (e.range * e.range);
+         const float x = 1.f - rr * rr;
+         if (x <= 0.f)
+            continue;
+         float w = x * x / dist2;
+         if (e.upward)
+            w *= clamp(-dl.z / sqrtf(max(d2, 1e-6f)), 0.f, 1.f);
+         E.x += e.radiance.x * w;
+         E.y += e.radiance.y * w;
+         E.z += e.radiance.z * w;
+         const float lum = (0.2126f * e.radiance.x + 0.7152f * e.radiance.y + 0.0722f * e.radiance.z) * w;
+         dir += dl * (lum / sqrtf(max(d2, 1e-6f)));
+         sum += lum;
+      }
+      prim->m_domeGI = E;
+      const float dirLen = dir.Length();
+      prim->m_domeGIDir = dirLen > 0.f ? vec4(dir.x / dirLen, dir.y / dirLen, dir.z / dirLen, sum > 0.f ? min(dirLen / sum, 1.f) : 0.f) : vec4(0.f, 0.f, 1.f, 0.f);
+   }
+
    // Bucket into all cells overlapped by the light range (cell count caps at maxPerCell lights)
    for (int i = 0; i < lightCount; i++)
    {
