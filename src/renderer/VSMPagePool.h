@@ -43,7 +43,7 @@ struct LightMap
 
    std::vector<int> phys; // per virtual page: physical pool layer + 1 (0 = not resident)
    std::vector<uint8_t> needed; // caster coverage marked this frame
-   std::vector<uint8_t> dirty; // stale content: page must be (re)rendered
+   std::vector<uint8_t> dirty; // stale content: page must be (re)rendered (bit 1: freshly allocated, kept out of the page table until rendered)
 
    int EntryCount() const { return gridW * gridH * (layout == LAYOUT_CUBE ? 6 : 1); }
    void Reset(int layout_, int w, int h);
