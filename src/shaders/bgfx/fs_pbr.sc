@@ -345,7 +345,7 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wV, const vec3 wPos, const vec3 
       vec2(pbrLightGrid.w - 1.0, pbrLightGrid2.x - 1.0));
    const vec4 cell = pbr_light_texel(512 + int(cellf.y) * int(pbrLightGrid.w) + int(cellf.x));
    const int start = int(cell.x);
-   const int count = min(int(cell.y), 16);
+   const int count = min(int(cell.y), 32); // must match the renderer's maxPerCell
    const float a = roughness * roughness;
    // Specular AA: widen the lobe (alpha2) by the screen-space normal variance so a highlight
    // narrower than a pixel spreads its energy instead of strobing single pixels (no TAA in v1).
