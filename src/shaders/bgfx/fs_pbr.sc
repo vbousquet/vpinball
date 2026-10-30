@@ -43,6 +43,9 @@ SAMPLER2D      (tex_pbr_lights, 12); // packed light records + cluster grid + in
 SAMPLER2DSTEREO(tex_pbr_probe0, 13); // first planar reflection probe (screen space)
 SAMPLER2DSTEREO(tex_pbr_probe1, 14); // second planar reflection probe (screen space)
 SAMPLER2DSTEREO(tex_pbr_refr, 15);   // screen space refraction probe (transmitted light of transparent parts)
+#ifdef TRANSPARENT
+SAMPLER2DSTEREO(tex_probe_depth, 7); // its depth: a refracted sample nearer than the part (a wire in front) is not behind it
+#endif
 
 #ifdef STEREO
     uniform mat4 matView[2];
@@ -311,19 +314,24 @@ vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv, const float roughness)
 // Transmitted light through a transparent part: refract the view ray by the part thickness, project
 // back to screen space and sample the refraction probe (screen space copy of what's behind the part).
 #ifdef STEREO
-vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV, const float roughness, const float v_eye)
+vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV, const float roughness, const vec3 screenCoord, const float v_eye)
 #else
-vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV, const float roughness)
+vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV, const float roughness, const vec3 screenCoord)
 #endif
 {
    const vec3 R = refract(-wV, wN, 1.0 / 1.5); // n1 = 1.0 (air), n2 = 1.5 (plastic), eta = n1 / n2
    const vec3 refracted_pos = wPos + refractionTint_thickness.w * R; // Shift ray by the thickness of the material
    const vec4 proj = mul(mRotViewProj, vec4(refracted_pos - cCameraPosWorld, 1.0));
    #if TEX_V_IS_UP
-   const vec2 uv = vec2(0.5, 0.5) + proj.xy * (0.5 / proj.w);
+   vec2 uv = vec2(0.5, 0.5) + proj.xy * (0.5 / proj.w);
    #else
-   const vec2 uv = vec2(0.5, 0.5) + vec2(proj.x, -proj.y) * (0.5 / proj.w);
+   vec2 uv = vec2(0.5, 0.5) + vec2(proj.x, -proj.y) * (0.5 / proj.w);
    #endif
+   // A refracted sample landing on something nearer than this fragment (a wire or rail in front of the part) is not what
+   // lies behind it: fall back to the unrefracted pixel, as the legacy refraction does (screenCoord = gl_FragCoord, passed
+   // in since gl_FragCoord is only available in main on the SPIR-V/HLSL path)
+   if (texStereoNoLod(tex_probe_depth, uv).x < screenCoord.z)
+      uv = screenCoord.xy * w_h_height.xy;
    return refractionTint_thickness.rgb * texStereoLod(tex_pbr_refr, uv, roughness * pbrProbeLods.z).rgb;
 }
 #endif
@@ -619,9 +627,9 @@ void main() {
          const vec3 wN = mul(vec4(N, 0.0), mView).xyz; // trafo back to world (orthonormal, no renormalize needed)
          const vec3 wV = normalize(cCameraPosWorld - v_tablePos);
          #ifdef STEREO
-            const vec3 behind = pbr_transmit(v_tablePos, wN, wV, roughness, v_eye) * staticColor_Alpha.rgb;
+            const vec3 behind = pbr_transmit(v_tablePos, wN, wV, roughness, gl_FragCoord.xyz, v_eye) * staticColor_Alpha.rgb;
          #else
-            const vec3 behind = pbr_transmit(v_tablePos, wN, wV, roughness) * staticColor_Alpha.rgb;
+            const vec3 behind = pbr_transmit(v_tablePos, wN, wV, roughness, gl_FragCoord.xyz) * staticColor_Alpha.rgb;
          #endif
          gl_FragData[0] = vec4(color.rgb * alpha + behind * (1.0 - alpha) + spec, 1.0);
       }
