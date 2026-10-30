@@ -3068,7 +3068,7 @@ void Renderer::UpdateVirtualShadowMaps()
             if (layer >= 0)
             {
                map.phys[vp] = layer + 1;
-               map.dirty[vp] = 1;
+               map.dirty[vp] = 2; // fresh page: not visible through the page table until rendered (holds another page's depth)
                ptChanged = true;
             }
          }
@@ -3085,7 +3085,7 @@ void Renderer::UpdateVirtualShadowMaps()
       {
          float* const base = m_vsmPageTableData.data() + map.ptBase * 4;
          for (int vp = 0; vp < map.EntryCount(); vp++)
-            base[vp * 4] = (float)map.phys[vp];
+            base[vp * 4] = (map.dirty[vp] & 2) ? 0.f : (float)map.phys[vp];
          m_vsmPageTableDirty = true;
       }
       for (int vp = 0; vp < map.EntryCount(); vp++)
@@ -3154,6 +3154,12 @@ void Renderer::UpdateVirtualShadowMaps()
       m_render_mask = SHADOW_MAP | (job.dynamicTier ? 0u : static_cast<unsigned int>(STATIC_ONLY));
       for (const Caster& caster : casters)
          RenderItem(caster.part, true);
+      if (job.map->dirty[job.vpage] & 2)
+      {
+         // Fresh page now rendered: publish it in the page table
+         m_vsmPageTableData[(job.map->ptBase + job.vpage) * 4] = (float)(job.layer + 1);
+         m_vsmPageTableDirty = true;
+      }
       job.map->dirty[job.vpage] = 0;
       m_vsmTouchedRTs.push_back(pageRT);
    }
