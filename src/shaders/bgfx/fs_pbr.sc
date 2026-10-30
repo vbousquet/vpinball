@@ -879,17 +879,18 @@ void main() {
          const vec3 wV = normalize(cCameraPosWorld - v_tablePos);
          // Blur (a fraction of the probe's mip chain): the roughness, plus a little where the normal map bends away from the
          // surface (scuffs), capped so the probe never collapses to its average colour
-         // VPX_REFR_DEBUG 4/5 (refraction bench vs stock 10.8.1): the legacy composite, mix(refracted, colour, alpha) with no
-         // Fresnel coverage and no blur; 4 also takes the legacy offset direction (refract(+V))
-         const bool legacyMix = pbrLightGrid2.w >= 4.0;
+         // Composite as the legacy refraction does (refraction bench vs stock 10.8.1, 2026-10-30): the refracted image comes
+         // through 1 - alpha, the Fresnel share is not taken out of it. Fresnel lives only in the added reflection (spec):
+         // taking it out of the transmission covered the grazing walls and edges, where the lensing reads as plastic, with
+         // a milky sheet. VPX_REFR_DEBUG 4: the legacy offset direction (refract +V) for the bench.
          const vec3 wI = pbrLightGrid2.w == 4.0 ? wV : -wV;
-         const float blur = legacyMix ? 0.0 : min(roughness + 0.1 * (1.0 - saturate(dot(N, Ng))), 0.08);
+         const float blur = min(roughness + 0.1 * (1.0 - saturate(dot(N, Ng))), 0.08);
          #ifdef STEREO
             const vec3 behind = pbr_transmit(v_tablePos, wN, wI, blur, gl_FragCoord, v_eye) * (staticColor_Alpha.rgb * coatIBL);
          #else
             const vec3 behind = pbr_transmit(v_tablePos, wN, wI, blur, gl_FragCoord) * (staticColor_Alpha.rgb * coatIBL);
          #endif
-         gl_FragData[0] = vec4(color.rgb * alpha + behind * (1.0 - (legacyMix ? alpha : cover)) + spec, 1.0);
+         gl_FragData[0] = vec4(color.rgb * alpha + behind * (1.0 - alpha) + spec, 1.0);
          if (pbrLightGrid2.w == 1.0)
             gl_FragData[0] = vec4(texStereoLod(tex_pbr_refr, gl_FragCoord.xy * w_h_height.xy, 0.0).rgb, 1.0);
          else if (pbrLightGrid2.w == 2.0)
