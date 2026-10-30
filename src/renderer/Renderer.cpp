@@ -2855,6 +2855,9 @@ void Renderer::UpdateVirtualShadowMaps()
       case eItemPlunger:
       case eItemTrigger:
       {
+         // Invisible walls never draw in the shadow pass (see Surface::Render): keep their whole-table bounds from marking pages
+         if (part->GetItemType() == eItemSurface && !static_cast<const Surface*>(part)->m_d.m_sideVisible && !static_cast<const Surface*>(part)->m_d.m_topBottomVisible)
+            break;
          Caster c;
          c.part = part;
          c.isStatic = IsStaticShadowCaster(part);
