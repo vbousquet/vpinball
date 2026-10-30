@@ -376,14 +376,18 @@ vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV, const float rou
    const vec3 refracted_pos = wPos + refractionTint_thickness.w * R; // Shift ray by the thickness of the material
    const vec4 proj = mul(mRotViewProj, vec4(refracted_pos - cCameraPosWorld, 1.0));
    #if TEX_V_IS_UP
-   vec2 uv = vec2(0.5, 0.5) + proj.xy * (0.5 / proj.w);
+   const vec2 uvR = vec2(0.5, 0.5) + proj.xy * (0.5 / proj.w);
    #else
-   vec2 uv = vec2(0.5, 0.5) + vec2(proj.x, -proj.y) * (0.5 / proj.w);
+   const vec2 uvR = vec2(0.5, 0.5) + vec2(proj.x, -proj.y) * (0.5 / proj.w);
    #endif
    // A refracted sample that lands on something nearer than this fragment (a wire or rail in front of the ramp) is not
-   // what lies behind it: fall back to the unrefracted pixel (as the legacy refraction does)
-   if (texStereo(tex_probe_depth, uv).x < fragCoord.z)
-      uv = fragCoord.xy * w_h_height.xy;
+   // what lies behind it: fall back toward the unrefracted pixel (as the legacy refraction does), through the half offset
+   // first so the switch does not leave a per-pixel staircase along the occluder
+   const vec2 uv0 = fragCoord.xy * w_h_height.xy;
+   const vec2 uvH = 0.5 * (uvR + uv0);
+   vec2 uv = uvR;
+   if (texStereo(tex_probe_depth, uvR).x < fragCoord.z)
+      uv = texStereo(tex_probe_depth, uvH).x < fragCoord.z ? uv0 : uvH;
    return refractionTint_thickness.rgb * texStereoLod(tex_pbr_refr, uv, roughness * pbrProbeLods.z).rgb;
 }
 #endif
@@ -867,7 +871,9 @@ void main() {
          // behind itself: the probe (a copy of the scene behind), refracted through the part's thickness and tinted,
          // through the uncovered fraction, over its own diffuse and under its reflections. The probe is blurred by the
          // roughness and more where the normal map bends away from the surface (scuffs, scratches): flat runs stay clear.
-         const vec3 wN = mul(vec4(N, 0.0), mView).xyz; // trafo back to world (orthonormal, no renormalize needed)
+         // The offset follows the surface (mostly the geometric normal): the scratch normals bending it pixel by pixel
+         // shredded the edges behind into hairs along the scratches; they blur it instead
+         const vec3 wN = mul(vec4(normalize(mix(Ng, N, 0.2)), 0.0), mView).xyz; // trafo back to world (orthonormal)
          const vec3 wV = normalize(cCameraPosWorld - v_tablePos);
          // Blur (a fraction of the probe's mip chain): the roughness, plus a little where the normal map bends away from the
          // surface (scuffs), capped so the probe never collapses to its average colour
