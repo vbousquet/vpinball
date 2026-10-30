@@ -3443,7 +3443,9 @@ void Renderer::BuildPBRLightList()
    m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrLightGrid, m_table->m_left, m_table->m_top, 1.f / cellSize, (float)cellsX);
    // z: specular AA strength (fs_pbr: the normal variance added to the GGX lobes), VPX_SPEC_AA=0 turns it off for A/B
    static const float specAA = std::getenv("VPX_SPEC_AA") ? (float)atof(std::getenv("VPX_SPEC_AA")) : 1.f;
-   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrLightGrid2, (float)cellsY, (float)lightCount, specAA, 0.f);
+   // w: refraction probe debug view (VPX_REFR_DEBUG=1 raw probe at the pixel, 2 at the refracted position)
+   static const float refrDebug = std::getenv("VPX_REFR_DEBUG") ? (float)atof(std::getenv("VPX_REFR_DEBUG")) : 0.f;
+   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrLightGrid2, (float)cellsY, (float)lightCount, specAA, refrDebug);
    m_renderDevice->AddBeginOfFrameCmd([rd = m_renderDevice, data = std::move(texData)]()
       { bgfx::updateTexture2D(rd->m_pbrLightListTex, 0, 0, 0, 0, 256, 32, bgfx::copy(data.data(), static_cast<uint32_t>(data.size() * sizeof(float)))); });
 }

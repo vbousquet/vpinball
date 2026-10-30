@@ -919,12 +919,13 @@ void Shader::SetTechniqueMaterial(
       // Clear coat layer (on by default, VPX_COAT=0 disables it for A/B tests): a zero strength skips the coat lobe in the shaders
       static const bool coatEnabled = []() { const char* const v = std::getenv("VPX_COAT"); return v == nullptr || v[0] != '0'; }();
       SetVector(ShaderUniform::pbrCoat, coatEnabled ? saturate(mat.m_fClearcoat) : 0.f, clamp(mat.m_fClearcoatRoughness, 0.02f, 1.f), 0.f, 0.f);
-      // See-through parts use the transparent shading (premultiplied: their reflections are not modulated by their coverage,
-      // refraction probe) also when the specular is evaluated in-shader (no depth prepass, which is the Player default, or
-      // inside a probe render): the 'ti' variants, without the sideband outputs. Alpha-tested parts keep pbr_is_at (the 'ti'
-      // variants have no alpha test).
-      if (pbrMaps->transparent && (!pbrMaps->inShaderSpecular || !(textured && doAlphaTest)))
+      // VPX_PBR_TI=0: the old routing (transparent parts on the opaque in-shader technique without the prepass), for A/B
+      static const bool transparentInShader = []() { const char* const v = std::getenv("VPX_PBR_TI"); return v == nullptr || v[0] != '0'; }();
+      if (pbrMaps->transparent && (!pbrMaps->inShaderSpecular || (transparentInShader && !(textured && doAlphaTest))))
       {
+         // See-through parts use the transparent shading (premultiplied: their reflections are not modulated by their
+         // coverage, Fresnel coverage, refraction probe) also when the specular is evaluated in-shader (no depth prepass,
+         // which is the default, or inside a probe render): the 'ti' variants, without the sideband outputs
          tech = pbrMaps->inShaderSpecular ? (textured ? ShaderTechnique::pbr_ti : ShaderTechnique::pbr_ti_notex)
                                           : (textured ? ShaderTechnique::pbr_t : ShaderTechnique::pbr_t_notex);
          m_pbrPremultiply = true;

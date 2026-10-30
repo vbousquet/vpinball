@@ -367,9 +367,9 @@ vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv, const float roughness, 
 // Transmitted light through a transparent part: refract the view ray by the part thickness, project
 // back to screen space and sample the refraction probe (screen space copy of what's behind the part).
 #ifdef STEREO
-vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV, const float roughness, const vec3 screenCoord, const float v_eye)
+vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV, const float roughness, const vec4 fragCoord, const float v_eye)
 #else
-vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV, const float roughness, const vec3 screenCoord)
+vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV, const float roughness, const vec4 fragCoord)
 #endif
 {
    const vec3 R = refract(-wV, wN, 1.0 / 1.5); // n1 = 1.0 (air), n2 = 1.5 (plastic), eta = n1 / n2
@@ -380,11 +380,10 @@ vec3 pbr_transmit(const vec3 wPos, const vec3 wN, const vec3 wV, const float rou
    #else
    vec2 uv = vec2(0.5, 0.5) + vec2(proj.x, -proj.y) * (0.5 / proj.w);
    #endif
-   // A refracted sample landing on something nearer than this fragment (a wire or rail in front of the part) is not what
-   // lies behind it: fall back to the unrefracted pixel, as the legacy refraction does (screenCoord = gl_FragCoord, passed
-   // in since gl_FragCoord is only available in main on the SPIR-V/HLSL path)
-   if (texStereoNoLod(tex_probe_depth, uv).x < screenCoord.z)
-      uv = screenCoord.xy * w_h_height.xy;
+   // A refracted sample that lands on something nearer than this fragment (a wire or rail in front of the ramp) is not
+   // what lies behind it: fall back to the unrefracted pixel (as the legacy refraction does)
+   if (texStereo(tex_probe_depth, uv).x < fragCoord.z)
+      uv = fragCoord.xy * w_h_height.xy;
    return refractionTint_thickness.rgb * texStereoLod(tex_pbr_refr, uv, roughness * pbrProbeLods.z).rgb;
 }
 #endif
@@ -864,23 +863,37 @@ void main() {
       const float cover = alpha + (1.0 - alpha) * saturate(dot(W * coatIBL, vec3(0.2126, 0.7152, 0.0722)));
       BRANCH if (pbrProbeParams.w > 0.0)
       {
-         // Bound refraction probe: the part is drawn unblended (like legacy refraction parts), so it composites what lies
-         // behind it itself, as the blend below would: the probe (a copy of the scene behind), refracted through the part's
-         // thickness and tinted, through the uncovered fraction, plus the part's own diffuse & emission by coverage and its
-         // unmodulated specular, written opaque
+         // Bound refraction probe: the part is drawn unblended (as legacy refraction parts), so it composites what lies
+         // behind itself: the probe (a copy of the scene behind), refracted through the part's thickness and tinted,
+         // through the uncovered fraction, over its own diffuse and under its reflections. The probe is blurred by the
+         // roughness and more where the normal map bends away from the surface (scuffs, scratches): flat runs stay clear.
          const vec3 wN = mul(vec4(N, 0.0), mView).xyz; // trafo back to world (orthonormal, no renormalize needed)
          const vec3 wV = normalize(cCameraPosWorld - v_tablePos);
+         // Blur (a fraction of the probe's mip chain): the roughness, plus a little where the normal map bends away from the
+         // surface (scuffs), capped so the probe never collapses to its average colour
+         const float blur = min(roughness + 0.1 * (1.0 - saturate(dot(N, Ng))), 0.08);
          #ifdef STEREO
-            const vec3 behind = pbr_transmit(v_tablePos, wN, wV, roughness, gl_FragCoord.xyz, v_eye) * (staticColor_Alpha.rgb * coatIBL);
+            const vec3 behind = pbr_transmit(v_tablePos, wN, wV, blur, gl_FragCoord, v_eye) * (staticColor_Alpha.rgb * coatIBL);
          #else
-            const vec3 behind = pbr_transmit(v_tablePos, wN, wV, roughness, gl_FragCoord.xyz) * (staticColor_Alpha.rgb * coatIBL);
+            const vec3 behind = pbr_transmit(v_tablePos, wN, wV, blur, gl_FragCoord) * (staticColor_Alpha.rgb * coatIBL);
          #endif
-         gl_FragData[0] = vec4(color.rgb * alpha + behind * (1.0 - alpha) + spec, 1.0);
+         gl_FragData[0] = vec4(color.rgb * alpha + behind * (1.0 - cover) + spec, 1.0);
+         if (pbrLightGrid2.w == 1.0)
+            gl_FragData[0] = vec4(texStereoLod(tex_pbr_refr, gl_FragCoord.xy * w_h_height.xy, 0.0).rgb, 1.0);
+         else if (pbrLightGrid2.w == 2.0)
+            gl_FragData[0] = vec4(behind, 1.0);
+         else if (pbrLightGrid2.w == 3.0)
+         {
+            #ifdef STEREO
+               gl_FragData[0] = vec4(pbr_transmit(v_tablePos, wN, wV, 0.0, gl_FragCoord, v_eye), 1.0);
+            #else
+               gl_FragData[0] = vec4(pbr_transmit(v_tablePos, wN, wV, 0.0, gl_FragCoord), 1.0);
+            #endif
+         }
       }
       else
-         // Premultiplied output (used with ONE/INVSRC_ALPHA blending): diffuse & emission (or the
-         // transmitted term) are modulated by coverage while specular stays unmodulated (reflects
-         // even on thin glass)
+         // Premultiplied output (used with ONE/INVSRC_ALPHA blending): diffuse & emission are modulated by coverage while
+         // specular stays unmodulated (reflects even on thin glass)
          gl_FragData[0] = vec4(color.rgb * alpha + spec, cover);
    #else
       gl_FragData[0] = vec4(color.rgb + spec, alpha);
