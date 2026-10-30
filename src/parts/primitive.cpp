@@ -1206,7 +1206,7 @@ void Primitive::Render(const unsigned int renderMask)
          const float hash = sinf(m_d.m_vPosition.x * 127.1f + m_d.m_vPosition.y * 311.7f) * 43758.5453f;
          const float seed = hash - floorf(hash);
          float turn = -78.201f, turnJitter = 14.641f, fadeTint = 1.f, depthK = 1.f;
-         vec4 params[11] = {
+         vec4 params[12] = {
             vec4(15.f, 45.f, 60.f, 70.f), // traced elevations
             vec4(4.f, 2.5f, 3.5f, 1.5f), // depths (mm): cover, facets, glow parallax, rim fade
             vec4(m_d.m_tracedGain, 0.67f, 1.6f, 0.f), // glow gain, glow spread, IOR, alignment view
@@ -1217,7 +1217,8 @@ void Primitive::Render(const unsigned int renderMask)
             convertColor(m_d.m_color, 0.f), // the plastic's colour
             vec4(0.f, m_d.m_tracedHaloSize, m_d.m_tracedHaloStrength, 0.f), // spill pass, size, strength
             vec4(0.f, 0.f, 0.f, 0.f), // table position to ink mask UV (scale, offset), 0 = no mask
-            vec4(0.f, 0.f, 0.f, 0.f) }; // print map texel at the spill mip (u, v), white leak through the plastic, room glint tint
+            vec4(0.f, 0.f, 0.f, 0.f), // print map texel at the spill mip (u, v), white leak through the plastic, room glint tint
+            vec4(0.f, 0.f, 0.f, 0.f) }; // print map tint on the glow
          // The lamp-off look atlas, in the Emission Map slot
          Texture *const envMap = m_ptable->GetImage(m_d.m_szEmissionMap);
          if (envMap)
@@ -1264,6 +1265,7 @@ void Primitive::Render(const unsigned int renderMask)
             if ((p = strstr(tuning, "depthk=")) && sscanf(p + 7, "%f", &v) == 1) depthK = v;
             if ((p = strstr(tuning, "leak=")) && sscanf(p + 5, "%f", &v) == 1) params[10].z = v;
             if ((p = strstr(tuning, "roomtint=")) && sscanf(p + 9, "%f", &v) == 1) params[10].w = v;
+            if ((p = strstr(tuning, "inktint=")) && sscanf(p + 8, "%f", &v) == 1) params[11].x = v;
          };
          if (!m_d.m_tracedParams.empty())
             tune(m_d.m_tracedParams.c_str());
@@ -1299,19 +1301,19 @@ void Primitive::Render(const unsigned int renderMask)
             m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::staticColor_Alpha, color.x * color.w * tint[0] / tint2700[0],
                color.y * color.w * tint[1] / tint2700[1], color.z * color.w * tint[2] / tint2700[2], color.w);
          }
-         m_renderer->m_renderDevice->m_basicShader->SetFloat4v(ShaderUniform::tracedParams, params, 11);
+         m_renderer->m_renderDevice->m_basicShader->SetFloat4v(ShaderUniform::tracedParams, params, 12);
          m_renderer->m_renderDevice->m_basicShader->SetTechnique(ShaderTechnique::insert_traced);
          // The lit insert's soft spill onto the art and coat around it: the same card, scaled up about its centre, drawn
          // first by the same technique in its spill mode. Not in reflections, and not with the lamp off.
          if (params[8].y > 0.f && params[8].z > 0.f && alpha > 0.f && !isReflectionPass)
          {
             params[8].x = 1.f;
-            m_renderer->m_renderDevice->m_basicShader->SetFloat4v(ShaderUniform::tracedParams, params, 11);
+            m_renderer->m_renderDevice->m_basicShader->SetFloat4v(ShaderUniform::tracedParams, params, 12);
             m_renderer->UpdateBasicShaderMatrix(Matrix3D::MatrixScale(params[8].y, params[8].y, 1.f) * m_fullMatrix);
             m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, true, m_d.m_vPosition, m_d.m_depthBias + 0.1f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_groupdRendering ? m_numGroupIndices : (uint32_t)m_mesh.NumIndices());
             m_renderer->UpdateBasicShaderMatrix(m_fullMatrix, m_prevFullMatrixValid ? &m_prevFullMatrix : nullptr);
             params[8].x = 0.f;
-            m_renderer->m_renderDevice->m_basicShader->SetFloat4v(ShaderUniform::tracedParams, params, 11);
+            m_renderer->m_renderDevice->m_basicShader->SetFloat4v(ShaderUniform::tracedParams, params, 12);
          }
       }
       else
