@@ -488,9 +488,12 @@ Renderer::~Renderer()
    delete m_staticPrepassRT;
 #if defined(ENABLE_BGFX)
    m_vsmPoolSampler = nullptr;
+   m_vsmTransSampler = nullptr;
    m_vsmPageTableSampler = nullptr;
    if (bgfx::isValid(m_vsmPoolTex))
       bgfx::destroy(m_vsmPoolTex);
+   if (bgfx::isValid(m_vsmTransTex))
+      bgfx::destroy(m_vsmTransTex);
    if (bgfx::isValid(m_vsmPageTableTex))
       bgfx::destroy(m_vsmPageTableTex);
 #endif
@@ -2665,6 +2668,15 @@ void Renderer::CreateVSMPagePoolTargets()
       // so each page render job creates its layer attachment + framebuffer transiently (freed at end of frame).
       m_vsmPoolSampler = std::make_shared<Sampler>(m_renderDevice, "VSM Page Pool"s, SurfaceType::RT_DEFAULT, m_vsmPoolTex, bgfx::TextureFormat::D32F, VSM::PAGE_SIZE, VSM::PAGE_SIZE, true);
       m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_vsm_pool, m_vsmPoolSampler);
+      // Transmittance layer of each page (cleared with the page: no translucent caster = absorbance 0)
+      m_vsmTransSampler = nullptr;
+      if (bgfx::isValid(m_vsmTransTex))
+         bgfx::destroy(m_vsmTransTex);
+      m_vsmTransTex = bgfx::createTexture2D(VSM::PAGE_SIZE, VSM::PAGE_SIZE, false, static_cast<uint16_t>(m_vsmPoolPages), bgfx::TextureFormat::RGBA8, BGFX_TEXTURE_RT);
+      bgfx::setName(m_vsmTransTex, "VSM Page Transmittance");
+      m_vsmTransSampler
+         = std::make_shared<Sampler>(m_renderDevice, "VSM Page Transmittance"s, SurfaceType::RT_DEFAULT, m_vsmTransTex, bgfx::TextureFormat::RGBA8, VSM::PAGE_SIZE, VSM::PAGE_SIZE, true);
+      m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_vsm_trans, m_vsmTransSampler);
    }
    if (!bgfx::isValid(m_vsmPageTableTex))
    {
@@ -2880,6 +2892,7 @@ void Renderer::UpdateVirtualShadowMaps()
       Matrix3D view, proj;
       bool dynamicTier;
       VSM::LightMap* map;
+      int index; // shadow slot (per-light uniform array index)
    };
    vector<PageJob> jobs;
    vector<uint8_t> markTmp;
@@ -2994,7 +3007,7 @@ void Renderer::UpdateVirtualShadowMaps()
          light->m_pbrShadowLayout = VSM::LAYOUT_ORTHO;
          m_vsmShadowVP[index] = view * proj;
          m_vsmParams[index] = vec4((float)map.ptBase, (float)gridW, (float)gridH, zf - zn);
-         m_vsmBox[index] = vec4(1.f / (r - l), 1.f / (t - b), 0.f, 0.f);
+         m_vsmBox[index] = vec4(1.f / (r - l), 1.f / (t - b), zn, 0.f); // z: near depth (translucent caster linear depth start)
 
          // Mark caster coverage; dynamic casters of a dynamic-tier light also dirty their pages
          std::fill(map.needed.begin(), map.needed.end(), uint8_t(0));
@@ -3111,6 +3124,7 @@ void Renderer::UpdateVirtualShadowMaps()
          job.layer = map.phys[vp] - 1;
          job.dynamicTier = dynamicTier;
          job.map = &map;
+         job.index = index;
          if (map.layout == VSM::LAYOUT_CUBE)
          {
             const int face = vp / (map.gridW * map.gridH);
@@ -3139,9 +3153,10 @@ void Renderer::UpdateVirtualShadowMaps()
          break;
       rendered++;
       // Transient per-page framebuffer: only the few pages rendered this frame hold an FB handle at once
-      bgfx::Attachment attachment;
-      attachment.init(m_vsmPoolTex, bgfx::Access::Write, static_cast<uint16_t>(job.layer), 1, 0, BGFX_ATTACHMENT_NONE);
-      const bgfx::FrameBufferHandle fbh = bgfx::createFrameBuffer(1, &attachment);
+      bgfx::Attachment attachments[2];
+      attachments[0].init(m_vsmTransTex, bgfx::Access::Write, static_cast<uint16_t>(job.layer), 1, 0, BGFX_ATTACHMENT_NONE);
+      attachments[1].init(m_vsmPoolTex, bgfx::Access::Write, static_cast<uint16_t>(job.layer), 1, 0, BGFX_ATTACHMENT_NONE);
+      const bgfx::FrameBufferHandle fbh = bgfx::createFrameBuffer(2, attachments);
       if (!bgfx::isValid(fbh))
       {
          PLOGE << "VSM page framebuffer creation failed (handle pool exhausted)";
@@ -3152,12 +3167,13 @@ void Renderer::UpdateVirtualShadowMaps()
          bgfx::TextureFormat::D32F, "VSMPage"s + std::to_string(job.layer), VSM::PAGE_SIZE, VSM::PAGE_SIZE, colorFormat::RGBA8);
       m_renderDevice->AddEndOfFrameCmd([pageRT]() { delete pageRT; });
       m_renderDevice->SetRenderTarget("VSM Page "s + std::to_string(job.layer), pageRT, false);
-      m_renderDevice->Clear(clearType::ZBUFFER, 0x00000000);
+      m_renderDevice->Clear(clearType::ZBUFFER | clearType::TARGET, 0x00000000);
       m_renderDevice->ResetRenderState();
       m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_TRUE);
       m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_TRUE);
       m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
       m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
+      m_renderDevice->SetRenderState(RenderState::COLORWRITEENABLE, RenderState::RGBMASK_NONE);
       m_renderDevice->m_basicShader->SetTechnique(ShaderTechnique::unshaded_without_texture);
       for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
       {
@@ -3168,6 +3184,25 @@ void Renderer::UpdateVirtualShadowMaps()
       m_render_mask = SHADOW_MAP | (job.dynamicTier ? 0u : static_cast<unsigned int>(STATIC_ONLY));
       for (const Caster& caster : casters)
          RenderItem(caster.part, true);
+      // Translucent casters (PBR plastics with a transmission, clear parts) do not block: they tint and attenuate the light
+      // through the page's transmittance layer, max blended (strongest absorbance, nearest caster), depth tested against
+      // the opaque casters. Linear depth is normalized over the light's depth range (ortho: near..far, cube: 0..far).
+      {
+         const bool cube = job.map->layout == VSM::LAYOUT_CUBE;
+         const vec4 vsmP = m_vsmParams[job.index];
+         const float zStart = cube ? 0.f : m_vsmBox[job.index].z;
+         m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrShadowParams, 1.f / VSM::PAGE_SIZE, 0.002f, zStart, 1.f / max(vsmP.w, 1.f));
+         m_renderDevice->SetRenderState(RenderState::COLORWRITEENABLE, RenderState::RGBMASK_RGBA);
+         m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
+         m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_TRUE);
+         m_renderDevice->SetRenderState(RenderState::BLENDOP, RenderState::BLENDOP_MAX);
+         m_renderDevice->SetRenderState(RenderState::SRCBLEND, RenderState::ONE);
+         m_renderDevice->SetRenderState(RenderState::DESTBLEND, RenderState::ONE);
+         m_render_mask |= SHADOW_TRANS;
+         for (const Caster& caster : casters)
+            if (caster.part->GetItemType() == eItemPrimitive)
+               RenderItem(caster.part, true);
+      }
       if (job.map->dirty[job.vpage] & 2)
       {
          // Fresh page now rendered: publish it in the page table
