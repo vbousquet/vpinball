@@ -2962,7 +2962,9 @@ void Renderer::UpdateVirtualShadowMaps()
          boxR = r;
          boxB = b;
          boxT = t;
-         lightProj = Matrix3D::MatrixOrthoOffCenterRH(l, r, b, t, zn, zf);
+         // SetOrthoOffCenterRH maps signed view-space z to NDC: a RH view has forward on negative z,
+         // so the near/far distances are passed negated (near view-z -> 0, far view-z -> 1)
+         lightProj = Matrix3D::MatrixOrthoOffCenterRH(l, r, b, t, -zn, -zf);
          const Matrix3D& proj = lightProj;
          const float side = std::max(r - l, t - b);
          float pageWorld = side * VSM::PAGE_SIZE / (float)m_vsmVirtRes;
@@ -2999,6 +3001,8 @@ void Renderer::UpdateVirtualShadowMaps()
          markTmp.assign(map.EntryCount(), 0);
          for (const Caster& caster : casters)
          {
+            if (caster.boundsMin.x > caster.boundsMax.x || caster.boundsMin.y > caster.boundsMax.y || caster.boundsMin.z > caster.boundsMax.z)
+               continue;
             std::fill(markTmp.begin(), markTmp.end(), uint8_t(0));
             // PCF taps reach up to 0.02 of the map (see fs_pbr filterRadius clamp); non-resident pages
             // count as lit, so the marked band must cover caster bounds + max penumbra or the soft edge
