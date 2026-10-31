@@ -559,11 +559,19 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNg, const vec3 wV, const vec3 w
       }
       BRANCH if (shadowMode == 1 || shadowMode >= 3) // RAYTRACED_BALL_SHADOWS or PBR ball shadow tiers
          shadow *= get_light_ball_shadow(lPos.xyz, -dl, sqrt(dist2));
-      // Thin surface translucency: the transmitted fraction (pbrTransmission) of the light arriving on the far side leaves
+      // Thin surface translucency: the transmitted fraction (transmission) of the light arriving on the far side leaves
       // this side diffusely, filtered by the surface colour (printed ink: dark ink passes little, white flood glows). Light
-      // ink scatters wider: a wrapped lobe lets grazing light through, spreading the glow away from the bulb.
-      const float wrap = 0.4 * dot(diffuse, vec3(0.2126, 0.7152, 0.0722));
-      const float transmitted = NdotLraw < 0.0 ? transmission * saturate((wrap - NdotLraw) / (1.0 + wrap)) : 0.0;
+      // ink scatters wider: a wrapped lobe lets grazing light through, spreading the glow away from the bulb. Clear
+      // plastics additionally show a view-dependent transmission cone toward the light (the bulb seen through the
+      // sheet), widening from a tight hot spot to the wrap term as the material roughness frosts over.
+      float transmitted = 0.0;
+      BRANCH if (NdotLraw < 0.0)
+      {
+         const float wrap = 0.4 * dot(diffuse, vec3(0.2126, 0.7152, 0.0722));
+         const vec3 l2 = normalize(-l + wN * 0.5);
+         const float lobe = pow(saturate(dot(-wV, l2)), exp2(mix(12.0, 2.0, roughness)));
+         transmitted = transmission * saturate((wrap - NdotLraw) / (1.0 + wrap) + lobe * (1.0 - roughness));
+      }
       acc += (gFade * shadow) * (diffuse * ((vec3_splat(1.0) - F) * NdotL + transmitted) * (1.0 / PI) * (lCol * (x * x / dist2)));
       specOut += (gFade * shadow) * spec;
    }
