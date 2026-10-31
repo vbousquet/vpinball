@@ -783,13 +783,31 @@ void Surface::Render(const unsigned int renderMask)
    {
       if (m_d.m_visible && m_meshBuffer != nullptr && (!m_isDropped || StaticRendering()))
       {
+         // Translucent sub-meshes draw in the transmittance pass only, classified per sub-mesh material
+         const bool transPass = (renderMask & Renderer::SHADOW_TRANS) != 0;
          m_renderer->UpdateBasicShaderMatrix();
          if (m_d.m_sideVisible)
-            m_renderer->m_renderDevice->DrawMesh(
-               m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numVertices * 6);
+         {
+            const Material *const mat = m_ptable->GetMaterial(m_d.m_szSideMaterial);
+            if (m_renderer->IsTranslucentShadowCaster(mat) == transPass)
+            {
+               if (transPass)
+                  m_renderer->BindTranslucentShadowCaster(mat, m_ptable->GetImage(m_d.m_szSideImage), 1.f);
+               m_renderer->m_renderDevice->DrawMesh(
+                  m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numVertices * 6);
+            }
+         }
          if (m_d.m_topBottomVisible)
-            m_renderer->m_renderDevice->DrawMesh(
-               m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, m_numVertices * 6, m_numPolys * 3);
+         {
+            const Material *const mat = m_ptable->GetMaterial(m_d.m_szMaterial);
+            if (m_renderer->IsTranslucentShadowCaster(mat) == transPass)
+            {
+               if (transPass)
+                  m_renderer->BindTranslucentShadowCaster(mat, m_ptable->GetImage(m_d.m_szImage), 1.f);
+               m_renderer->m_renderDevice->DrawMesh(
+                  m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, m_numVertices * 6, m_numPolys * 3);
+            }
+         }
       }
       return;
    }

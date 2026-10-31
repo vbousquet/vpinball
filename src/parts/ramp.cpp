@@ -727,8 +727,14 @@ void Ramp::Render(const unsigned int renderMask)
    // PBR shadow map pass: draw only the caster geometry with the light's view-projection
    if (renderMask & Renderer::SHADOW_MAP)
    {
+      // Translucent casters (translucent ramps are mostly PBR plastics) draw in the transmittance pass only
+      const bool translucent = m_renderer->IsTranslucentShadowCaster(mat);
+      if (translucent != ((renderMask & Renderer::SHADOW_TRANS) != 0))
+         return;
       if (m_d.m_visible && m_meshBuffer != nullptr && mat != nullptr && (!isStaticOnly || (!mat->m_bOpacityActive && !isPBR)))
       {
+         if (translucent)
+            m_renderer->BindTranslucentShadowCaster(mat, m_ptable->GetImage(m_d.m_szImage), 1.f);
          m_renderer->UpdateBasicShaderMatrix();
          m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
       }
