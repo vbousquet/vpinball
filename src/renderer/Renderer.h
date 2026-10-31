@@ -226,6 +226,11 @@ public:
    void RenderMesh(const unsigned int renderMask, RenderMeshDesc& draw, const VisualMaterial& mat);
 
    // The queued renderable updates all invalidate the accumulated static part prerender of the views
+   // Translucent shadow casters (PBR materials with a transmission, or with opacity): in a SHADOW_MAP pass they do not
+   // write depth; in a SHADOW_MAP|SHADOW_TRANS pass they draw their absorbance into the page's transmittance layer.
+   bool IsTranslucentShadowCaster(const Material* mat) const; // Shared per-material caster classification of the SHADOW_MAP branches
+   void BindTranslucentShadowCaster(const Material* mat, Texture* image, float partAlpha) const; // pbr_shadow_trans technique + tint bindings
+
    void ReinitRenderable(IRenderable* part)
    {
       if (part)
