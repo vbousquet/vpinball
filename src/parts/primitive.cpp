@@ -902,6 +902,14 @@ void Primitive::Render(const unsigned int renderMask)
    {
       if (m_d.m_visible && !m_skipRendering && m_meshBuffer != nullptr && ((renderMask & Renderer::STATIC_ONLY) == 0 || m_d.m_staticRendering))
       {
+         // Translucent casters (PBR materials with a transmission, or with opacity) tint the light instead of blocking it:
+         // they draw in the transmittance pass only, with their base colour, image and alpha
+         const Material *const mat = m_ptable->GetMaterial(m_d.m_szMaterial);
+         const bool translucent = m_renderer->IsTranslucentShadowCaster(mat);
+         if (translucent != ((renderMask & Renderer::SHADOW_TRANS) != 0))
+            return;
+         if (translucent)
+            m_renderer->BindTranslucentShadowCaster(mat, m_ptable->GetImage(m_d.m_szImage), m_d.m_alpha / 100.f);
          m_renderer->UpdateBasicShaderMatrix(RecalculateMatrices());
          m_renderer->m_renderDevice->DrawMesh(
             m_renderer->m_renderDevice->m_basicShader, false, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, (uint32_t)m_mesh.NumIndices());

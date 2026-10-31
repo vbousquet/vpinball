@@ -19,7 +19,9 @@
 // Builds a table exercising the PBR orthographic shadow map path: the playfield has a PBR material
 // (the shadow receiver), one static and one dynamic-tier shadowed PBR light high above the table
 // (ortho layout), plus static (wall) and dynamic (flipper) casters inside their footprint.
-static std::filesystem::path CreatePBRShadowTable()
+// With translucentCaster, a red translucent PBR plastic plate floats between the lights and the
+// playfield: the receivers behind it get the transmitted (red) light instead of a plain shadow.
+static std::filesystem::path CreatePBRShadowTable(const bool translucentCaster = false)
 {
    CComObject<PinTable>* table;
    CComObject<PinTable>::CreateInstance(&table);
@@ -97,7 +99,35 @@ static std::filesystem::path CreatePBRShadowTable()
       light->Release();
    }
 
-   const std::filesystem::path file = GetTestTmpDir() / "pbr-shadow-table.vpx";
+   // Translucent caster: a red PBR plastic plate floating between the lights (ortho at z=500, near
+   // light at z=60) and the playfield. Wrap lighting is the material's thin-surface transmission.
+   if (translucentCaster)
+   {
+      Material* const plasticMat = new Material();
+      plasticMat->m_name = "pbr_plastic_red";
+      plasticMat->m_type = Material::MaterialType::PBR;
+      plasticMat->m_fRoughness = 0.4f;
+      plasticMat->m_cBase = RGB(255, 40, 30);
+      plasticMat->m_cRefractionTint = RGB(255, 60, 40);
+      plasticMat->m_fThickness = 5.f;
+      plasticMat->m_bOpacityActive = true;
+      plasticMat->m_fOpacity = 0.65f;
+      plasticMat->m_fWrapLighting = 1.0f;
+      table->AddMaterial(plasticMat);
+
+      Primitive* const plastic = Primitive::COMCreate();
+      plastic->Init(cx + 80.f, cy - 200.f, false);
+      plastic->SetName("caster_plastic"s);
+      plastic->m_d.m_vPosition.z = 120.f;
+      plastic->m_d.m_vSize = Vertex3Ds(400.f, 300.f, 12.f);
+      plastic->m_d.m_szMaterial = plasticMat->m_name;
+      plastic->m_d.m_visible = true;
+      plastic->m_d.m_staticRendering = true;
+      table->AddPart(plastic);
+      plastic->Release();
+   }
+
+   const std::filesystem::path file = GetTestTmpDir() / (translucentCaster ? "pbr-translucency-table.vpx" : "pbr-shadow-table.vpx");
    table->m_filename = file;
    TestFileFeedback saveFeedback;
    REQUIRE(SUCCEEDED(table->Save(saveFeedback)));
@@ -116,6 +146,24 @@ TEST_CASE("PBR shadow map render [render]")
    g_settingsService.GetAppSettings().SetPlayer_DepthPrepass(2, false);
    CaptureRender(tableFile.string(), "pbr-shadow-Test.webp"s);
    CHECK(std::filesystem::exists(GetAssetPath() / "pbr-shadow-Test.webp"));
+#endif
+
+   ResetVPX();
+}
+
+// A red translucent plastic plate sits between the shadowed lights and the playfield: the light it
+// transmits reaches the playfield tinted red (coloured transmittance shadow, ortho + cube layouts)
+// while the plate itself glows from the near light behind it (thin surface translucency).
+TEST_CASE("PBR transmittance shadow render [render]")
+{
+   ResetVPX();
+   const std::filesystem::path tableFile = CreatePBRShadowTable(true);
+
+#if defined(ENABLE_BGFX)
+   g_settingsService.GetAppSettings().SetPlayer_GfxBackend("Direct3D11"s, false);
+   g_settingsService.GetAppSettings().SetPlayer_DepthPrepass(2, false);
+   CaptureRender(tableFile.string(), "pbr-translucency-Test.webp"s);
+   CHECK(std::filesystem::exists(GetAssetPath() / "pbr-translucency-Test.webp"));
 #endif
 
    ResetVPX();

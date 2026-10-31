@@ -487,9 +487,12 @@ Renderer::~Renderer()
    delete m_tonemapLUT;
 #if defined(ENABLE_BGFX)
    m_vsmPoolSampler = nullptr;
+   m_vsmTransSampler = nullptr;
    m_vsmPageTableSampler = nullptr;
    if (bgfx::isValid(m_vsmPoolTex))
       bgfx::destroy(m_vsmPoolTex);
+   if (bgfx::isValid(m_vsmTransTex))
+      bgfx::destroy(m_vsmTransTex);
    if (bgfx::isValid(m_vsmPageTableTex))
       bgfx::destroy(m_vsmPageTableTex);
 #endif
@@ -1411,6 +1414,15 @@ void Renderer::CreateVSMPagePoolTargets()
       // so each page render job creates its layer attachment + framebuffer transiently (freed at end of frame).
       m_vsmPoolSampler = std::make_shared<Sampler>(m_renderDevice, "VSM Page Pool"s, SurfaceType::RT_DEFAULT, m_vsmPoolTex, bgfx::TextureFormat::D32F, VSM::PAGE_DIM, VSM::PAGE_DIM, true);
       m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_vsm_pool, m_vsmPoolSampler);
+      // Transmittance layer of each page (cleared with the page: no translucent caster = absorbance 0)
+      m_vsmTransSampler = nullptr;
+      if (bgfx::isValid(m_vsmTransTex))
+         bgfx::destroy(m_vsmTransTex);
+      m_vsmTransTex = bgfx::createTexture2D(VSM::PAGE_DIM, VSM::PAGE_DIM, false, static_cast<uint16_t>(m_vsmPoolPages), bgfx::TextureFormat::RGBA8, BGFX_TEXTURE_RT);
+      bgfx::setName(m_vsmTransTex, "VSM Page Transmittance");
+      m_vsmTransSampler
+         = std::make_shared<Sampler>(m_renderDevice, "VSM Page Transmittance"s, SurfaceType::RT_DEFAULT, m_vsmTransTex, bgfx::TextureFormat::RGBA8, VSM::PAGE_DIM, VSM::PAGE_DIM, true);
+      m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_vsm_trans, m_vsmTransSampler);
    }
    if (!bgfx::isValid(m_vsmPageTableTex))
    {
@@ -1546,7 +1558,31 @@ bool Renderer::IsStaticShadowCaster(const IEditable* const part) const
    default: return false; // flipper, hittarget, gate, spinner, plunger, trigger animate
    }
 }
+#endif
 
+// Translucent casters (PBR materials with a transmission, or with opacity) tint the light instead of
+// blocking it: they skip the depth pass and draw in the SHADOW_TRANS pass only. Defined unconditionally
+// like PreparePBRPasses: the parts' SHADOW_MAP branches call them on every renderer (no-ops without BGFX,
+// where m_pbrActive stays false).
+bool Renderer::IsTranslucentShadowCaster(const Material* const mat) const
+{
+   return m_renderDevice->m_pbrActive && mat != nullptr && mat->m_type == Material::MaterialType::PBR && (mat->m_fWrapLighting > 0.f || mat->m_bOpacityActive);
+}
+
+void Renderer::BindTranslucentShadowCaster(const Material* const mat, Texture* const image, const float partAlpha) const
+{
+#if defined(ENABLE_BGFX)
+   Shader* const shader = m_renderDevice->m_basicShader;
+   shader->SetTechnique(image ? ShaderTechnique::pbr_shadow_trans : ShaderTechnique::pbr_shadow_trans_notex);
+   if (image)
+      shader->SetTexture(ShaderUniform::tex_base_color, image, false);
+   shader->SetMaterial(mat, image != nullptr && !image->IsOpaque());
+   shader->SetVector(ShaderUniform::pbrMapFlags, 0.f, 0.f, saturate(mat->m_fWrapLighting), 0.f);
+   shader->SetVector(ShaderUniform::staticColor_Alpha, 1.f, 1.f, 1.f, partAlpha);
+#endif
+}
+
+#if defined(ENABLE_BGFX)
 // Marks caster coverage per shadowed light, allocates physical pages for covered virtual pages
 // (LRU-evicting cold pages under pressure), then renders each dirty page into its pool layer with
 // the caster whitelist under a page-zoomed projection. Static-tier lights re-mark but their pages
@@ -1629,47 +1665,110 @@ void Renderer::UpdateVirtualShadowMaps()
       Matrix3D view, proj;
       bool dynamicTier;
       VSM::LightMap* map;
+      int index; // shadow slot (per-light uniform array index)
    };
    vector<PageJob> jobs;
    vector<uint8_t> markTmp;
    bool indexUsed[VSM::MAX_LIGHTS] = {};
 
-   for (IEditable* const part : m_table->GetParts())
+   // A shadowed light that goes dark (a flasher between fires, a lamp in an off phase) keeps its index and its resident
+   // static pages ('parked'): its casters did not move, so the next fire costs nothing instead of re-rendering the whole
+   // map (Police Force 2026-10-30: every flasher fire re-rendered its cube map, 600 pages a second, the same drop at any
+   // resolution). Parked lights are also warmed once (their pages built while off, after the lit lights' pages, within
+   // the page budget) when the pool has room. Lit lights go first, may take a free index, and only take a parked light's
+   // index (dropping its pages) when none is free.
+   const auto shadowCapable
+      = [](const Light* l) { return l->m_d.m_type == LightType::PBR && l->m_d.m_visible && !l->m_desktopBackdrop && l->m_d.m_shadows >= ShadowMode::PBR_STATIC_SHADOWS; };
+   vector<Light*> lights;
+   Light* reservedBy[VSM::MAX_LIGHTS] = {};
+   for (int pass = 0; pass < 3; pass++) // lit, parked, then the others (released)
+      for (IEditable* const part : m_table->GetParts())
+         if (part->GetItemType() == eItemLight)
+         {
+            Light* const l = static_cast<Light*>(part);
+            const int kind = !shadowCapable(l) ? 2 : l->m_currentIntensity > 0.f ? 0 : 1;
+            if (kind != pass)
+               continue;
+            lights.push_back(l);
+            if (kind < 2 && l->m_pbrShadowSlot >= 0 && l->m_pbrShadowSlot < m_vsmMaxLights && !reservedBy[l->m_pbrShadowSlot])
+               reservedBy[l->m_pbrShadowSlot] = l;
+         }
+   const auto releaseSlot = [this, &reservedBy](Light* l)
    {
-      if (part->GetItemType() != eItemLight)
-         continue;
-      Light* const light = static_cast<Light*>(part);
-      const bool eligible = light->m_d.m_type == LightType::PBR && light->m_d.m_visible && light->m_currentIntensity > 0.f && !light->m_desktopBackdrop
-         && light->m_d.m_shadows >= ShadowMode::PBR_STATIC_SHADOWS;
-      if (!eligible)
+      // Frees the map only when the index is this light's (a stale index of a light that lost it keeps the new owner's pages)
+      if (l->m_pbrShadowSlot >= 0 && l->m_pbrShadowSlot < VSM::MAX_LIGHTS && (!reservedBy[l->m_pbrShadowSlot] || reservedBy[l->m_pbrShadowSlot] == l))
+      {
+         VSM::LightMap& dead = m_vsmLights[l->m_pbrShadowSlot];
+         for (const int phys : dead.phys)
+            if (phys > 0)
+               m_vsmPool.Free(phys - 1);
+         dead = VSM::LightMap {};
+      }
+      l->m_pbrShadowSlot = -1;
+      l->m_pbrShadowBakedSlot = -1;
+   };
+   constexpr int warmFreePages = 64; // pool headroom kept for the lit lights before a parked light is warmed
+
+   for (Light* const light : lights)
+   {
+      if (!shadowCapable(light))
       {
          // Release the index and any resident pages: re-marked from scratch when it comes back
-         if (light->m_pbrShadowSlot >= 0 && light->m_pbrShadowSlot < VSM::MAX_LIGHTS)
-         {
-            VSM::LightMap& dead = m_vsmLights[light->m_pbrShadowSlot];
-            for (const int phys : dead.phys)
-               if (phys > 0)
-                  m_vsmPool.Free(phys - 1);
-            dead = VSM::LightMap {};
-         }
-         light->m_pbrShadowSlot = -1;
-         light->m_pbrShadowBakedSlot = -1;
+         releaseSlot(light);
          continue;
       }
+      const bool lit = light->m_currentIntensity > 0.f;
+      const int held = light->m_pbrShadowSlot;
+      const bool holds = held >= 0 && held < m_vsmMaxLights && reservedBy[held] == light && !indexUsed[held];
+      if (!lit)
+      {
+         bool warm = holds && light->m_pbrShadowBakedSlot == held && m_vsmLights[held].EntryCount() > 0;
+         if (warm)
+         {
+            const VSM::LightMap& m = m_vsmLights[held];
+            for (int vp = 0; vp < m.EntryCount() && warm; vp++)
+               warm = !m.needed[vp] || (m.phys[vp] != 0 && !m.dirty[vp]);
+         }
+         if (holds && (warm || m_vsmPool.FreeCount() < warmFreePages))
+         {
+            indexUsed[held] = true; // parked: index and pages kept, nothing rendered or touched (evictable under pressure)
+            continue;
+         }
+         if (!holds)
+         {
+            if (held >= 0)
+               releaseSlot(light); // its index went to a lit light
+            if (m_vsmPool.FreeCount() < warmFreePages)
+               continue;
+         }
+         // else: warm up through the regular path below (its jobs queue after the lit lights')
+      }
 
-      // Stable index assignment: keep the light's current index, else take the first free one
-      int index = light->m_pbrShadowSlot;
-      if (index < 0 || index >= m_vsmMaxLights || indexUsed[index])
+      // Stable index assignment: keep the light's current index, else take the first free one (one no parked light
+      // holds; a lit light takes a parked light's index when nothing else is free)
+      int index = held;
+      if (!holds)
       {
          index = -1;
          for (int i = 0; i < m_vsmMaxLights && index < 0; i++)
-            if (!indexUsed[i])
+            if (!indexUsed[i] && !reservedBy[i])
                index = i;
+         for (int i = 0; lit && i < m_vsmMaxLights && index < 0; i++)
+            if (!indexUsed[i])
+            {
+               index = i;
+               if (reservedBy[i] && reservedBy[i] != light)
+               {
+                  releaseSlot(reservedBy[i]);
+                  reservedBy[i] = nullptr;
+               }
+            }
          if (index < 0)
          {
             light->m_pbrShadowBakedSlot = -1; // index-starved light: shadow=1 through the missing map
             continue;
          }
+         reservedBy[index] = light;
       }
       indexUsed[index] = true;
       light->m_pbrShadowSlot = index;
@@ -1743,7 +1842,7 @@ void Renderer::UpdateVirtualShadowMaps()
          light->m_pbrShadowLayout = VSM::LAYOUT_ORTHO;
          m_vsmShadowVP[index] = view * proj;
          m_vsmParams[index] = vec4((float)map.ptBase, (float)gridW, (float)gridH, zf - zn);
-         m_vsmBox[index] = vec4(1.f / (r - l), 1.f / (t - b), 0.f, 0.f);
+         m_vsmBox[index] = vec4(1.f / (r - l), 1.f / (t - b), zn, 0.f); // z: near depth (translucent caster linear depth start)
 
          // Mark caster coverage; dynamic casters of a dynamic-tier light also dirty their pages
          std::fill(map.needed.begin(), map.needed.end(), uint8_t(0));
@@ -1860,6 +1959,7 @@ void Renderer::UpdateVirtualShadowMaps()
          job.layer = map.phys[vp] - 1;
          job.dynamicTier = dynamicTier;
          job.map = &map;
+         job.index = index;
          if (map.layout == VSM::LAYOUT_CUBE)
          {
             const int face = vp / (map.gridW * map.gridH);
@@ -1888,9 +1988,10 @@ void Renderer::UpdateVirtualShadowMaps()
          break;
       rendered++;
       // Transient per-page framebuffer: only the few pages rendered this frame hold an FB handle at once
-      bgfx::Attachment attachment;
-      attachment.init(m_vsmPoolTex, bgfx::Access::Write, static_cast<uint16_t>(job.layer), 1, 0, BGFX_ATTACHMENT_NONE);
-      const bgfx::FrameBufferHandle fbh = bgfx::createFrameBuffer(1, &attachment);
+      bgfx::Attachment attachments[2];
+      attachments[0].init(m_vsmTransTex, bgfx::Access::Write, static_cast<uint16_t>(job.layer), 1, 0, BGFX_ATTACHMENT_NONE);
+      attachments[1].init(m_vsmPoolTex, bgfx::Access::Write, static_cast<uint16_t>(job.layer), 1, 0, BGFX_ATTACHMENT_NONE);
+      const bgfx::FrameBufferHandle fbh = bgfx::createFrameBuffer(2, attachments);
       if (!bgfx::isValid(fbh))
       {
          PLOGE << "VSM page framebuffer creation failed (handle pool exhausted)";
@@ -1901,12 +2002,13 @@ void Renderer::UpdateVirtualShadowMaps()
          bgfx::TextureFormat::D32F, "VSMPage"s + std::to_string(job.layer), VSM::PAGE_DIM, VSM::PAGE_DIM, colorFormat::RGBA8);
       m_renderDevice->AddEndOfFrameCmd([pageRT]() { delete pageRT; });
       m_renderDevice->SetRenderTarget("VSM Page "s + std::to_string(job.layer), pageRT, false);
-      m_renderDevice->Clear(clearType::ZBUFFER, 0x00000000);
+      m_renderDevice->Clear(clearType::ZBUFFER | clearType::TARGET, 0x00000000);
       m_renderDevice->ResetRenderState();
       m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_TRUE);
       m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_TRUE);
       m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
       m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
+      m_renderDevice->SetRenderState(RenderState::COLORWRITEENABLE, RenderState::RGBMASK_NONE);
       m_renderDevice->m_basicShader->SetTechnique(ShaderTechnique::unshaded_without_texture);
       // Route every reference space through this page's light camera: on a space switch RenderItem
       // re-applies the per-space view/proj (see RenderView::SetSpaceReference), so each space's pair
@@ -1925,6 +2027,31 @@ void Renderer::UpdateVirtualShadowMaps()
       m_render_mask = SHADOW_MAP | (job.dynamicTier ? 0u : static_cast<unsigned int>(STATIC_ONLY));
       for (const Caster& caster : casters)
          RenderItem(caster.part, true);
+      // Translucent casters (PBR plastics with a transmission, clear parts) do not block: they tint and attenuate the light
+      // through the page's transmittance layer, max blended (strongest absorbance, nearest caster), depth tested against
+      // the opaque casters. Linear depth is normalized over the light's depth range (ortho: near..far, cube: 0..far).
+      {
+         const bool cube = job.map->layout == VSM::LAYOUT_CUBE;
+         const vec4 vsmP = m_vsmParams[job.index];
+         const float zStart = cube ? 0.f : m_vsmBox[job.index].z;
+         m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrShadowParams, 1.f / VSM::PAGE_DIM, 0.002f, zStart, 1.f / max(vsmP.w, 1.f));
+         m_renderDevice->SetRenderState(RenderState::COLORWRITEENABLE, RenderState::RGBMASK_RGBA);
+         m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
+         m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_TRUE);
+         m_renderDevice->SetRenderState(RenderState::BLENDOP, RenderState::BLENDOP_MAX);
+         m_renderDevice->SetRenderState(RenderState::SRCBLEND, RenderState::ONE);
+         m_renderDevice->SetRenderState(RenderState::DESTBLEND, RenderState::ONE);
+         m_render_mask |= SHADOW_TRANS;
+         for (const Caster& caster : casters)
+            switch (caster.part->GetItemType())
+            {
+            case eItemPrimitive:
+            case eItemRamp:
+            case eItemRubber:
+            case eItemSurface: RenderItem(caster.part, true); break;
+            default: break;
+            }
+      }
       if (job.map->dirty[job.vpage] & 2)
       {
          // Fresh page now rendered: publish it in the page table

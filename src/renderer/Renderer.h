@@ -228,6 +228,11 @@ public:
    void RenderMesh(const unsigned int renderMask, RenderMeshDesc& draw, const VisualMaterial& mat);
 
    // The queued renderable updates all invalidate the accumulated static part prerender of the views
+   // Translucent shadow casters (PBR materials with a transmission, or with opacity): in a SHADOW_MAP pass they do not
+   // write depth; in a SHADOW_MAP|SHADOW_TRANS pass they draw their absorbance into the page's transmittance layer.
+   bool IsTranslucentShadowCaster(const Material* mat) const; // Shared per-material caster classification of the SHADOW_MAP branches
+   void BindTranslucentShadowCaster(const Material* mat, Texture* image, float partAlpha) const; // pbr_shadow_trans technique + tint bindings
+
    void ReinitRenderable(IRenderable* part)
    {
       if (part)
@@ -385,6 +390,7 @@ public:
       UI_EDGES = 1 << 5, // Render as wireframe
       UI_FILL = 1 << 6, // Render filled interior
       SHADOW_MAP = 1 << 7, // PBR shadow map pass, only render shadow casting geometry
+      SHADOW_TRANS = 1 << 8, // With SHADOW_MAP: translucent casters into the transmittance layer (opaque ones otherwise)
    };
    unsigned int m_render_mask = DEFAULT; // Active pass render bit mask
    bool IsRenderPass(const RenderMask pass_mask) const { return (m_render_mask & pass_mask) != 0; }
@@ -438,6 +444,8 @@ private:
    int m_vsmPoolTexLayers = 0; // layer count the pool texture was created with (framebuffers are created transiently per page job)
    bgfx::TextureHandle m_vsmPoolTex = BGFX_INVALID_HANDLE; // depth texture array backing the pool
    std::shared_ptr<Sampler> m_vsmPoolSampler;
+   bgfx::TextureHandle m_vsmTransTex = BGFX_INVALID_HANDLE; // RGBA8 texture array parallel to the pool: translucent casters' absorbance + nearness
+   std::shared_ptr<Sampler> m_vsmTransSampler;
    bgfx::TextureHandle m_vsmPageTableTex = BGFX_INVALID_HANDLE; // CPU-generated page table (physical layer+1 per virtual page)
    std::shared_ptr<Sampler> m_vsmPageTableSampler;
    std::vector<float> m_vsmPageTableData; // CPU mirror of the page-table texture
