@@ -728,11 +728,6 @@ void main() {
    vec3 F0 = mix(vec3_splat(0.04), albedo, metallic);
    const vec3 diffuse = albedo * (1.0 - metallic);
 
-   // Geometric normal (no normal map), facing the viewer: it tells which side of the surface a direct light is on
-   vec3 Ng = normalize(v_normal);
-   if (dot(Ng, V) < 0.0)
-      Ng = -Ng;
-
    // Clear coat: the coat follows the geometric normal (a smooth shell over the normal mapped base). The base is seen from
    // inside the coat (its F0 relative to IOR 1.5) and is at least as rough as the coat (Filament)
    vec3 Nc = N;
