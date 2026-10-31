@@ -173,7 +173,7 @@ float pbr_vsm_depth(const float ptBase, const vec2 grid, const vec2 vuv)
    const int idx = pbr_vsm_index(ptBase, grid, vuv);
    if (idx < 0)
       return -1.0;
-   return pbr_vsm_fetch(idx, fract(vuv * grid));
+   return pbr_vsm_fetch(idx, vec2(fract(vuv.x * grid.x), 1.0 - fract(vuv.y * grid.y)));
 }
 
 // Cube paged depth for a lookup (cl.xy = face uv in [0,1], cl.z = face index)
@@ -182,7 +182,7 @@ float pbr_vsm_cube_depth(const float ptBase, const float faceGrid, const vec4 cl
    const int g = int(faceGrid + 0.5);
    const vec2 pg = floor(cl.xy * vec2_splat(faceGrid));
    const int idx = int(ptBase + 0.5) + int(cl.z + 0.5) * g * g + int(pg.y) * g + int(pg.x);
-   return pbr_vsm_fetch(idx, fract(cl.xy * vec2_splat(faceGrid)));
+   return pbr_vsm_fetch(idx, vec2(fract(cl.x * faceGrid), 1.0 - fract(cl.y * faceGrid)));
 }
 
 mat3 TBN_trafo(const vec3 N, const vec3 V, const vec2 uv)
