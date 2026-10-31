@@ -1711,7 +1711,9 @@ void Renderer::UpdateVirtualShadowMaps()
          boxR = r;
          boxB = b;
          boxT = t;
-         lightProj = Matrix3D::MatrixOrthoOffCenterRH(l, r, b, t, zn, zf);
+         // SetOrthoOffCenterRH maps signed view-space z to NDC: a RH view has forward on negative z,
+         // so the near/far distances are passed negated (near view-z -> 0, far view-z -> 1)
+         lightProj = Matrix3D::MatrixOrthoOffCenterRH(l, r, b, t, -zn, -zf);
          const Matrix3D& proj = lightProj;
          const float side = std::max(r - l, t - b);
          float pageWorld = side * VSM::PAGE_DIM / (float)m_vsmVirtRes;
@@ -1748,6 +1750,8 @@ void Renderer::UpdateVirtualShadowMaps()
          markTmp.assign(map.EntryCount(), 0);
          for (const Caster& caster : casters)
          {
+            if (caster.boundsMin.x > caster.boundsMax.x || caster.boundsMin.y > caster.boundsMax.y || caster.boundsMin.z > caster.boundsMax.z)
+               continue;
             std::fill(markTmp.begin(), markTmp.end(), uint8_t(0));
             // PCF taps reach up to 0.02 of the map (see fs_pbr filterRadius clamp); non-resident pages
             // count as lit, so the marked band must cover caster bounds + max penumbra or the soft edge
@@ -1791,7 +1795,9 @@ void Renderer::UpdateVirtualShadowMaps()
          for (const Caster& caster : casters)
          {
             std::fill(markTmp.begin(), markTmp.end(), uint8_t(0));
-            VSM::MarkCubePages(lPos, zNear, caster.boundsMin, caster.boundsMax, VSM::CUBE_FACE_GRID, 0, markTmp.data());
+            // Same PCF bleed as the ortho maps: taps reach up to 8/(grid*PAGE_DIM) of a face
+            // (see fs_pbr filterRadius clamp), under a page, so one page ring covers it
+            VSM::MarkCubePages(lPos, zNear, caster.boundsMin, caster.boundsMax, VSM::CUBE_FACE_GRID, 1, markTmp.data());
             const bool dynDirty = dynamicTier && !caster.isStatic;
             for (int i = 0; i < (int)map.needed.size(); i++)
             {
@@ -2018,9 +2024,9 @@ void Renderer::BuildPBRLightList()
       // inserts, flashers) keep their intensity, as legacy lights do, so the room darkens or brightens around them
       const float radiance = light->m_currentIntensity * intensityToLinear * (light->m_d.m_roomLight ? m_sceneLighting.GetGlobalEmissionScale() : 1.f);
       // w packs the shadow mode (bits 0-3), the VSM shadow index + 1 (bits 4-11, 0 = no virtual map),
-      // the map layout (bits 12-15, 0 = ortho, 2 = cube) and the quantized penumbra radius in 0.5 VPU units (bits 16+)
+      // the map layout (bits 12-15, 0 = ortho, 2 = cube)
       const int shadowIndex = light->m_pbrShadowSlot;
-      const int shadowInfo = static_cast<int>(light->m_d.m_shadows) | ((shadowIndex + 1) << 4) | (light->m_pbrShadowLayout << 12) | (4 << 16);
+      const int shadowInfo = static_cast<int>(light->m_d.m_shadows) | ((shadowIndex + 1) << 4) | (light->m_pbrShadowLayout << 12);
       e.radiance = vec4(tint.x * radiance, tint.y * radiance, tint.z * radiance, (float)shadowInfo);
       e.index = lightCount;
       lightCount++;
