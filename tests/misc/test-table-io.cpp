@@ -10,6 +10,7 @@
 #include "parts/flipper.h"
 #include "parts/gate.h"
 #include "parts/kicker.h"
+#include "parts/light.h"
 #include "parts/Material.h"
 #include "parts/PartGroup.h"
 #include "parts/pintable.h"
@@ -1028,6 +1029,69 @@ TEST_CASE("VPZ pack keeps fractional flipper rubber dimensions")
    reloaded->Release();
    table->Release();
    std::filesystem::remove(packPath, ec);
+}
+
+TEST_CASE("Light room_light flag survives both table file formats")
+{
+   std::error_code ec;
+
+   CComObject<PinTable> *table;
+   CComObject<PinTable>::CreateInstance(&table);
+   table->AddRef();
+   TestFileFeedback feedback;
+   REQUIRE(SUCCEEDED(table->LoadGameFromFilename(GetAssetPath() / "test000-default-table.vpx", feedback)));
+
+   Light *const light = Light::COMCreate();
+   light->Init(100.f, 200.f, false);
+   light->SetName("room_light_test");
+   light->m_d.m_roomLight = true;
+   table->AddPart(light);
+   light->Release();
+
+   const auto checkFlag = [](const PinTable *reloaded)
+   {
+      const auto isTestLight = [](const IEditable *part) { return part->GetItemType() == eItemLight && part->GetName() == "room_light_test"s; };
+      const auto found = std::ranges::find_if(reloaded->GetParts(), isTestLight);
+      REQUIRE(found != reloaded->GetParts().end());
+      CHECK(static_cast<const Light *>(*found)->m_d.m_roomLight);
+   };
+
+   SUBCASE("vpx")
+   {
+      const std::filesystem::path vpxPath = GetTmpDir() / "room-light.vpx";
+      std::filesystem::remove(vpxPath, ec);
+      table->m_filename = vpxPath;
+      TestFileFeedback saveFeedback;
+      REQUIRE(SUCCEEDED(table->Save(saveFeedback)));
+
+      CComObject<PinTable> *reloaded;
+      CComObject<PinTable>::CreateInstance(&reloaded);
+      reloaded->AddRef();
+      TestFileFeedback loadFeedback;
+      REQUIRE(SUCCEEDED(reloaded->LoadGameFromFilename(vpxPath, loadFeedback)));
+      checkFlag(reloaded);
+      reloaded->Release();
+      std::filesystem::remove(vpxPath, ec);
+   }
+
+   SUBCASE("vpz")
+   {
+      const std::filesystem::path packPath = GetTmpDir() / "room-light.vpz";
+      std::filesystem::remove_all(packPath, ec);
+      TestFileFeedback saveFeedback;
+      REQUIRE(SUCCEEDED(table->SaveToJSON(packPath, saveFeedback)));
+
+      CComObject<PinTable> *reloaded;
+      CComObject<PinTable>::CreateInstance(&reloaded);
+      reloaded->AddRef();
+      TestFileFeedback loadFeedback;
+      REQUIRE(SUCCEEDED(reloaded->LoadGameFromFilename(packPath, loadFeedback)));
+      checkFlag(reloaded);
+      reloaded->Release();
+      std::filesystem::remove_all(packPath, ec);
+   }
+
+   table->Release();
 }
 
 TEST_CASE("VPZ pack keeps names that are not valid file names")
