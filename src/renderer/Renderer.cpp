@@ -3046,7 +3046,9 @@ void Renderer::UpdateVirtualShadowMaps()
          for (const Caster& caster : casters)
          {
             std::fill(markTmp.begin(), markTmp.end(), uint8_t(0));
-            VSM::MarkCubePages(lPos, zNear, caster.boundsMin, caster.boundsMax, VSM::CUBE_FACE_GRID, 0, markTmp.data());
+            // Same PCF bleed as the ortho maps: taps reach up to 8/(grid*PAGE_SIZE) of a face
+            // (see fs_pbr filterRadius clamp), under a page, so one page ring covers it
+            VSM::MarkCubePages(lPos, zNear, caster.boundsMin, caster.boundsMax, VSM::CUBE_FACE_GRID, 1, markTmp.data());
             const bool dynDirty = dynamicTier && !caster.isStatic;
             for (int i = 0; i < (int)map.needed.size(); i++)
             {
