@@ -153,12 +153,19 @@ vec4 pbr_shadow_cube_lookup(const vec3 dir)
 // Page-table fetch + page-local depth sample. idx is the linear virtual-page index into the
 // page-table texture (ptBase + page), luv is the page-local uv (fract of the virtual-map scaled uv).
 // Returns -1 when the page is not resident (no caster coverage -> lit by construction).
+// The sampled value is the render target's depth encoding, converted back to the [0,1] clip z
+// domain of the light view projections (OpenGL stores clip z * 0.5 + 0.5, see toClipZ in ssr_common.sh).
 float pbr_vsm_fetch(const int idx, const vec2 luv)
 {
    const float phys = texelFetch(tex_vsm_pagetables, ivec2(idx & 511, idx >> 9), 0).x;
    if (phys <= 0.0)
       return -1.0;
-   return texture2DArrayLod(tex_vsm_pool, vec3(luv, phys - 1.0), 0.0).x;
+   const float d = texture2DArrayLod(tex_vsm_pool, vec3(luv, phys - 1.0), 0.0).x;
+   #if TEX_V_IS_UP
+      return d * 2.0 - 1.0;
+   #else
+      return d;
+   #endif
 }
 
 // Linear virtual-page index of a virtual-map uv, or -1 when outside the grid
