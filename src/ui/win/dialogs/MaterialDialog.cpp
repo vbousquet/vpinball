@@ -53,6 +53,8 @@ void MaterialDialog::EnableAllMaterialDialogItems(const BOOL e)
    GetDlgItem(IDC_MAT_METALLIC).EnableWindow(e);
    GetDlgItem(IDC_MAT_OCCLUSION).EnableWindow(e);
    GetDlgItem(IDC_MAT_EMISSION_INTENSITY).EnableWindow(e);
+   GetDlgItem(IDC_MAT_CLEARCOAT).EnableWindow(e);
+   GetDlgItem(IDC_MAT_CLEARCOAT_ROUGHNESS).EnableWindow(e);
    m_colorButton5.EnableWindow(e);
 }
 
@@ -146,6 +148,10 @@ BOOL MaterialDialog::OnInitDialog()
    m_resizer.AddChild(GetDlgItem(IDC_MAT_EMISSION_COLOR).GetHwnd(), CResizer::topright, 0);
    m_resizer.AddChild(GetDlgItem(IDC_STATIC_MAT_EMISSION_INT).GetHwnd(), CResizer::topright, 0);
    m_resizer.AddChild(GetDlgItem(IDC_MAT_EMISSION_INTENSITY).GetHwnd(), CResizer::topright, 0);
+   m_resizer.AddChild(GetDlgItem(IDC_STATIC_MAT_CLEARCOAT).GetHwnd(), CResizer::topright, 0);
+   m_resizer.AddChild(GetDlgItem(IDC_MAT_CLEARCOAT).GetHwnd(), CResizer::topright, 0);
+   m_resizer.AddChild(GetDlgItem(IDC_STATIC_MAT_CLEARCOAT_ROUGH).GetHwnd(), CResizer::topright, 0);
+   m_resizer.AddChild(GetDlgItem(IDC_MAT_CLEARCOAT_ROUGHNESS).GetHwnd(), CResizer::topright, 0);
    m_resizer.AddChild(GetDlgItem(IDC_STATIC_PBR_TEXT).GetHwnd(), CResizer::topright, 0);
    m_resizer.AddChild(GetDlgItem(IDC_ADD_BUTTON).GetHwnd(), CResizer::topright, 0);
    m_resizer.AddChild(GetDlgItem(IDC_CLONE_BUTTON).GetHwnd(), CResizer::topright, 0);
@@ -710,10 +716,14 @@ void MaterialDialog::SetEditedMaterial(const Material& mat)
    GetDlgItem(IDC_MAT_METALLIC).EnableWindow(isPBR);
    GetDlgItem(IDC_MAT_OCCLUSION).EnableWindow(isPBR);
    GetDlgItem(IDC_MAT_EMISSION_INTENSITY).EnableWindow(isPBR);
+   GetDlgItem(IDC_MAT_CLEARCOAT).EnableWindow(isPBR);
+   GetDlgItem(IDC_MAT_CLEARCOAT_ROUGHNESS).EnableWindow(isPBR);
    m_colorButton5.EnableWindow(isPBR);
    setItemText(IDC_MAT_METALLIC, mat.m_fMetallic);
    setItemText(IDC_MAT_OCCLUSION, mat.m_fOcclusion);
    setItemText(IDC_MAT_EMISSION_INTENSITY, mat.m_fEmissionIntensity);
+   setItemText(IDC_MAT_CLEARCOAT, mat.m_fClearcoat);
+   setItemText(IDC_MAT_CLEARCOAT_ROUGHNESS, mat.m_fClearcoatRoughness);
    m_colorButton5.SetColor(mat.m_cEmission);
 
    // Physics
@@ -778,6 +788,14 @@ void MaterialDialog::SaveEditedMaterial(Material& mat)
    if (mat.m_fEmissionIntensity != fv)
       pt->SetNonUndoableDirty(SaveDirtyState::Dirty);
    mat.m_fEmissionIntensity = fv;
+   fv = saturate(getItemText(IDC_MAT_CLEARCOAT));
+   if (mat.m_fClearcoat != fv)
+      pt->SetNonUndoableDirty(SaveDirtyState::Dirty);
+   mat.m_fClearcoat = fv;
+   fv = saturate(getItemText(IDC_MAT_CLEARCOAT_ROUGHNESS));
+   if (mat.m_fClearcoatRoughness != fv)
+      pt->SetNonUndoableDirty(SaveDirtyState::Dirty);
+   mat.m_fClearcoatRoughness = fv;
 
    fv = getItemText(IDC_MAT_ELASTICITY);
    if (mat.m_fElasticity != fv)

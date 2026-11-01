@@ -64,6 +64,8 @@ public:
       , m_fOcclusion(1.0f)
       , m_cEmission(0)
       , m_fEmissionIntensity(1.0f)
+      , m_fClearcoat(0.0f)
+      , m_fClearcoatRoughness(0.03f)
       , m_fElasticity(0.0f)
       , m_fElasticityFalloff(0.0f)
       , m_fFriction(0.0f)
@@ -92,6 +94,8 @@ public:
       , m_fOcclusion(occlusion)
       , m_cEmission(emission)
       , m_fEmissionIntensity(emissionIntensity)
+      , m_fClearcoat(0.0f)
+      , m_fClearcoatRoughness(0.03f)
       , m_fElasticity(elasticity)
       , m_fElasticityFalloff(elasticityFalloff)
       , m_fFriction(max(friction, 0.f)) // Friction can not be negative
@@ -118,6 +122,8 @@ public:
       , m_fOcclusion(pmat->m_fOcclusion)
       , m_cEmission(pmat->m_cEmission)
       , m_fEmissionIntensity(pmat->m_fEmissionIntensity)
+      , m_fClearcoat(pmat->m_fClearcoat)
+      , m_fClearcoatRoughness(pmat->m_fClearcoatRoughness)
       , m_fElasticity(pmat->m_fElasticity)
       , m_fElasticityFalloff(pmat->m_fElasticityFalloff)
       , m_fFriction(pmat->m_fFriction)
@@ -185,6 +191,9 @@ public:
    float m_fOcclusion;
    COLORREF m_cEmission;
    float m_fEmissionIntensity;
+   // PBR clear coat layer (a smooth dielectric shell, IOR 1.5, over the base: printed plastics, lacquered playfield, painted parts)
+   float m_fClearcoat; // coat strength (0 = no coat, 1 = full coat)
+   float m_fClearcoatRoughness; // coat perceptual roughness
 
    // physic properties
    float m_fElasticity;
@@ -216,6 +225,8 @@ public:
       writer.WriteFloat(FID(OCLU), m_fOcclusion);
       writer.WriteInt(FID(EMIC), m_cEmission);
       writer.WriteFloat(FID(EMII), m_fEmissionIntensity);
+      writer.WriteFloat(FID(CCWT), m_fClearcoat);
+      writer.WriteFloat(FID(CCRG), m_fClearcoatRoughness);
       writer.WriteFloat(FID(ELFO), m_fElasticityFalloff);
       writer.WriteFloat(FID(FRIC), m_fFriction);
       writer.WriteFloat(FID(SCAT), m_fScatterAngle);
@@ -247,6 +258,8 @@ public:
             case FID(OCLU): m_fOcclusion = reader.AsFloat(); break;
             case FID(EMIC): m_cEmission = reader.AsInt(); break;
             case FID(EMII): m_fEmissionIntensity = reader.AsFloat(); break;
+            case FID(CCWT): m_fClearcoat = reader.AsFloat(); break;
+            case FID(CCRG): m_fClearcoatRoughness = reader.AsFloat(); break;
             case FID(ELAS): m_fElasticity = reader.AsFloat(); break;
             case FID(ELFO): m_fElasticityFalloff = reader.AsFloat(); break;
             case FID(FRIC): m_fFriction = reader.AsFloat(); break;
