@@ -2660,22 +2660,22 @@ void Renderer::CreateVSMPagePoolTargets()
    {
       if (bgfx::isValid(m_vsmPoolTex))
          bgfx::destroy(m_vsmPoolTex);
-      m_vsmPoolTex = bgfx::createTexture2D(VSM::PAGE_SIZE, VSM::PAGE_SIZE, false, static_cast<uint16_t>(m_vsmPoolPages), bgfx::TextureFormat::D32F, BGFX_TEXTURE_RT);
+      m_vsmPoolTex = bgfx::createTexture2D(VSM::PAGE_DIM, VSM::PAGE_DIM, false, static_cast<uint16_t>(m_vsmPoolPages), bgfx::TextureFormat::D32F, BGFX_TEXTURE_RT);
       bgfx::setName(m_vsmPoolTex, "VSM Page Pool");
       m_vsmPoolTexLayers = m_vsmPoolPages;
       m_vsmPool.Reset(m_vsmPoolPages);
       // Framebuffers are not pre-created per layer: the pool can exceed BGFX's framebuffer handle limit (128),
       // so each page render job creates its layer attachment + framebuffer transiently (freed at end of frame).
-      m_vsmPoolSampler = std::make_shared<Sampler>(m_renderDevice, "VSM Page Pool"s, SurfaceType::RT_DEFAULT, m_vsmPoolTex, bgfx::TextureFormat::D32F, VSM::PAGE_SIZE, VSM::PAGE_SIZE, true);
+      m_vsmPoolSampler = std::make_shared<Sampler>(m_renderDevice, "VSM Page Pool"s, SurfaceType::RT_DEFAULT, m_vsmPoolTex, bgfx::TextureFormat::D32F, VSM::PAGE_DIM, VSM::PAGE_DIM, true);
       m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_vsm_pool, m_vsmPoolSampler);
       // Transmittance layer of each page (cleared with the page: no translucent caster = absorbance 0)
       m_vsmTransSampler = nullptr;
       if (bgfx::isValid(m_vsmTransTex))
          bgfx::destroy(m_vsmTransTex);
-      m_vsmTransTex = bgfx::createTexture2D(VSM::PAGE_SIZE, VSM::PAGE_SIZE, false, static_cast<uint16_t>(m_vsmPoolPages), bgfx::TextureFormat::RGBA8, BGFX_TEXTURE_RT);
+      m_vsmTransTex = bgfx::createTexture2D(VSM::PAGE_DIM, VSM::PAGE_DIM, false, static_cast<uint16_t>(m_vsmPoolPages), bgfx::TextureFormat::RGBA8, BGFX_TEXTURE_RT);
       bgfx::setName(m_vsmTransTex, "VSM Page Transmittance");
       m_vsmTransSampler
-         = std::make_shared<Sampler>(m_renderDevice, "VSM Page Transmittance"s, SurfaceType::RT_DEFAULT, m_vsmTransTex, bgfx::TextureFormat::RGBA8, VSM::PAGE_SIZE, VSM::PAGE_SIZE, true);
+         = std::make_shared<Sampler>(m_renderDevice, "VSM Page Transmittance"s, SurfaceType::RT_DEFAULT, m_vsmTransTex, bgfx::TextureFormat::RGBA8, VSM::PAGE_DIM, VSM::PAGE_DIM, true);
       m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_vsm_trans, m_vsmTransSampler);
    }
    if (!bgfx::isValid(m_vsmPageTableTex))
@@ -3066,7 +3066,7 @@ void Renderer::UpdateVirtualShadowMaps()
          lightProj = Matrix3D::MatrixOrthoOffCenterRH(l, r, b, t, -zn, -zf);
          const Matrix3D& proj = lightProj;
          const float side = std::max(r - l, t - b);
-         float pageWorld = side * VSM::PAGE_SIZE / (float)m_vsmVirtRes;
+         float pageWorld = side * VSM::PAGE_DIM / (float)m_vsmVirtRes;
          // Fair share of the pool: a full virtual resolution ortho map over the table (2000+ pages at 8192) would take every
          // physical page, leaving the other shadowed lights (GI cube maps) without any and so unshadowed. Coarser pages then.
          const float orthoPages = (r - l) * (t - b) / (pageWorld * pageWorld), orthoBudget = (float)std::max(16, m_vsmPoolPages / 8);
@@ -3250,7 +3250,7 @@ void Renderer::UpdateVirtualShadowMaps()
       }
       // depthTex left invalid: RenderTarget would own+destroy it, but the pool texture is shared/persistent
       RenderTarget* const pageRT = new RenderTarget(m_renderDevice, GetBackBufferTexture()->m_type, fbh, BGFX_INVALID_HANDLE, bgfx::TextureFormat::Count, BGFX_INVALID_HANDLE,
-         bgfx::TextureFormat::D32F, "VSMPage"s + std::to_string(job.layer), VSM::PAGE_SIZE, VSM::PAGE_SIZE, colorFormat::RGBA8);
+         bgfx::TextureFormat::D32F, "VSMPage"s + std::to_string(job.layer), VSM::PAGE_DIM, VSM::PAGE_DIM, colorFormat::RGBA8);
       m_renderDevice->AddEndOfFrameCmd([pageRT]() { delete pageRT; });
       m_renderDevice->SetRenderTarget("VSM Page "s + std::to_string(job.layer), pageRT, false);
       m_renderDevice->Clear(clearType::ZBUFFER | clearType::TARGET, 0x00000000);
@@ -3277,7 +3277,7 @@ void Renderer::UpdateVirtualShadowMaps()
          const bool cube = job.map->layout == VSM::LAYOUT_CUBE;
          const vec4 vsmP = m_vsmParams[job.index];
          const float zStart = cube ? 0.f : m_vsmBox[job.index].z;
-         m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrShadowParams, 1.f / VSM::PAGE_SIZE, 0.002f, zStart, 1.f / max(vsmP.w, 1.f));
+         m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrShadowParams, 1.f / VSM::PAGE_DIM, 0.002f, zStart, 1.f / max(vsmP.w, 1.f));
          m_renderDevice->SetRenderState(RenderState::COLORWRITEENABLE, RenderState::RGBMASK_RGBA);
          m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
          m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_TRUE);
@@ -3331,7 +3331,7 @@ void Renderer::UpdateVirtualShadowMaps()
    m_renderDevice->m_basicShader->SetMatrix(ShaderUniform::matShadowVP, m_vsmShadowVP, VSM::MAX_LIGHTS);
    m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrVSMParams, m_vsmParams, VSM::MAX_LIGHTS);
    m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrVSMBox, m_vsmBox, VSM::MAX_LIGHTS);
-   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrShadowParams, 1.f / VSM::PAGE_SIZE, 0.002f, 0.f, 0.f);
+   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrShadowParams, 1.f / VSM::PAGE_DIM, 0.002f, 0.f, 0.f);
 }
 #endif
 

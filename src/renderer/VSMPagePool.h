@@ -17,7 +17,7 @@
 // GPU side (one RenderTarget per physical layer, tex_vsm_pool / tex_vsm_pagetables samplers).
 namespace VSM
 {
-constexpr int PAGE_SIZE = 128; // physical page edge in texels (one array layer per page)
+constexpr int PAGE_DIM = 128; // physical page edge in texels (one array layer per page); named PAGE_DIM since PAGE_SIZE is a system macro on some platforms
 constexpr int MAX_LIGHTS = 32; // max shadowed lights (index+1 packed in 8 bits of the light record)
 constexpr int CUBE_FACE_GRID = 2; // virtual pages per cube-face edge -> 4 pages per face, 24 per light
 constexpr int MAX_ORTHO_GRID = 64; // max pages per edge of an ortho virtual map (64 pages = 8192 texels)

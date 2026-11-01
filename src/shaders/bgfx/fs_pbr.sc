@@ -605,7 +605,7 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 
             const float blocker = zN * zF / (zF - blockerNdc * (zF - zN));
             const float worldGap = dist * cl.w - blocker;
             // PCSS-lite penumbra in direction space (a uv offset of 1.0 maps to ~2 direction units);
-            // the face's virtual texel size is 1/(faceGrid * PAGE_SIZE) of a direction unit
+            // the face's virtual texel size is 1/(faceGrid * PAGE_DIM) of a direction unit
             const float invFaceRes = 1.0 / (faceGrid * 128.0);
             const float filterRadius = clamp(lightRadius * worldGap / max(blocker, 1.0) * invFaceRes * 2.0, invFaceRes, 8.0 * invFaceRes);
             const float bias = min(0.5 + 2.0 * (1.0 - NdotLs) / max(NdotLs, 0.05), 8.0);
