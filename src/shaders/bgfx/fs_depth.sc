@@ -34,6 +34,8 @@ uniform vec4 pbrFactors;
 #define pbrRoughnessFactor (pbrFactors.z)
 uniform vec4 pbrMapFlags; // x: ORM map bound, y: emission map bound
 #define hasORMMap      (pbrMapFlags.x != 0.0)
+uniform vec4 pbrCoat; // x: clear coat strength (0 = off), y: clear coat perceptual roughness
+#define hasCoat        (pbrCoat.x > 0.0)
 #endif
 #ifdef AT
 SAMPLER2D      (tex_base_color, 0); // base color
@@ -104,7 +106,13 @@ void main() {
    #ifdef OUT_NORMAL
       vec3 N = normalize(v_normal);
       #if defined(TEX)
+         // A clear coated PBR surface reflects off its smooth coat: the indirect specular (resolved through this prepass) is
+         // the coat lobe, which follows the geometric normal
+         #if defined(PBR)
+         BRANCH if (doNormalMapping && !hasCoat)
+         #else
          BRANCH if (doNormalMapping)
+         #endif
          {
             const vec3 V = -normalize(v_worldPos);
             vec3 tn;
@@ -153,7 +161,10 @@ void main() {
             else
                roughness *= texture2D(tex_pbr_orm, v_texcoord0).y;
          }
-         gl_FragData[1] = vec4(clamp(roughness, 0.045, 1.0), 1.0, 0.0, 0.0);
+         // Clear coated surface: its indirect specular sideband carries the coat lobe (the base lobe is shaded in place)
+         if (hasCoat)
+            roughness = pbrCoat.y;
+         gl_FragData[1] = vec4(clamp(roughness, hasCoat ? 0.02 : 0.045, 1.0), 1.0, 0.0, 0.0);
       #endif
    #else
       gl_FragColor = vec4_splat(0.0);
