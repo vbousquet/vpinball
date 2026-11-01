@@ -742,6 +742,8 @@ static const ankerl::unordered_dense::map<int, FieldMap>& GetFieldMaps()
          { FID(OCLU), "occlusion" },
          { FID(EMIC), "emission_color" },
          { FID(EMII), "emission_intensity" },
+         { FID(CCWT), "clearcoat" },
+         { FID(CCRG), "clearcoat_roughness" },
          { FID(ELFO), "elasticity_falloff" },
          { FID(FRIC), "friction" },
          { FID(SCAT), "scatter_angle" },
