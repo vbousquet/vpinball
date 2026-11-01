@@ -868,13 +868,17 @@ void main() {
          const vec3 wV = normalize(cCameraPosWorld - v_tablePos);
          // Blur (a fraction of the probe's mip chain): the roughness, plus a little where the normal map bends away from the
          // surface (scuffs), capped so the probe never collapses to its average colour
+         // Composite as the legacy refraction does (refraction bench vs stock 10.8.1, 2026-10-30): the refracted image comes
+         // through 1 - alpha, the Fresnel share is not taken out of it. Fresnel lives only in the added reflection (spec):
+         // taking it out of the transmission covered the grazing walls and edges, where the lensing reads as plastic, with
+         // a milky sheet.
          const float blur = min(roughness + 0.1 * (1.0 - saturate(dot(N, Ng))), 0.08);
          #ifdef STEREO
             const vec3 behind = pbr_transmit(v_tablePos, wN, wV, blur, gl_FragCoord, v_eye) * (staticColor_Alpha.rgb * coatIBL);
          #else
             const vec3 behind = pbr_transmit(v_tablePos, wN, wV, blur, gl_FragCoord) * (staticColor_Alpha.rgb * coatIBL);
          #endif
-         gl_FragData[0] = vec4(color.rgb * alpha + behind * (1.0 - cover) + spec, 1.0);
+         gl_FragData[0] = vec4(color.rgb * alpha + behind * (1.0 - alpha) + spec, 1.0);
       }
       else
          // Premultiplied output (used with ONE/INVSRC_ALPHA blending): diffuse & emission are modulated by coverage while
