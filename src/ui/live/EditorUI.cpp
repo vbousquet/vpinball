@@ -23,6 +23,7 @@
 #include "parts/primitive.h"
 #include "math/dragpoint.h"
 #include "math/matrix.h"
+#include "utils/UnityPrefabImporter.h"
 
 #include "physics/PhysicsEngine.h"
 #include "plugins/VPXPlugin.h"
@@ -666,6 +667,14 @@ void EditorUI::RenderUI()
       op->displayPath = PathToUTF8(op->filename);
       m_pendingLoadPath = nullptr;
       StartFileOp(std::move(op));
+   }
+
+   // Apply the .prefab picked by the asynchronous 'Import Unity Prefab' dialog (deferred to the main thread)
+   if (!IsInspectMode() && m_pendingUnityPrefabPath && !m_pendingUnityPrefabPath->empty())
+   {
+      const std::filesystem::path path = PathFromUTF8(*m_pendingUnityPrefabPath);
+      m_pendingUnityPrefabPath = nullptr;
+      ImportUnityPrefab(path);
    }
 
    // Apply the result of a completed asynchronous file operation (running a worker thread load/save)
@@ -2730,6 +2739,85 @@ void EditorUI::DeleteSelectedPoints()
       curve->DeletePoint(point);
    }
    EndPointEdit();
+}
+
+
+void EditorUI::PickUnityPrefab()
+{
+   if (m_table->IsLocked() || IsInspectMode() || m_player->m_playfieldWnd == nullptr)
+      return;
+   m_pendingUnityPrefabPath = std::make_shared<string>();
+   std::filesystem::path defaultLocation = PathFromString(m_table->GetSettings().GetRecentDir_ImportDir());
+   if (defaultLocation.empty())
+      defaultLocation = m_table->m_filename.empty() ? PathFromString(m_table->GetSettings().GetRecentDir_LoadDir()) : m_table->m_filename.parent_path();
+   const string location = PathToUTF8(defaultLocation); // SDL expects UTF-8
+   const SDL_DialogFileFilter filters[] = { { "Unity Prefab", "prefab" } };
+   SDL_ShowOpenFileDialog(
+      [](void *userdata, const char *const *filelist, int filter)
+      {
+         auto *res = static_cast<std::shared_ptr<string> *>(userdata);
+         if (filelist != nullptr && filelist[0] != nullptr)
+            **res = filelist[0];
+         delete res;
+      },
+      new std::shared_ptr<string>(m_pendingUnityPrefabPath), //
+      m_player->m_playfieldWnd->GetCore(), filters, 1, location.empty() ? nullptr : location.c_str(), false);
+}
+
+void EditorUI::ImportUnityPrefab(const std::filesystem::path &path)
+{
+   if (m_table->IsLocked() || IsInspectMode())
+      return;
+   g_settingsService.GetAppSettings().SetRecentDir_ImportDir(PathToString(path.parent_path()), false);
+   vector<IEditable *> created;
+   const UnityImportResult res = UnityImportPrefab(m_table, path, GetPartGroupForNewPart(), created);
+   if (!res.success)
+   {
+      m_liveUI.PushNotification("Unity prefab import failed: "s + res.error, 10000);
+      for (const string &w : res.warnings)
+         PLOGW << "UnityPrefabImport: " << w;
+      return;
+   }
+   for (const string &w : res.warnings)
+      PLOGW << "UnityPrefabImport: " << w;
+
+   // A running session looks assets up through hash maps built at its start: refresh them so the
+   // imported materials and images resolve (same fixup as PinTable::ImportParts).
+   if (m_table == m_player->m_ptable)
+      m_table->SetupLookUpTables(true);
+
+   m_undo.BeginUndo();
+   for (IEditable *const part : created)
+   {
+      part->AddRef(); // Created parts keep a creation reference, released by the undo record (see PinTable::Uncreate)
+      m_undo.MarkForCreate(part);
+   }
+   m_undo.EndUndo();
+
+   // Player side setup, same as part creation
+   for (IEditable *const part : created)
+   {
+      if (part->GetItemType() == eItemBall)
+         m_player->m_vball.push_back(static_cast<Ball *>(part));
+      m_player->TimerSetup(part);
+      if (auto *const renderable = part->GetIRenderable(); renderable)
+         renderable->RenderSetup(m_renderer.get());
+      if (part->GetIHitable())
+         m_player->m_physics->Add(part);
+   }
+
+   // Select the imported parts
+   UpdateEditableList();
+   m_multiSel.clear();
+   for (IEditable *const part : created)
+      if (const auto it = m_editableMap.find(part); it != m_editableMap.end())
+         m_multiSel.push_back(it->second);
+   if (!m_multiSel.empty())
+      m_selection = Selection(m_multiSel.back());
+
+   m_liveUI.PushNotification("Imported "s + std::to_string(res.parts) + " part(s), "s + std::to_string(res.materials) + " material(s), "s + std::to_string(res.images) + " image(s) from '"s
+         + PathToUTF8(path.filename()) + "'"s + (res.warnings.empty() ? ""s : " ("s + std::to_string(res.warnings.size()) + " warnings)"s),
+      10000);
 }
 
 

@@ -160,6 +160,7 @@ class Texture final : public ITexManCacheable
 {
 public:
    static Texture *CreateFromFile(const std::filesystem::path& filename, const bool isImageData = true);
+   static Texture *CreateFromMemory(const string &name, const std::filesystem::path &path, vector<uint8_t> &&data);
    static Texture *CreateFromObjectReader(IObjectReader& reader, PinTable * const pt);
    ~Texture() override;
 

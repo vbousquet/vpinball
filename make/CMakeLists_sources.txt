@@ -448,6 +448,10 @@ set(VPX_SOURCES
    src/utils/wintimer.h
    src/utils/ushock_output.cpp
    src/utils/ushock_output.h
+   src/utils/UnityPrefabImporter.cpp
+   src/utils/UnityPrefabImporter.h
+   src/utils/UnityYaml.cpp
+   src/utils/UnityYaml.h
    src/utils/vector.h
    src/utils/vectorsort.h
    src/utils/fileio.cpp
@@ -506,6 +510,9 @@ set(VPX_SOURCES
    third-party/include/unordered_dense.h
    third-party/include/pole/pole.h
    third-party/include/pole/pole.cpp
+   third-party/include/ufbx/ufbx.c
+   third-party/include/ufbx/ufbx.h
+   third-party/include/xxhash.h
 )
 
 set(VPX_WINDOWS_SOURCES
