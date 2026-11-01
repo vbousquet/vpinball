@@ -916,10 +916,10 @@ void Shader::SetTechniqueMaterial(
       SetVector(ShaderUniform::pbrMapFlags, pbrMaps->ormMap != nullptr ? 1.f : 0.f, pbrMaps->emissionMap != nullptr ? 1.f : 0.f, saturate(mat.m_fWrapLighting), 0.f);
       // Clear coat layer: a zero strength skips the coat lobe in the shaders
       SetVector(ShaderUniform::pbrCoat, saturate(mat.m_fClearcoat), clamp(mat.m_fClearcoatRoughness, 0.02f, 1.f), 0.f, 0.f);
-      // See-through parts use the transparent shading (premultiplied: their reflections are not modulated by their coverage,
-      // refraction probe) also when the specular is evaluated in-shader (no depth prepass, which is the Player default, or
-      // inside a probe render): the 'ti' variants, without the sideband outputs. Alpha-tested parts keep pbr_is_at (the 'ti'
-      // variants have no alpha test).
+      // See-through parts use the transparent shading (premultiplied: their reflections are not modulated by their
+      // coverage, Fresnel coverage, refraction probe) also when the specular is evaluated in-shader (no depth prepass,
+      // which is the default, or inside a probe render): the 'ti' variants, without the sideband outputs. Alpha-tested
+      // parts keep pbr_is_at (the 'ti' variants have no alpha test).
       if (pbrMaps->transparent && (!pbrMaps->inShaderSpecular || !(textured && doAlphaTest)))
       {
          tech = pbrMaps->inShaderSpecular ? (textured ? ShaderTechnique::pbr_ti : ShaderTechnique::pbr_ti_notex)
