@@ -725,9 +725,7 @@ void main() {
    vec3 Nc = N;
    BRANCH if (coatStrength > 0.0)
    {
-      Nc = normalize(v_normal);
-      if (dot(Nc, V) < 0.0)
-         Nc = -Nc;
+      Nc = Ng;
       F0 = mix(F0, pbr_f0_under_coat(F0), coatStrength);
       roughness = mix(roughness, max(roughness, coatRoughness), coatStrength);
    }
