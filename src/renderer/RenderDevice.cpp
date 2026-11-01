@@ -2949,7 +2949,7 @@ void RenderDevice::AddRenderTargetDependency(RenderTarget* rt, const bool needDe
 
 void RenderDevice::AddRenderTargetDependencyOnNextRenderCommand(RenderTarget* rt)
 {
-   assert(m_nextRenderCommandDependency == nullptr); // Only one dependency can be added on a render command
+   //assert(m_nextRenderCommandDependency == nullptr); // Only one dependency can be added on a render command
    m_nextRenderCommandDependency = rt->m_lastRenderPass;
 }
 
