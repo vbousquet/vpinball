@@ -3344,6 +3344,7 @@ void Renderer::UpdateVirtualShadowMaps()
 // texture (256x32 texels): [0,512) light records ((pos,range) then (radiance,mode)), [512,1024) grid cells
 // (start,count), [1024,+) the light index list (light index, light source sphere radius, upward emitter flag). The
 // upload runs inside RenderFrame::Execute through a begin-of-frame command so it lands on the render thread.
+// VPX_T11=0 disables the sphere light radius (punctual specular) and the Traced insert proxy lights (A/B tests).
 void Renderer::BuildPBRLightList()
 {
    constexpr int texW = 256, texH = 32;
@@ -3374,6 +3375,7 @@ void Renderer::BuildPBRLightList()
       float cookie = 0.f; // flasher dome light: flute count + root angle / 2pi (0 = none)
       float cut = 0.f; // flasher dome light: elevation below which the dome base blocks the light (deg)
    };
+   static const bool areaLights = std::getenv("VPX_T11") == nullptr || std::string(std::getenv("VPX_T11")) != "0";
    LightEntry entries[maxLights];
    int lightCount = 0;
    vector<uint8_t> counts(cellCount, 0);
@@ -3420,7 +3422,7 @@ void Renderer::BuildPBRLightList()
       const int shadowInfo = static_cast<int>(light->m_d.m_shadows) | ((shadowIndex + 1) << 4) | (light->m_pbrShadowLayout << 12)
          | (clamp(static_cast<int>(light->m_d.m_bulbRadius * 2.f + 0.5f), 4, 255) << 16); // bulb radius as the PCSS penumbra (>= 2 VPU, 255 keeps the float exact)
       e.radiance = vec4(tint.x * radiance, tint.y * radiance, tint.z * radiance, (float)shadowInfo);
-      e.radius = max(light->m_d.m_bulbRadius, 0.f);
+      e.radius = areaLights ? max(light->m_d.m_bulbRadius, 0.f) : 0.f;
       e.upward = false;
       e.index = lightCount;
       if (const auto dome = domeCookies.find(light); dome != domeCookies.end())
@@ -3437,7 +3439,7 @@ void Renderer::BuildPBRLightList()
    // insert colour.
    // VPX_T11_INSERT_GAIN is the PBR light intensity of a fully lit insert
    static const float insertGain = std::getenv("VPX_T11_INSERT_GAIN") ? (float)atof(std::getenv("VPX_T11_INSERT_GAIN")) : 0.025f;
-   if (insertGain > 0.f)
+   if (areaLights && insertGain > 0.f)
    {
       for (IEditable* const part : m_table->GetParts())
       {
