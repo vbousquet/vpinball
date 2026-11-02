@@ -228,6 +228,12 @@ float pbr_vsm_cube_depth(const float ptBase, const float faceGrid, const vec4 cl
    #endif
 }
 
+// 2D rotation of a shadow kernel tap by cs = (cos a, sin a): the per-pixel rotation applied to the Poisson disk
+vec2 pbr_vsm_rot(const vec2 t, const vec2 cs)
+{
+   return vec2(t.x * cs.x - t.y * cs.y, t.x * cs.y + t.y * cs.x);
+}
+
 vec3 pbr_normal_map(const vec3 N, const vec3 pos, const vec2 uv)
 {
    vec3 tn;
@@ -391,7 +397,7 @@ float pbr_aa_roughness(const vec3 n, const float roughness)
 
 // Returns the diffuse (and transmitted) direct light; the specular reflection is accumulated apart in specOut, since a
 // see-through part reflects it whatever its coverage (it is not modulated by alpha like the diffuse, as the indirect specular)
-vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 wV, const vec3 wPos, const vec3 diffuse, const vec3 F0, const float roughness, const float alpha, const float transmission, out vec3 specOut)
+vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 wV, const vec3 wPos, const vec3 diffuse, const vec3 F0, const float roughness, const float alpha, const float transmission, const vec2 vsmRot, out vec3 specOut)
 {
    specOut = vec3_splat(0.0);
    const vec2 cellf = clamp((wPos.xy - pbrLightGrid.xy) * pbrLightGrid.z, vec2_splat(0.0),
@@ -421,6 +427,27 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 
       coatExit = 1.0 - coatStrength * (0.04 + 0.96 * pow(1.0 - cNdotV, 5.0));
    }
    vec3 acc = vec3_splat(0.0);
+   // VSM shadow kernel: a 16-tap Poisson disk on the unit circle, rotated per pixel by a hash of the
+   // fragment coords. The previous axis-aligned 3x3 grid quantized the penumbra into ~10 visibly banded
+   // levels; the rotated disk spreads the taps so the residual quantization reads as fine noise instead.
+   // (elementwise init: shaderc has no array literals, same pattern as the SMAA offset[] declarations)
+   vec2 vsmDisk[16];
+   vsmDisk[0] = vec2(-0.94201624, -0.39906216);
+   vsmDisk[1] = vec2(0.94558609, -0.76890725);
+   vsmDisk[2] = vec2(-0.09418410, -0.92938870);
+   vsmDisk[3] = vec2(0.34495938, 0.29387760);
+   vsmDisk[4] = vec2(-0.91588581, 0.45771432);
+   vsmDisk[5] = vec2(-0.81544232, -0.87912464);
+   vsmDisk[6] = vec2(-0.38277543, 0.27676845);
+   vsmDisk[7] = vec2(0.97484398, 0.75648379);
+   vsmDisk[8] = vec2(0.44323325, -0.97511554);
+   vsmDisk[9] = vec2(0.53742981, -0.47373420);
+   vsmDisk[10] = vec2(-0.26496911, -0.41893023);
+   vsmDisk[11] = vec2(0.79197514, 0.19090188);
+   vsmDisk[12] = vec2(-0.24188840, 0.99706507);
+   vsmDisk[13] = vec2(-0.81409955, 0.91437590);
+   vsmDisk[14] = vec2(0.19984126, 0.78641367);
+   vsmDisk[15] = vec2(0.14383161, -0.14100790);
    for (int i = 0; i < count; i++)
    {
       const vec4 lIdx = pbr_light_texel(1024 + start + i);
@@ -542,19 +569,19 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 
                // world units then converted to virtual uv through the box scale
                const float worldGap = (sc.z - blocker) * vsmP.w;
                const vec2 filterRadius = clamp(vec2_splat(lightRadius * worldGap / max(sqrt(dist2), 1.0)) * vsmB.xy, vec2_splat(pbrShadowParams.x), vec2_splat(0.02));
+               // Soft compare: each tap ramps over a ~1.5-texel world-depth window (widened at grazing
+               // incidence like the bias) instead of a binary step, so the penumbra comes out continuous
+               const float cmpWin = 1.5 * max(1.0 / (vsmB.x * grid.x), 1.0 / (vsmB.y * grid.y)) / (max(NdotLs, 0.3) * 128.0);
                float shadowAcc = 0.0;
-               UNROLL for (int py = -1; py <= 1; py++)
+               UNROLL for (int t = 0; t < 16; t++)
                {
-                  UNROLL for (int px = -1; px <= 1; px++)
-                  {
-                     const vec2 tuv = suv + vec2(float(px), float(py)) * filterRadius;
-                     const float d = pbr_vsm_depth(vsmP.x, grid, tuv);
-                     shadowAcc += d < 0.0 ? 1.0 : step(sc.z - bias, d);
-                  }
+                  const vec2 tuv = suv + pbr_vsm_rot(vsmDisk[t], vsmRot) * filterRadius;
+                  const float d = pbr_vsm_depth(vsmP.x, grid, tuv);
+                  shadowAcc += d < 0.0 ? 1.0 : smoothstep(-cmpWin, cmpWin, (d - sc.z + bias) * vsmP.w);
                }
                // Translucent casters: one bilinear tap at the centre (receiver 2 VPU behind them at least)
                const float nearness = 1.0 - sc.z + 2.0 / max(vsmP.w, 1.0);
-               shadow = shadowAcc * (1.0 / 9.0) * pbr_vsm_tint(pbr_vsm_index(vsmP.x, grid, suv), fract(suv * grid), nearness);
+               shadow = shadowAcc * (1.0 / 16.0) * pbr_vsm_tint(pbr_vsm_index(vsmP.x, grid, suv), fract(suv * grid), nearness);
             }
          }
       }
@@ -589,22 +616,22 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 
             const vec3 upRef = abs(ldir.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
             const vec3 tX = normalize(cross(upRef, ldir));
             const vec3 tY = cross(ldir, tX);
+            // Soft compare window: ~one face texel projected at the receiver distance in world units
+            const float cmpWin = max(0.25, dist * 2.0 * invFaceRes) / max(NdotLs, 0.3);
             float shadowAcc = 0.0;
-            UNROLL for (int py = -1; py <= 1; py++)
+            UNROLL for (int t = 0; t < 16; t++)
             {
-               UNROLL for (int px = -1; px <= 1; px++)
-               {
-                  const vec3 tdir = normalize(ldir + (float(px) * tX + float(py) * tY) * filterRadius);
-                  const vec4 tl = pbr_shadow_cube_lookup(tdir);
-                  const float tapNdc = pbr_vsm_cube_depth(vsmP.x, faceGrid, tl);
-                  const float tapBlocker = tapNdc < 0.0 ? -1.0 : zN * zF / (zF - tapNdc * (zF - zN));
-                  shadowAcc += tapBlocker < 0.0 ? 1.0 : step(dist * tl.w - bias, tapBlocker);
-               }
+               const vec2 toff = pbr_vsm_rot(vsmDisk[t], vsmRot);
+               const vec3 tdir = normalize(ldir + (toff.x * tX + toff.y * tY) * filterRadius);
+               const vec4 tl = pbr_shadow_cube_lookup(tdir);
+               const float tapNdc = pbr_vsm_cube_depth(vsmP.x, faceGrid, tl);
+               const float tapBlocker = tapNdc < 0.0 ? -1.0 : zN * zF / (zF - tapNdc * (zF - zN));
+               shadowAcc += tapBlocker < 0.0 ? 1.0 : smoothstep(-cmpWin, cmpWin, tapBlocker - (dist * tl.w - bias));
             }
             const int g = int(faceGrid + 0.5);
             const vec2 pg = floor(cl.xy * vec2_splat(faceGrid));
             const int cidx = int(vsmP.x + 0.5) + int(cl.z + 0.5) * g * g + int(pg.y) * g + int(pg.x);
-            shadow = shadowAcc * (1.0 / 9.0) * pbr_vsm_tint(cidx, fract(cl.xy * vec2_splat(faceGrid)), 1.0 - (dist * cl.w - 2.0) / zF);
+            shadow = shadowAcc * (1.0 / 16.0) * pbr_vsm_tint(cidx, fract(cl.xy * vec2_splat(faceGrid)), 1.0 - (dist * cl.w - 2.0) / zF);
          }
       }
       BRANCH if (shadowMode == 1 || shadowMode >= 3) // RAYTRACED_BALL_SHADOWS or PBR ball shadow tiers
@@ -794,7 +821,9 @@ void main() {
          const vec3 wN = mul(vec4(N, 0.0), mView).xyz; // trafo back to world (orthonormal, no renormalize needed)
          const vec3 wV = normalize(cCameraPosWorld - v_tablePos);
          const vec3 wNc = coatStrength > 0.0 ? mul(vec4(Nc, 0.0), mView).xyz : wN;
-         color += pbr_direct_light(wN, wNc, mul(vec4(Ng, 0.0), mView).xyz, wV, v_tablePos, diffuse, F0, roughness, base.a * staticColor_Alpha.a, pbrTransmission * orm.w, directSpec);
+         // Per-pixel rotation of the VSM Poisson kernel (gl_FragCoord is only in scope in main(), hence passed in)
+         const float vsmPhase = hash22(gl_FragCoord.xy).x * (2.0 * PI);
+         color += pbr_direct_light(wN, wNc, mul(vec4(Ng, 0.0), mView).xyz, wV, v_tablePos, diffuse, F0, roughness, base.a * staticColor_Alpha.a, pbrTransmission * orm.w, vec2(cos(vsmPhase), sin(vsmPhase)), directSpec);
       }
    }
 
