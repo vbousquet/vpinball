@@ -56,7 +56,9 @@ uniform vec4 u_basic_shade_mode;
     #define mWorldViewInverseTranspose matWorldViewInverseTranspose
 #endif
 
+#ifndef PBR
 uniform vec4 objectSpaceNormalMap; // float extended to vec4 for BGFX FIXME float uniforms are not supported: group or declare as vec4
+#endif
 
 #define doNormalMapping     (u_basic_shade_mode.y != 0.0)
 #endif
@@ -97,11 +99,13 @@ void main() {
             else
                tn = texture2D(tex_base_normalmap, v_texcoord0).xyz * (255./127.) - (128./127.);
 
+            #ifndef PBR
             BRANCH if (objectSpaceNormalMap.x != 0.0)
             { // Object space: this matches the object space, +X +Y +Z, export/baking in Blender with our trafo setup
                N = normalize(mul(mWorldViewInverseTranspose, vec4(tn.x, tn.y, -tn.z, 0.0)).xyz);
             }
             else
+            #endif
             { // Tangent space
                N = normalize(mul(TBN_trafo(N, v_worldPos, v_texcoord0), tn).xyz);
             }
