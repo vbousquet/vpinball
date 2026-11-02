@@ -228,30 +228,7 @@ float pbr_vsm_cube_depth(const float ptBase, const float faceGrid, const vec4 cl
    #endif
 }
 
-mat3 TBN_trafo(const vec3 N, const vec3 V, const vec2 uv)
-{
-   // derivatives: edge vectors for tri-pos and tri-uv
-   const vec3 dpx = dFdx(V);
-   const vec3 dpy = dFdy(V);
-   #if TEX_V_IS_UP
-      const vec2 duvx = dFdx(uv);
-      const vec2 duvy = dFdy(uv);
-   #else
-      const vec2 duvx = dFdx(vec2(uv.x, -uv.y));
-      const vec2 duvy = dFdy(vec2(uv.x, -uv.y));
-   #endif
-
-   // solve linear system
-   const vec3 dp2perp = cross(N, dpy);
-   const vec3 dp1perp = cross(dpx, N);
-   const vec3 T = dp2perp * duvx.x + dp1perp * duvy.x;
-   const vec3 B = dp2perp * duvx.y + dp1perp * duvy.y;
-
-   // construct scale-invariant transformation
-   return mat3(T, B, N * sqrt( max(dot(T,T), dot(B,B)) )); // inverse scale, as will be normalized anyhow later-on (to save some mul's)
-}
-
-vec3 pbr_normal_map(const vec3 N, const vec3 V, const vec2 uv)
+vec3 pbr_normal_map(const vec3 N, const vec3 pos, const vec2 uv)
 {
    vec3 tn;
    if (noMipMaps)
@@ -260,7 +237,7 @@ vec3 pbr_normal_map(const vec3 N, const vec3 V, const vec2 uv)
       tn = texture2D(tex_base_normalmap, uv).xyz * (255./127.) - (128./127.);
 
    // PBR normal maps are always tangent space
-   return normalize(mul(TBN_trafo(N, V, uv), tn).xyz);
+   return normalize(mul(TBN_trafo(N, pos, uv), tn).xyz);
 }
 
 // Base layer F0 seen through a clear coat of IOR 1.5 instead of air (Filament's f0ClearCoatToSurface): a dielectric
@@ -707,7 +684,7 @@ void main() {
    const vec3 V = -normalize(v_worldPos);
    vec3 N = normalize(v_normal);
    BRANCH if (doNormalMapping)
-      N = pbr_normal_map(N, -V, v_texcoord0);
+      N = pbr_normal_map(N, v_worldPos, v_texcoord0);
    // Flip normal in case of backside lighting (same as legacy shading)
    if (dot(N, V) < 0.0)
       N = -N;

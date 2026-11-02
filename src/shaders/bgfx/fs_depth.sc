@@ -56,32 +56,11 @@ uniform vec4 u_basic_shade_mode;
     #define mWorldViewInverseTranspose matWorldViewInverseTranspose
 #endif
 
+#ifndef PBR
 uniform vec4 objectSpaceNormalMap; // float extended to vec4 for BGFX FIXME float uniforms are not supported: group or declare as vec4
+#endif
 
 #define doNormalMapping     (u_basic_shade_mode.y != 0.0)
-
-mat3 TBN_trafo(const vec3 N, const vec3 V, const vec2 uv)
-{
-   // derivatives: edge vectors for tri-pos and tri-uv
-   const vec3 dpx = dFdx(V);
-   const vec3 dpy = dFdy(V);
-   #if TEX_V_IS_UP
-      const vec2 duvx = dFdx(uv);
-      const vec2 duvy = dFdy(uv);
-   #else
-      const vec2 duvx = dFdx(vec2(uv.x, -uv.y));
-      const vec2 duvy = dFdy(vec2(uv.x, -uv.y));
-   #endif
-
-   // solve linear system
-   const vec3 dp2perp = cross(N, dpy);
-   const vec3 dp1perp = cross(dpx, N);
-   const vec3 T = dp2perp * duvx.x + dp1perp * duvy.x;
-   const vec3 B = dp2perp * duvx.y + dp1perp * duvy.y;
-
-   // construct scale-invariant transformation
-   return mat3(T, B, N * sqrt( max(dot(T,T), dot(B,B)) )); // inverse scale, as will be normalized anyhow later-on (to save some mul's)
-}
 #endif
 
 #if !defined(AT) && !defined(CLIP)
@@ -114,20 +93,21 @@ void main() {
          BRANCH if (doNormalMapping)
          #endif
          {
-            const vec3 V = -normalize(v_worldPos);
             vec3 tn;
             if (noMipMaps)
                tn = texNoLod(tex_base_normalmap, v_texcoord0).xyz * (255./127.) - (128./127.);
             else
                tn = texture2D(tex_base_normalmap, v_texcoord0).xyz * (255./127.) - (128./127.);
 
+            #ifndef PBR
             BRANCH if (objectSpaceNormalMap.x != 0.0)
             { // Object space: this matches the object space, +X +Y +Z, export/baking in Blender with our trafo setup
                N = normalize(mul(mWorldViewInverseTranspose, vec4(tn.x, tn.y, -tn.z, 0.0)).xyz);
             }
             else
+            #endif
             { // Tangent space
-               N = normalize(mul(TBN_trafo(N, V, v_texcoord0), tn).xyz);
+               N = normalize(mul(TBN_trafo(N, v_worldPos, v_texcoord0), tn).xyz);
             }
          }
       #endif

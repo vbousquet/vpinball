@@ -182,6 +182,14 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>test-assets/shaders-src/%(Filename)%(Extension)</TargetPath>
     </ContentWithTargetPath>
+    <ContentWithTargetPath Include="$(SolutionDir)/../../src/shaders/bgfx/fs_depth.sc">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>test-assets/shaders-src/%(Filename)%(Extension)</TargetPath>
+    </ContentWithTargetPath>
+    <ContentWithTargetPath Include="$(SolutionDir)/../../src/shaders/bgfx/fs_pbr.sc">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>test-assets/shaders-src/%(Filename)%(Extension)</TargetPath>
+    </ContentWithTargetPath>
     <ContentWithTargetPath Include="$(SolutionDir)/../../src/shaders/hlsl_glsl/BasicShader.hlsl">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>test-assets/shaders-src/%(Filename)%(Extension)</TargetPath>
