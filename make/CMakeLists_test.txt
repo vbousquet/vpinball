@@ -270,6 +270,8 @@ if(PLATFORM STREQUAL "windows")
       COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
       COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/bgfx/common.sh" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
       COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/bgfx/fs_basic.sc" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
+      COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/bgfx/fs_depth.sc" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
+      COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/bgfx/fs_pbr.sc" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
       COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/hlsl_glsl/BasicShader.hlsl" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
       COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/hlsl_glsl/BasicShader.glfx" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
    )
@@ -394,6 +396,8 @@ elseif(PLATFORM STREQUAL "windows-mingw")
       COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
       COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/bgfx/common.sh" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
       COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/bgfx/fs_basic.sc" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
+      COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/bgfx/fs_depth.sc" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
+      COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/bgfx/fs_pbr.sc" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
       COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/hlsl_glsl/BasicShader.hlsl" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
       COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/hlsl_glsl/BasicShader.glfx" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
    )
@@ -504,6 +508,8 @@ elseif(PLATFORM STREQUAL "macos")
       COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
       COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/bgfx/common.sh" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
       COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/bgfx/fs_basic.sc" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
+      COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/bgfx/fs_depth.sc" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
+      COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/bgfx/fs_pbr.sc" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
       COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/hlsl_glsl/BasicShader.hlsl" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
       COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/hlsl_glsl/BasicShader.glfx" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
    )
@@ -614,6 +620,8 @@ elseif(PLATFORM STREQUAL "linux")
       COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
       COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/bgfx/common.sh" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
       COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/bgfx/fs_basic.sc" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
+      COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/bgfx/fs_depth.sc" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
+      COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/bgfx/fs_pbr.sc" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
       COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/hlsl_glsl/BasicShader.hlsl" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
       COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/hlsl_glsl/BasicShader.glfx" "$<TARGET_FILE_DIR:vpx-test>/test-assets/shaders-src"
    )
