@@ -193,6 +193,13 @@ Window::Window(const string& title, const Settings& settings, VPXWindowId window
    else
    {
       uint32_t wnd_flags = SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY;
+      // VPX_WINDOW_DECORATED=1: a windowed playfield gets the OS title bar so it can be dragged (desktop testing; default unchanged)
+      if (m_windowId == VPXWindowId::VPXWINDOW_Playfield && m_windowMode == Windowed)
+      {
+         const char *const decorated = getenv("VPX_WINDOW_DECORATED");
+         if (decorated && decorated[0] == '1')
+            wnd_flags &= ~SDL_WINDOW_BORDERLESS;
+      }
 
       #if defined(ENABLE_OPENGL)
          wnd_flags |= SDL_WINDOW_OPENGL; // Leads to read OpenGL context hint (swapchain backbuffer format, ...)

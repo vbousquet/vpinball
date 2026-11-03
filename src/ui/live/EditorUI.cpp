@@ -212,54 +212,61 @@ void EditorUI::PlayTest()
 
 void EditorUI::SaveTable()
 {
-   if (IsInspectMode() || m_table->IsLocked() || m_fileOp != nullptr)
-      PLOGI << "SaveTable requested (inspect=" << IsInspectMode() << ", locked=" << m_table->IsLocked() << ", fileOpBusy=" << (m_fileOp != nullptr)
-            << ", file=" << PathToUTF8(m_table->m_filename) << ')';
+   PLOGI << "SaveTable requested (inspect=" << IsInspectMode() << ", locked=" << m_table->IsLocked() << ", fileOpBusy=" << (m_fileOp != nullptr)
+         << ", file=" << PathToUTF8(m_table->m_filename) << ')';
    {
       PLOGW << "SaveTable ignored: " << (m_table->IsLocked() ? "table is locked" : "a file operation is in progress");
       m_liveUI.PushNotification(m_table->IsLocked() ? "Nothing saved: the table is locked"s : "Nothing saved: a file operation is still in progress"s, 8000);
-      return;
-   }
-   PinTable *saveTable = m_table;
-   if (IsInspectMode())
-   {
-      // Inspection session: write the startup table, after copying back what was edited in the 'Live' tabs
-      saveTable = m_table->m_liveBaseTable;
-      if (saveTable->m_filename.empty())
+      if (m_table->IsLocked() || m_fileOp != nullptr)
+         return;
+      PinTable *saveTable = m_table;
+      if (IsInspectMode())
       {
-         m_liveUI.PushNotification("Nothing saved: the table has no file yet, use Save As from the editor"s, 8000);
+         // Inspection session: write the startup table, after copying back what was edited in the 'Live' tabs
+         saveTable = m_table->m_liveBaseTable;
+         if (saveTable->m_filename.empty())
+         {
+            m_liveUI.PushNotification("Nothing saved: the table has no file yet, use Save As from the editor"s, 8000);
+            return;
+         }
+         int copied = 0, skipped = 0;
+         for (Material *const live : m_liveEditedMaterials)
+            if (Material *const startup = m_table->GetStartupFromLive<Material>(live))
+            {
+               const string name = startup->m_name;
+               *startup = *live;
+               startup->m_name = name;
+               copied++;
+            }
+         for (IEditable *const live : m_liveEditedParts)
+         {
+            IEditable *const startup = m_table->GetStartupFromLive<IEditable>(live);
+            if (startup == nullptr)
+               continue;
+            if (live->GetItemType() == eItemPrimitive && startup->GetItemType() == eItemPrimitive)
+               static_cast<Primitive *>(startup)->m_d = static_cast<Primitive *>(live)->m_d;
+            else if (live->GetItemType() == eItemLight && startup->GetItemType() == eItemLight)
+               static_cast<Light *>(startup)->m_d = static_cast<Light *>(live)->m_d;
+            else
+            {
+               skipped++;
+               continue;
+            }
+            copied++;
+         }
+         m_liveEditedMaterials.clear();
+         m_liveEditedParts.clear();
+         string msg = std::format("Saved the startup table to '{}' ({} live edit(s) copied in", PathToUTF8(saveTable->m_filename), copied);
+         if (skipped > 0)
+            msg += std::format(", {} edited part(s) of other types NOT copied: use the save icon next to their fields", skipped);
+         msg += ")";
+         m_liveUI.PushNotification(msg, 10000);
+      }
+      else if (m_table->m_filename.empty())
+      {
+         SaveTableAs();
          return;
       }
-      int skipped = 0;
-      for (Material *const live : m_liveEditedMaterials)
-         if (Material *const startup = m_table->GetStartupFromLive<Material>(live))
-         {
-            const string name = startup->m_name;
-            *startup = *live;
-            startup->m_name = name;
-         }
-      for (IEditable *const live : m_liveEditedParts)
-      {
-         IEditable *const startup = m_table->GetStartupFromLive<IEditable>(live);
-         if (startup == nullptr)
-            continue;
-         if (live->GetItemType() == eItemPrimitive && startup->GetItemType() == eItemPrimitive)
-            static_cast<Primitive *>(startup)->m_d = static_cast<Primitive *>(live)->m_d;
-         else if (live->GetItemType() == eItemLight && startup->GetItemType() == eItemLight)
-            static_cast<Light *>(startup)->m_d = static_cast<Light *>(live)->m_d;
-         else
-            skipped++;
-      }
-      m_liveEditedMaterials.clear();
-      m_liveEditedParts.clear();
-      if (skipped > 0)
-         m_liveUI.PushNotification(std::to_string(skipped) + " edited part(s) of types other than primitive or light were NOT copied to the startup table"s, 8000);
-   }
-   else if (m_table->m_filename.empty())
-   {
-      SaveTableAs();
-      return;
-   }
    auto op = std::make_unique<AsyncFileOp>();
    op->type = AsyncFileOp::Type::Save;
    op->saveTable = saveTable;
@@ -514,7 +521,8 @@ void EditorUI::FinishFileOp()
       else
       {
          PLOGI << "Save done: " << op->displayPath;
-         m_liveUI.PushNotification("Saved '" + op->displayPath + "'", 5000);
+         if (!IsInspectMode()) // inspect mode already reported when starting the save
+            m_liveUI.PushNotification("Saved " + op->displayPath, 5000);
       }
       if (SUCCEEDED(result))
       {
@@ -1328,6 +1336,9 @@ void EditorUI::RenderUI()
    if (m_boxSelectActive && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
       m_boxSelectActive = false; // Canceled: button released outside of the playfield
    if (!io.WantCaptureKeyboard && m_fileOp == nullptr && !modalWasActive)
+      // Ctrl+S must work while a widget (e.g. a slider) has keyboard focus; only a text input being edited takes precedence
+      if (!io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_S, false) && io.KeyCtrl && !io.KeyAlt && !io.KeyShift)
+         SaveTable();
    {
       if (ImGui::IsKeyReleased(ImGuiKey_Escape))
       {

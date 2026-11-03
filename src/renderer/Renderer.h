@@ -91,6 +91,7 @@ public:
    void InitLayout(const float xpixoff = 0.f, const float ypixoff = 0.f); // Reset both the base and the current MVP to the default view setup, with an optional pixel offset for AA
    void SetFlip(ModelViewProj::FlipMode flipMode); // Flip the rendered image horizontally and/or vertically (e.g. for rear projection setups), applied to base MVP
    void SetViewProj(const Matrix3D& view, const Matrix3D& proj); // Override the MVP, applied to the base MVP
+   void SetLookAtCamera(const Vertex3Ds& eye, const Vertex3Ds& target, float fovYDeg); // Override the view with a perspective camera given in table space (VPU, Z up), vertical FOV in degrees; restarts the static prepass if the view changed
    void SetReflection(const Matrix3D& reflectionMatrix); // Set a reflection matrix to be applied to the view matrix, used for mirror reflections, applied to current MVP, NOT the base MVP
    void ApplyViewJitter(const float xpixoff, const float ypixoff); // Apply a sub pixel offset to the projection of the current MVP (same offset as InitLayout but without resetting view and base MVP, allowing to jitter a reflected MVP)
    const ModelViewProj& GetMVP() const { return m_mvp; }

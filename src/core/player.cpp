@@ -2047,6 +2047,9 @@ public:
          if (m_player->m_backglassOutput.GetMode() == RenderOutput::OutputMode::OM_WINDOW)
             m_captureRequestMask |= 2;
       #endif
+
+      if (const char* camFile = std::getenv("VPX_CAM_FILE"); camFile != nullptr && camFile[0] != '\0')
+         LoadCameraFile(camFile);
    }
 
    void Update()
@@ -2057,6 +2060,8 @@ public:
       // (the initial quick render triggers a game logic update before StartPhysics is called)
       if (!m_player->m_physics->IsStarted())
          return;
+
+      ApplyScriptedCamera(); // Once per captured frame, as soon as it is the current one (so that the frame renders with it)
 
       m_player->m_physics->UpdatePhysics(max(m_captureTime, m_player->m_physics->GetCurrentTime()));
       m_player->FireTimers(-2);
@@ -2108,6 +2113,40 @@ public:
    }
 
 private:
+   // VPX_CAM_FILE: scripted camera, one line per captured frame: 'eyeX eyeY eyeZ targetX targetY targetZ fovY' (table space VPU,
+   // Z up; vertical FOV in degrees). Blank lines and lines starting with '#' are ignored. The last camera is held when the file runs out.
+   void LoadCameraFile(const char* path)
+   {
+      std::ifstream file(path);
+      if (!file)
+      {
+         PLOGE << "VPX_CAM_FILE: cannot open " << path;
+         return;
+      }
+      std::string line;
+      while (std::getline(file, line))
+      {
+         if (line.empty() || line[0] == '#')
+            continue;
+         std::istringstream is(line);
+         std::array<float, 7> key;
+         if (is >> key[0] >> key[1] >> key[2] >> key[3] >> key[4] >> key[5] >> key[6])
+            m_camKeys.push_back(key);
+         else if (line.find_first_not_of(" \t\r") != std::string::npos)
+            PLOGW << "VPX_CAM_FILE: skipping malformed line: " << line;
+      }
+      PLOGI << "VPX_CAM_FILE active: " << m_camKeys.size() << " camera lines from " << path;
+   }
+
+   void ApplyScriptedCamera()
+   {
+      if (m_camKeys.empty() || m_camAppliedFrame == m_captureFrameNumber || m_player->m_renderer->m_stereo3D == STEREO_VR)
+         return;
+      m_camAppliedFrame = m_captureFrameNumber;
+      const auto& k = m_camKeys[min(static_cast<size_t>(m_captureFrameNumber - 1), m_camKeys.size() - 1)];
+      m_player->m_renderer->SetLookAtCamera({ k[0], k[1], k[2] }, { k[3], k[4], k[5] }, k[6]);
+   }
+
    void OnCapture(bool success)
    {
       #ifdef ENABLE_BGFX
@@ -2255,6 +2294,9 @@ private:
 
    int m_nLights;
    vector<vector<float>> m_lightStates;
+
+   vector<std::array<float, 7>> m_camKeys; // VPX_CAM_FILE lines
+   int m_camAppliedFrame = 0; // Capture frame number the scripted camera was last applied for
 
    int m_bestLoopStart = -1;
    int m_bestLoopEnd = -1;

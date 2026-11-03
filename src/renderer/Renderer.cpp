@@ -1381,6 +1381,29 @@ void Renderer::SetViewProj(const Matrix3D& view, const Matrix3D& proj)
    m_initialMVP.SetProj(1, proj);
 }
 
+void Renderer::SetLookAtCamera(const Vertex3Ds& eye, const Vertex3Ds& target, const float fovYDeg)
+{
+   assert(m_stereo3D != STEREO_VR);
+   // Same convention as the live editor camera (EditorUI): right handed look at in a table space mirrored along Z, then
+   // converted to VPX's left handed view/projection pair (the two YAxis flips cancel out in the final clip position)
+   const Matrix3D RH2LH = Matrix3D::MatrixScale(1.f, 1.f, -1.f);
+   const Matrix3D YAxis = Matrix3D::MatrixScale(1.f, -1.f, 1.f);
+   Vertex3Ds dir = target - eye;
+   dir.NormalizeSafe();
+   // World up (table +Z, which is -Z once mirrored), falling back to table -Y when looking straight up or down
+   const Vertex3Ds up = fabsf(dir.z) > 0.999f ? Vertex3Ds(0.f, -1.f, 0.f) : Vertex3Ds(0.f, 0.f, -1.f);
+   const Matrix3D camView = Matrix3D::MatrixLookAtRH(Vertex3Ds(eye.x, eye.y, -eye.z), Vertex3Ds(target.x, target.y, -target.z), up);
+   // Frustum depth range fitted to the table parts as seen from this camera (plain left handed look at in table space)
+   float zNear, zFar;
+   m_table->ComputeNearFarPlane(Matrix3D::MatrixLookAtLH(eye, target, Vertex3Ds(0.f, 0.f, 1.f)), 1.f, zNear, zFar);
+   const Matrix3D camProj = Matrix3D::MatrixPerspectiveFovRH(max(fovYDeg, 1.f), GetDisplayAspectRatio(), zNear, zFar);
+   const Matrix3D view = RH2LH * camView * YAxis;
+   const Matrix3D proj = YAxis * camProj;
+   for (unsigned int eyeIdx = 0; eyeIdx < m_initialMVP.m_nEyes; eyeIdx++)
+      m_isStaticPrepassDirty |= !(m_initialMVP.GetView(eyeIdx) == view) || !(m_initialMVP.GetProj(eyeIdx) == proj);
+   SetViewProj(view, proj);
+}
+
 Vertex3Ds Renderer::Unproject(const int width, const int height, const Vertex3Ds& point) const
 {
    assert(m_stereo3D != STEREO_VR);

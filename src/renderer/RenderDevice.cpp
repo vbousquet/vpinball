@@ -456,6 +456,7 @@ void RenderDevice::RenderThread(RenderDevice* rd, bgfx::Init init)
    // neither an SDR white point nor a headroom for the tonemapper to target, too
    const bool allowHDR10ColorSpace = true //
       && rd->m_outputWnd[0]->IsWCGDisplay() // Display must be in HDR mode
+      && !std::getenv("VPX_FORCE_SDR") // capture/screenshot aid: screenshots of an RGB10A2 HDR10 backbuffer fail
       && g_pplayer->m_playMode != Player::PlayMode::CaptureAttract // Disable WCG colorspace as it causes issues with video recording for the time being
       && !rd->m_isAnaglyph // Anaglyph stereo requires an sRGB colorspace
       && !g_pplayer->IsVR(); // Not yet supported (not sure if there exists HDR headset)

@@ -109,7 +109,13 @@ void PropertiesPanel::Render(float topBarHeight)
                   if (editor.m_selection.GetType() == Selection::S_MATERIAL)
                      editor.m_liveEditedMaterials.insert(editor.m_selection.GetMaterial());
                   else if (editor.m_selection.GetType() == Selection::S_EDITABLE)
-                     editor.m_liveEditedParts.insert(editor.m_selection.GetPart()->GetEditable());
+                  {
+                     if (props.IsMultiEdit())
+                        for (const std::shared_ptr<EditorUIPart> &part : editor.m_multiSel)
+                           editor.m_liveEditedParts.insert(part->GetEditable());
+                     else
+                        editor.m_liveEditedParts.insert(editor.m_selection.GetPart()->GetEditable());
+                  }
                }
                ImGui::EndTabItem();
             }
@@ -822,6 +828,12 @@ void PropertiesPanel::MaterialProperties(PropertyPane &props, Material *material
             material, "Clear Coat Roughness"s, //
             [](const Material *material) { return material->m_fClearcoatRoughness; }, //
             [](Material *material, float v) { material->m_fClearcoatRoughness = v; }, PropertyPane::Unit::None, 2);
+            material, "Scatter Saturation"s, //
+            [](const Material *material) { return material->m_fScatterSaturation; }, //
+            [](Material *material, float v) { material->m_fScatterSaturation = clamp(v, 0.f, 2.f); }, 0.f, 2.f, 2);
+            material, "Absorption Light Tint"s, //
+            [](const Material *material) { return material->m_fAbsorptionLightTint; }, //
+            [](Material *material, float v) { material->m_fAbsorptionLightTint = clamp(v, 0.f, 1.f); }, 0.f, 1.f, 2);
       }
       props.EndSection();
    }
