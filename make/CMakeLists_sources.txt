@@ -338,6 +338,8 @@ set(VPX_SOURCES
    src/ui/live/editor/PartLibraryPanel.cpp
    src/ui/live/editor/PinnedPanel.h
    src/ui/live/editor/PinnedPanel.cpp
+   src/ui/live/editor/SearchPalette.h
+   src/ui/live/editor/SearchPalette.cpp
    src/ui/live/editor/PartGroupUIPart.h
    src/ui/live/editor/PartGroupUIPart.cpp
    src/ui/live/editor/PlungerUIPart.h

@@ -17,6 +17,7 @@
 #include "editor/RendererInspectionModal.h"
 #include "editor/ConvertToPBRModal.h"
 #include "editor/ScriptPanel.h"
+#include "editor/SearchPalette.h"
 #include "math/matrix.h"
 #include "renderer/Renderer.h"
 #include "unordered_dense.h"
@@ -58,6 +59,7 @@ class EditorUI final
    friend class PartLibraryPanel;
    friend class ScriptPanel;
    friend class PinnedPanel;
+   friend class SearchPalette;
 
 public:
    EditorUI(LiveUI &liveUI);
@@ -100,6 +102,7 @@ private:
    PartLibraryPanel m_partLibrary;
    ScriptPanel m_scriptPanel;
    PinnedPanel m_pinned; // Floating overlay of pinned properties
+   SearchPalette m_palette; // Cmd/Ctrl+K search to field
 
    Selection m_selection;
 

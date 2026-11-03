@@ -70,6 +70,7 @@ EditorUI::EditorUI(LiveUI &liveUI)
    , m_partLibrary(*this)
    , m_scriptPanel(*this)
    , m_pinned(*this)
+   , m_palette(*this)
    , m_undo(m_player->m_ptable)
 {
    m_table = m_player->m_ptable;
@@ -1353,11 +1354,16 @@ void EditorUI::RenderUI()
       // Ctrl+S must work while a widget (e.g. a slider) has keyboard focus; only a text input being edited takes precedence
       if (!io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_S, false) && io.KeyCtrl && !io.KeyAlt && !io.KeyShift)
          SaveTable();
+   // Also while a field has keyboard focus (e.g. the one the palette just went to): no text field uses Ctrl+K
+   if (panelsShown && ImGui::IsKeyPressed(ImGuiKey_K, false) && io.KeyCtrl && !io.KeyAlt && !io.KeyShift)
    {
       m_showOutliner = true;
       m_outliner.FocusFilter();
    }
    const bool paletteEsc = m_palette.ConsumedEscape() | m_pinned.ConsumedEscape(); // The Esc that closed a popup is not an editor Esc
+   // Search to field palette (Cmd+K on macOS, where ImGui maps Cmd to Ctrl)
+   if (ImGui::IsKeyPressed(ImGuiKey_K, false) && io.KeyCtrl && !io.KeyAlt && !io.KeyShift && (!io.WantTextInput || m_palette.IsOpen()))
+      m_palette.Toggle();
    if (!io.WantCaptureKeyboard && m_fileOp == nullptr)
    {
       if (ImGui::IsKeyReleased(ImGuiKey_Escape) && !paletteEsc)
