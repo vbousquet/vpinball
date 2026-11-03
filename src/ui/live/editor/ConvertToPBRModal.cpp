@@ -8,6 +8,7 @@
 #include "parts/Material.h"
 #include "ui/live/EditorUI.h"
 #include "ui/live/LiveUI.h"
+#include "PropertyPane.h"
 
 namespace VPX::EditorUI
 {
@@ -143,20 +144,44 @@ void ConvertToPBRModal::Apply()
    PinTable *const table = m_editor.m_table;
    PBRConvertMaterialOptions opts;
    opts.deriveMetallicFromGlossy = m_deriveMetallic;
-   vector<std::pair<Material *, Material>> snapshots;
+   vector<std::pair<uint64_t, Material>> snapshots; // (runtime identity of the material, its state)
    int nMat = 0, nLight = 0;
    for (const MaterialItem &it : m_materials)
       if (it.convert)
-         snapshots.emplace_back(it.mat, *it.mat);
+         snapshots.emplace_back(it.mat->m_uid.Value(), *it.mat);
    m_editor.m_undo.BeginUndo();
    for (const LightItem &it : m_lights)
       if (it.convert)
          m_editor.m_undo.MarkForUndo(it.light);
    m_editor.m_undo.MarkForAction(
-      [snapshots]()
+      [table, snapshots]()
       {
-         for (const auto &[mat, snapshot] : snapshots)
-            *mat = snapshot;
+         // A material deleted since (not undoable) is gone: skip it (found by its runtime identity, as a new one may reuse its name or address)
+         for (const auto &[uid, snapshot] : snapshots)
+         {
+            if (Material *const mat = MaterialEditUndo::Find(table, uid))
+               *mat = snapshot;
+            else
+               MaterialEditUndo::NoteSkipped();
+         }
+      },
+      // Redo: the converted state of the materials, captured when the step is undone
+      [table, snapshots]() -> std::function<void()>
+      {
+         vector<std::pair<uint64_t, Material>> converted;
+         for (const auto &[uid, snapshot] : snapshots)
+         {
+            if (const Material *const mat = MaterialEditUndo::Find(table, uid))
+               converted.emplace_back(uid, *mat); // (a deleted material is already reported by the undo)
+         }
+         return [table, converted]()
+         {
+            for (const auto &[uid, state] : converted)
+               if (Material *const mat = MaterialEditUndo::Find(table, uid))
+                  *mat = state;
+               else
+                  MaterialEditUndo::NoteSkipped();
+         };
       });
    for (MaterialItem &it : m_materials)
       if (it.convert)

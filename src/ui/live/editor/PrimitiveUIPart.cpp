@@ -454,7 +454,7 @@ void PrimitiveUIPart::UpdatePropertyPane(PropertyPane& props)
       props.InputFloat3<Primitive>(
          m_part, "Scale"s, //
          [](const Primitive* primitive) { return primitive->m_d.m_vSize; }, //
-         [](Primitive* primitive, const vec3& v) { primitive->m_d.m_vSize = v; }, PropertyPane::Unit::PercentX100, 2);
+         [](Primitive* primitive, const vec3& v) { primitive->m_d.m_vSize = v; }, PropertyPane::Unit::PercentX100, 0); // Default primitives have a size of 100
 
       props.Separator("Additional Transform"s);
       props.InputFloat3<Primitive>(
