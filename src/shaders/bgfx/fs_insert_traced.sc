@@ -28,6 +28,10 @@
 //      w how much the plastic's colour tints the room glints (0 white, 1 the plastic's colour)
 // [11] x print map tint (inktint): an insert under printed art (Police Force's jackpot car and character patches) shows
 //      through the print by its alpha (the print's transmission) tinted by its hue; 0 = alpha only, as a cut-out window
+// [12] parallax hot spot: x the bulb's depth below the insert top in mm (0 = off: the block is skipped, output unchanged),
+//      y spot size (1 = a soft spot ~19 mm across at half height), z brightness (1 = +80 % of the glow's peak at its centre)
+// [13] parallax hot spot: xy stretch along the card's u and v (1 = round), zw the spot's offset from the card's centre in mm
+//      (along u and v: for an unturned card x across, y down the table)
 
 $input v_worldPos, v_tablePos, v_normal, v_texcoord0
 #ifdef STEREO
@@ -40,7 +44,7 @@ $input v_worldPos, v_tablePos, v_normal, v_texcoord0
 #include "common.sh"
 
 uniform vec4 staticColor_Alpha;
-uniform vec4 tracedParams[12];
+uniform vec4 tracedParams[14];
 
 #ifdef STEREO
 	uniform vec4 cameraPosWorld[2];
@@ -271,6 +275,21 @@ void main()
 	const vec3 roomGlint = tracedParams[6].rgb * mix(vec3_splat(1.0), tracedParams[7].rgb, tracedParams[10].w);
 	const vec3 glowTint = mix(staticColor_Alpha.rgb, vec3_splat(staticColor_Alpha.a), tracedParams[10].z * saturate(light));
 	vec3 result = glowTint * (tracedParams[2].x * light) + staticColor_Alpha.rgb * (10.0 * tracedParams[3].x * glint) + roomGlint * (10.0 * tracedParams[3].x) * glint + lampOff;
+
+	// Parallax hot spot: the lamp's light inside the lit insert is brightest over the bulb, which sits bulb_depth mm below the
+	// top; the refracted eye ray travels that far down before it meets it, so the soft spot shifts against the top (and the
+	// traced light, which parallaxes over its own baked depth) as the eye moves. A broad gaussian, no bulb detail; whiter at
+	// its core by the white-leak share; only where the insert is lit; nothing with the lamp off. A frosted cap spreads it out.
+	if (tracedParams[12].x > 0.0)
+	{
+		const vec2 spotUv = card + inside.xy * (tracedParams[12].x / size / steepInside);
+		// mm about the bake square's centre, moved by the offset and squashed by the stretch (both along the card's u and v)
+		const vec2 p = ((spotUv - 0.5) * size - tracedParams[13].zw) / (max(tracedParams[12].y, 0.05) * max(tracedParams[13].xy, vec2_splat(0.05)));
+		const float sigma = 8.0 + 8.0 * frost;
+		const float spot = exp(-dot(p, p) / (2.0 * sigma * sigma)) * (0.3 + 0.7 * saturate(light));
+		const vec3 hot = mix(staticColor_Alpha.rgb, vec3_splat(staticColor_Alpha.a), tracedParams[10].z * spot);
+		result += hot * (0.8 * tracedParams[2].x * tracedParams[12].z * spot);
+	}
 
 	// The print on the playfield covers the insert (its glow, the lamp-off look and the facets alike)
 	if (tracedParams[9].x > 0.0)
