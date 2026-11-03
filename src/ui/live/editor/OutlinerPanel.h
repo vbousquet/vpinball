@@ -2,14 +2,22 @@
 
 #pragma once
 
+#include "imgui/imgui.h"
+
+#include "Selection.h"
+#include "unordered_dense.h"
+
+class PartGroup;
+class IEditable;
+
 namespace VPX::EditorUI
 {
 
 class EditorUI;
 class EditorUIPart;
 
-// Left side panel listing the view setups, materials, images, sounds, render probes
-// and the scene parts tree, used to select the edited object.
+// Left side panel modelled on Blender's Outliner: a display mode (scene parts tree or table data), a search box
+// and a filter popover (object types, selected only), used to select the edited object.
 class OutlinerPanel
 {
 public:
@@ -18,22 +26,81 @@ public:
    {
    }
 
-   void Render(float topBarHeight);
+   void RenderInArea(const ImVec2 &pos, const ImVec2 &size); // Window filling the given area rect (the area header holds the editor type button)
+   void FocusFilter() { m_focusFilter = true; } // Ctrl+F: type a filter right away
 
-   // Width of the panel in logical pixels (scaled by the UI DPI)
+   // Default width of the panel in logical pixels (scaled by the UI DPI), the current one is stored in the area layout tree (EditorUI::m_areas)
    static constexpr float PaneWidth = 200.f;
 
-private:
-   bool MatchesFilter(const string &name) const;
+   // Filter popover & display mode state, exposed to be saved with the workspaces.
+   // The type mask has one bit per object category (all set: every type is listed), display mode 0 is the scene parts tree, 1 the table data.
+   uint32_t GetTypeMask() const { return m_typeMask; }
+   void SetTypeMask(uint32_t mask) { m_typeMask = mask & AllTypesMask; m_openMatchesPending = true; }
+   bool GetSelectedOnly() const { return m_selectedOnly; }
+   void SetSelectedOnly(bool selectedOnly) { m_selectedOnly = selectedOnly; m_openMatchesPending = true; }
+   int GetDisplayMode() const { return m_displayMode; }
+   void SetDisplayMode(int mode) { m_displayMode = mode == 1 ? 1 : 0; }
+   static constexpr uint32_t AllTypesMask = (1u << 12) - 1u;
 
-   // Render a resource list section (images, sounds, materials) with ctrl/shift multi selection.
+private:
+   // Filter text split in lowercase tokens: 'n:x' or bare words (name contains), 't:x' (type starts with), 'm:x' (material contains)
+   struct FilterTokens
+   {
+      vector<string> names;
+      vector<string> types;
+      vector<string> materials;
+      bool empty() const { return names.empty() && types.empty() && materials.empty(); }
+   };
+   void ParseFilter();
+   bool MatchesFilter(const string &name) const; // Name tokens only (non part lists)
+   bool MatchesPartCached(size_t index) const; // All tokens, for m_editables[index] (needs RefreshFilterCache)
+   void RefreshFilterCache();
+   void SelectViewSetup(int viewSetup); // Select a preview camera and switch the view to it
+
+   // Render a resource list (images, sounds, materials) with ctrl/shift multi selection.
    // multiSel holds all the selected items, anchor is the last clicked one for range selection.
-   template <class T> void RenderResourceList(const char *label, vector<T *> &items, vector<T *> &multiSel, T *&anchor, const std::function<string(T *)> &nameOf);
+   // When asTree is set, the list is wrapped in a twirl-down node labelled label.
+   template <class T>
+   void RenderResourceList(const char *label, bool asTree, vector<T *> &items, vector<T *> &multiSel, T *&anchor, const std::function<string(T *)> &nameOf);
 
    EditorUI &m_editor;
    string m_filter;
+   bool m_focusFilter = false;
    bool m_syncToSelection = false; // When enabled, the tree is expanded & scrolled to reveal the selected part on selection change
    std::shared_ptr<EditorUIPart> m_lastSyncedPart; // Last selection revealed in the tree while syncing
+
+   string m_parsedFilter; // Filter text the tokens were parsed from
+   FilterTokens m_tokens;
+   bool m_openMatchesPending = false; // Filter changed: open the groups containing matches once the tree is drawn
+
+   Selection m_lastSeenSelection; // To detect selection changes made elsewhere
+   bool m_revealResource = false; // The selection changed to a table data item: open its category and scroll to it
+   bool m_dragBlocked = false; // The drop under the mouse is refused (cycle), set while drawing the drop targets
+   ImGuiID m_dragHoverGroup = 0; // Collapsed group hovered while dragging parts (opens after a short delay)
+   double m_dragHoverSince = 0.0;
+   vector<std::shared_ptr<EditorUIPart>> m_listedParts; // Rows drawn in the parts tree this frame, in order (for shift+click range selection)
+
+   uint32_t m_typeMask = AllTypesMask;
+   bool m_selectedOnly = false;
+   int m_displayMode = 0;
+
+   // Per frame scratch data of the parts tree (members to avoid reallocating)
+   ankerl::unordered_dense::set<const PartGroup *> m_matchedGroups;
+   ankerl::unordered_dense::set<const PartGroup *> m_visibleGroups;
+   ankerl::unordered_dense::map<const PartGroup *, int> m_groupCounts;
+   vector<const PartGroup *> m_groupStack;
+   vector<uint8_t> m_showPart; // Per m_editables entry: part is listed (matches the filter or is in a matching group)
+
+   // Lowercase names/materials of m_editables (only filled when a matching token exists), refreshed when the parts,
+   // filter or view mode change, or every second to catch renames
+   vector<const IEditable *> m_cachePtrs; // Editable each cached index was built from, a mismatch means the cache is stale
+   vector<string> m_lowerNames;
+   vector<string> m_lowerMaterials;
+   size_t m_cacheSize = 0;
+   int m_filterGeneration = 0;
+   int m_cacheGeneration = -1;
+   bool m_cacheBackdrop = false;
+   double m_cacheTime = -10.0;
 };
 
 }
