@@ -7,6 +7,7 @@
 #include "imgui/imgui.h"
 #include "imguizmo/ImGuizmo.h"
 #include "imgui_markdown/imgui_markdown.h"
+#include "editor/AreaLayout.h"
 #include "editor/EditorUIPart.h"
 #include "editor/Selection.h"
 #include "editor/EditorChrome.h"
@@ -140,6 +141,7 @@ private:
    bool IsEditablePickable(const IEditable *editable) const;
    void BoxSelectParts(const ImVec2 &cornerA, const ImVec2 &cornerB, bool add);
    void SelectAllParts();
+   void FrameSelection(); // Editor camera centered on the selection, zoomed to fill the view (Blender's View Selected, numpad .)
 
    // Selection snapshot stored in undo records and restored on undo
    struct UndoSelectionState
@@ -351,8 +353,8 @@ private:
    // UI parts must not write into the parts' data which is being serialized (see EditorUI::Render3D)
    bool IsSaveInProgress() const { return m_fileOp != nullptr && m_fileOp->type == AsyncFileOp::Type::Save; }
 
-   // Part library (import/export of parts through partial VPZ packs, handled by the PartLibraryPanel dialog)
-   void OpenPartLibrary() { m_partLibrary.Show(); }
+   // Part library (import/export of parts through partial VPZ packs, handled by the PartLibraryPanel, hosted by an area)
+   void OpenPartLibrary() { ShowAreaEditor(AreaEditor::PartLibrary); }
    bool CanExportPartSelection() const { return m_partLibrary.CanExportSelection(); }
    void ExportPartSelection() { m_partLibrary.ExportSelection(); }
 
@@ -480,12 +482,8 @@ private:
    Matrix3D m_camView, m_camProj;
    float m_camDistance;
    bool m_showNavCube = true; // View > Navigation Cube
-   bool m_showOutliner = true; // View > Outliner (workspaces)
-   bool m_showProperties = true; // View > Properties (workspaces)
-   // Areas (Blender-style fixed layout: outliner | viewport + N-panel | properties): widths in logical pixels, resized by the
-   // splitters between areas, saved per workspace
-   float m_outlinerWidth = OutlinerPanel::PaneWidth;
-   float m_propertiesWidth = PropertiesPanel::PaneWidth;
+   // Areas: Blender-style split tree (see editor/AreaLayout.h): Outliner | Viewport + N-panel | Properties by default. Hidden leaves are the
+   // View menu show / hide toggles. Widths are logical pixels stored in the tree, resized by the splitters, saved per workspace.
    float m_sidebarWidth = 300.f;
    // N-panel (Blender's sidebar at the viewport's right edge): tabs Item (selection transform), Favorites (the Quick Favorites set), View
    enum class SidebarTab
@@ -498,10 +496,117 @@ private:
    SidebarTab m_sidebarTab = SidebarTab::Item;
    void ToggleSidebar(); // N
    void RenderSplitters();
+
+   // Editor types of the areas (Blender's editor type switcher, the button at the left of each area header). An editor type is hosted by one
+   // area at most (each panel is a single instance): picking in one area a type shown by another area swaps the two. Saved per workspace
+   // by name in the "layout" tree (the legacy left_editor / right_editor ints keep the AreaType order).
+   using AreaEditor = AreaType;
+   static const char *AreaEditorName(AreaEditor type);
+   static const char *AreaEditorIcon(AreaEditor type);
+   // Layout changes (type switch, show / hide, split, join, swap, maximize) are queued and applied by UpdateAreaLayout at the start of the
+   // next UI frame, before any panel is drawn: a panel never disappears between its BeginUndo and its EndUndo / Discard
+   struct PendingAreaOp
+   {
+      enum class Kind
+      {
+         SetType, // leaf, type: re-type the area (swap with the area hosting the type), widening it if too narrow for the new editor
+         Show, // type: reveal the editor, hosting it in its preferred area if needed
+         Toggle, // type: hide / show the area hosting the editor, or host it
+         Split, // leaf, axis, newOnSecondSide, size
+         Join, // leaf (kept), leaf2 (consumed)
+         Swap, // leaf: id of the split
+         Maximize // leaf: leaf to maximize, -1 to restore
+      };
+      Kind kind = Kind::SetType;
+      int leaf = -1;
+      int leaf2 = -1;
+      AreaType type = AreaType::Outliner;
+      SplitAxis axis = SplitAxis::Vertical;
+      bool newOnSecondSide = true;
+      float size = 0.f;
+   };
+   void QueueAreaOp(const PendingAreaOp &op) { m_pendingAreaOps.push_back(op); }
+   void SetAreaEditor(int leafId, AreaEditor type); // Editor type of the area (leaf id) (queued)
+   void SetAreaLayout(const AreaLayout &layout); // Workspace restore (immediate): clears the pending ops, the maximized area and the drags
+   bool IsAreaEditorHosted(AreaEditor type) const { return m_areas.IsHosted(type); }
+   bool IsAreaEditorShown(AreaEditor type) const; // Hosted by a visible area
+   void ShowAreaEditor(AreaEditor type); // Make the type visible (queued): reveals the area hosting it, or hosts it in its preferred area (Script, Properties: rightmost, others: leftmost)
    bool GetAreaUnderMouse(AreaEditor &type, bool &sidebar) const; // Area editor under the mouse (or the N-panel), false over the viewport
-   void ToggleAreaEditor(AreaEditor type); // View menu: hide / show the area hosting the type, or host it
-   void RenderAreas(float topBarHeight); // Hosts the panels of the left and right areas
+   void ToggleAreaEditor(AreaEditor type); // View menu (queued): hide / show the area hosting the type, or host it
+   void ToggleMaximizeArea(); // Ctrl+Space and View menu (queued): maximize the area under the mouse (the last one hovered, for the menu), or restore
+   ImVec2 GetViewportContentCenter() const; // Centre of the 3D view's visible part (paste position)
+   void UpdateAreaLayout(); // Start of the UI frame: applies the pending ops, then computes the area rects
+   void ComputeAreaRects() const; // Tree rect from the bar heights, then the cached leaf / splitter / viewport rects
+   void RenderAreas(); // Hosts the panels of the visible areas
    void RenderAreaTypeButton(AreaEditor current); // Header button of the area hosting the given type, and its editor type popup
+   bool ApplyAreaOp(const PendingAreaOp &op);
+   void WidenArea(int leafId, AreaType type); // Switching the editor of a too narrow area widens it (once, the splitter can shrink it again afterwards)
+   AreaLayout m_areas;
+   std::vector<PendingAreaOp> m_pendingAreaOps;
+   int m_maximizedLeafId = -1; // Transient (not saved): only this leaf is laid out, on the whole tree rect
+   // Rects of the last ComputeAreaRects (physical pixels): leaves, splitters, the viewport leaf and its content (the leaf without the N-panel).
+   // The 3D view is the full window, the viewport leaf is a window onto it.
+   mutable std::vector<LeafRect> m_leafRects;
+   mutable std::vector<SplitterRect> m_splitterRects;
+   mutable AreaRect m_viewportRect, m_viewportContentRect;
+   mutable bool m_areaRectsValid = false;
+   mutable bool m_viewportVisible = true; // False while a panel is maximized: the viewport rects are then empty and no viewport overlay is drawn
+   mutable string m_areaRectsLog;
+   int m_splitDragNode = -1; // Splitter drag: node id and unrounded divider position
+   float m_splitDragPos = 0.f;
+   // Corner drags (Blender's area split / join), the edge menu and its interactive split / join modes. Everything is drawn on the foreground
+   // draw list, the tree is only changed through the queued ops. Nodes are kept by id and re-resolved every frame: a vanished node cancels
+   struct AreaSplitPlan
+   {
+      bool ok = false;
+      const char *reason = ""; // Why not, when !ok
+      SplitAxis axis = SplitAxis::Vertical;
+      AreaRect leaf; // Area to split
+      AreaRect newRect; // Where the new area would be (ok only)
+      float line = 0.f; // Divider coordinate (x for a Vertical split, y for a Horizontal one), whole pixels, inside the area
+      float size = 0.f; // Logical extent of the new area (ok only)
+      AreaType newType = AreaType::Count; // First editor type not shown yet
+   };
+   struct AreaDrag
+   {
+      bool active = false;
+      int leaf = -1; // Area the drag started in
+      int corner = 0; // 0 top left, 1 top right, 2 bottom left, 3 bottom right
+      ImVec2 start = ImVec2(0.f, 0.f);
+      bool decided = false; // Moved far enough: split inside the area, join in another one
+      bool axisChosen = false; // The split axis is re-evaluated until the drag passes 20 px, then stays locked
+      SplitAxis axis = SplitAxis::Vertical;
+   };
+   enum class AreaModalKind
+   {
+      None,
+      Split, // Edge menu 'Vertical / Horizontal Split': the preview follows the mouse, click confirms
+      Join // Edge menu 'Join Areas': the area not under the mouse is consumed, click confirms
+   };
+   AreaDrag m_areaDrag;
+   AreaModalKind m_areaModal = AreaModalKind::None;
+   int m_areaModalNode = -1; // Split node (edge) the mode was started from
+   SplitAxis m_areaModalAxis = SplitAxis::Vertical;
+   bool m_areaModalFocus = false; // Bring the input catcher window to the front (first frame of the mode)
+   int m_edgeMenuNode = -1;
+   bool m_edgeMenuRequest = false;
+   ImVec2 m_edgeMenuPos = ImVec2(0.f, 0.f);
+   int m_hoverLeaf = -1; // Area under the mouse at the start of the frame (not while a popup or the palette covers the areas)
+   bool m_sidebarWasShown = false; // The N-panel window is created above the corner zones the first time it is shown: raise them then
+   bool m_raiseAreaWindows = false; // After a layout change: splitter strips and corner zones are brought to the front again, in that order (corners win)
+   bool IsViewportVisible() const { return m_viewportVisible; } // The 3D view is shown (not hidden behind a maximized panel): gate for the viewport overlays
+   bool ShouldRaiseAreaWindows() const; // A layout change is pending a raise, and no popup is open (it would be covered)
+   bool CanUseAreaTools() const; // Corner zones, edge menu and their modes: off during G / R / S, gizmo / point drags, point edit, running game inspection, file ops, palette, maximize
+   const LeafRect *FindLeafRect(int leafId) const; // Visible leaf of the last ComputeAreaRects
+   bool PlanAreaSplit(int leafId, SplitAxis axis, bool newOnSecondSide, const ImVec2 &cursor, AreaSplitPlan &plan) const;
+   const char *AreaJoinRefusal(int keepId, int consumeId) const;
+   void DrawAreaSplitPreview(const AreaSplitPlan &plan) const;
+   void DrawAreaJoinPreview(int keepId, int consumeId, bool ok) const;
+   void RenderAreaCorners(); // Corner action zones of the visible areas, then the drag in progress
+   void UpdateAreaDrag();
+   void RenderAreaEdgeMenu(); // Right click menu of the splitters, and the modes it starts
+   void RenderAreaModal();
+   void CancelAreaInteraction(bool consumeEscape); // Drag, mode and menu
    bool ConsumedAreaEscape(); // The Esc that closed the editor type popup is not an editor Esc
    bool m_areaEscPending = false;
    bool ConsumedPaneEscape(); // The Esc that cancelled a property pane field edit is not an editor Esc

@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "imgui/imgui.h"
 #include "parts/pintable.h"
 
 #include <filesystem>
@@ -17,7 +18,7 @@ namespace VPX::EditorUI
 class EditorUI;
 class EditorUIPart;
 
-// Part library: export of the current part selection to a partial VPZ pack, and import of
+// Part library, hosted by an editor area (Blender's editor type switcher): export of the current part selection to a partial VPZ pack, and import of
 // parts from a specific VPZ file or from a browsable list of library folders holding VPZ
 // packs organized in subfolders. The import merge strategy defines how conflicts between
 // imported assets and same named table assets are resolved.
@@ -32,24 +33,20 @@ public:
    explicit PartLibraryPanel(EditorUI &editor);
    ~PartLibraryPanel();
 
-   void Show()
-   {
-      m_visible = true;
-      m_rescanLibrary = true;
-   }
-   void Close();
-   bool IsVisible() const { return m_visible; }
+   void Show() { m_rescanLibrary = true; } // The editor was just switched to this type: rescan the library folders
 
    // Export of the current selection to a VPZ pack file, disabled when there is no exportable selection
    bool CanExportSelection() const;
    void ExportSelection();
+
+   void Update(); // Every frame, whether the editor is shown or not: applies the results of the asynchronous file dialogs
+   void RenderInArea(const ImVec2 &pos, const ImVec2 &size); // Window filling the given area rect, header included
 
    // Pack placement mode: a pack of the library is selected for preview & placement
    bool IsPlacementArmed() const { return !m_previewParts.empty(); }
    void CancelPlacement();
    void CommitPlacement();
 
-   void Render();
    void Render3D(); // Renders the ghost preview parts into the 3D scene (called by EditorUI::Render3D)
 
    // Drops the preview parts, e.g. when the edited table is switched or the editor is closed
@@ -94,9 +91,8 @@ private:
    void SetupPlayerSide(IEditable *part, bool initRenderable);
 
    EditorUI &m_editor;
-   bool m_visible = false;
 
-   // Results of the asynchronous SDL file dialogs, applied on the main thread in Render
+   // Results of the asynchronous SDL file dialogs, applied on the main thread in Update
    std::shared_ptr<string> m_pendingExportPath;
    std::shared_ptr<string> m_pendingImportPath;
    std::shared_ptr<string> m_pendingFolderPath;

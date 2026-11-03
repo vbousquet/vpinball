@@ -949,7 +949,7 @@ void InputManager::CreateInputActions()
       [this](const InputAction&, bool, bool isPressed)
       {
          m_gameStartedOnce = true; // disable autostart as player as requested debugger instead
-         if (m_player->m_liveUI->IsInGameUIOpened() || !isPressed)
+         if (m_player->m_liveUI->IsInGameUIOpened() || (m_player->m_liveUI->IsEditorUIOpened() && !m_player->m_liveUI->IsEditorInspectMode()) || !isPressed) // D is an editor key (Shift+D duplicates); kept while inspecting the running game
             return;
          m_player->m_showDebugger = true;
       }));

@@ -10,6 +10,7 @@
 #include "fonts/IconsForkAwesome.h"
 #include "editor/IconsLucide.h"
 #include "editor/LucideFont.h"
+#include "editor/EditorTheme.h"
 #include "fonts/ForkAwesome.h"
 #include "math/matrix.h"
 #include "plugins/VPXPlugin.h"
@@ -730,8 +731,8 @@ void LiveUI::SetupImGuiStyle(const bool isEditor) const
    style.Colors[ImGuiCol_Border] = ImVec4(0.306f, 0.306f, 0.306f, 1.0f);
    style.Colors[ImGuiCol_BorderShadow] = ImVec4(0.306f, 0.306f, 0.306f, 1.0f);
    style.Colors[ImGuiCol_FrameBg] = isEditor ? ImColor(0xFF545454) : ImColor(0.2f, 0.2f, 0.216f, 1.0f);
-   style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.114f, 0.592f, 0.925f, 1.0f);
-   style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.0f, 0.467f, 0.784f, 1.0f);
+   style.Colors[ImGuiCol_FrameBgHovered] = isEditor ? ImColor(96, 96, 96) : ImColor(0.114f, 0.592f, 0.925f, 1.0f);
+   style.Colors[ImGuiCol_FrameBgActive] = isEditor ? ImColor(34, 34, 34) : ImColor(0.0f, 0.467f, 0.784f, 1.0f); // Editor: Blender's dark field while editing
    style.Colors[ImGuiCol_TitleBg] = ImVec4(0.145f, 0.145f, 0.149f, 1.0f);
    style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.145f, 0.145f, 0.149f, 1.0f);
    style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.145f, 0.145f, 0.149f, 1.0f);
@@ -740,15 +741,16 @@ void LiveUI::SetupImGuiStyle(const bool isEditor) const
    style.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.322f, 0.322f, 0.333f, 1.0f);
    style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.353f, 0.353f, 0.373f, 1.0f);
    style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.353f, 0.353f, 0.373f, 1.0f);
-   style.Colors[ImGuiCol_CheckMark] = isEditor ? ImColor(0xFFdddddd) : ImColor(0.0f, 0.467f, 0.784f, 1.0f);
-   style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.114f, 0.592f, 0.925f, 1.0f);
-   style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.0f, 0.467f, 0.784f, 1.0f);
+   style.Colors[ImGuiCol_CheckMark] = isEditor ? ImColor(0xFFFFFFFF) : ImColor(0.0f, 0.467f, 0.784f, 1.0f);
+   style.Colors[ImGuiCol_SliderGrab] = isEditor ? ImColor(EditorTheme::Fill) : ImColor(0.114f, 0.592f, 0.925f, 1.0f);
+   style.Colors[ImGuiCol_SliderGrabActive] = isEditor ? ImColor(EditorTheme::FillActive) : ImColor(0.0f, 0.467f, 0.784f, 1.0f);
    style.Colors[ImGuiCol_Button] = ImVec4(0.2f, 0.2f, 0.216f, 1.0f);
-   style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.114f, 0.592f, 0.925f, 1.0f);
-   style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.114f, 0.592f, 0.925f, 1.0f);
-   style.Colors[ImGuiCol_Header] = isEditor ? ImColor(0xFF2B5A8C) : ImColor(0.2f, 0.2f, 0.216f, 1.0f);
-   style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.114f, 0.592f, 0.925f, 1.0f);
-   style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.0f, 0.467f, 0.784f, 1.0f);
+   style.Colors[ImGuiCol_ButtonHovered] = isEditor ? ImColor(EditorTheme::Hover) : ImColor(0.114f, 0.592f, 0.925f, 1.0f);
+   style.Colors[ImGuiCol_ButtonActive] = isEditor ? ImColor(EditorTheme::Raised) : ImColor(0.114f, 0.592f, 0.925f, 1.0f);
+   style.Colors[ImGuiCol_Header] = isEditor ? ImColor(60, 60, 60) : ImColor(0.2f, 0.2f, 0.216f, 1.0f);
+   // Editor: neutral grey section headers / selected rows (the accent is a thin rule drawn by the property sections)
+   style.Colors[ImGuiCol_HeaderHovered] = isEditor ? ImColor(75, 75, 75) : ImColor(0.114f, 0.592f, 0.925f, 1.0f);
+   style.Colors[ImGuiCol_HeaderActive] = isEditor ? ImColor(90, 90, 90) : ImColor(0.0f, 0.467f, 0.784f, 1.0f);
    style.Colors[ImGuiCol_Separator] = ImVec4(0.306f, 0.306f, 0.306f, 1.0f);
    style.Colors[ImGuiCol_SeparatorHovered] = ImVec4(0.306f, 0.306f, 0.306f, 1.0f);
    style.Colors[ImGuiCol_SeparatorActive] = ImVec4(0.306f, 0.306f, 0.306f, 1.0f);
@@ -756,20 +758,20 @@ void LiveUI::SetupImGuiStyle(const bool isEditor) const
    style.Colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.2f, 0.2f, 0.216f, 1.0f);
    style.Colors[ImGuiCol_ResizeGripActive] = ImVec4(0.322f, 0.322f, 0.333f, 1.0f);
    style.Colors[ImGuiCol_Tab] = ImVec4(0.145f, 0.145f, 0.149f, 1.0f);
-   style.Colors[ImGuiCol_TabHovered] = ImVec4(0.114f, 0.592f, 0.925f, 1.0f);
-   style.Colors[ImGuiCol_TabActive] = ImVec4(0.0f, 0.467f, 0.784f, 1.0f);
+   style.Colors[ImGuiCol_TabHovered] = isEditor ? ImColor(EditorTheme::TabHover) : ImColor(0.114f, 0.592f, 0.925f, 1.0f);
+   style.Colors[ImGuiCol_TabActive] = isEditor ? ImColor(EditorTheme::TabActive) : ImColor(0.0f, 0.467f, 0.784f, 1.0f);
    style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.145f, 0.145f, 0.149f, 1.0f);
-   style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.0f, 0.467f, 0.784f, 1.0f);
-   style.Colors[ImGuiCol_PlotLines] = ImVec4(0.0f, 0.467f, 0.784f, 1.0f);
-   style.Colors[ImGuiCol_PlotLinesHovered] = ImVec4(0.114f, 0.592f, 0.925f, 1.0f);
-   style.Colors[ImGuiCol_PlotHistogram] = ImVec4(0.0f, 0.467f, 0.784f, 1.0f);
-   style.Colors[ImGuiCol_PlotHistogramHovered] = ImVec4(0.114f, 0.592f, 0.925f, 1.0f);
+   style.Colors[ImGuiCol_TabUnfocusedActive] = isEditor ? ImColor(EditorTheme::Raised) : ImColor(0.0f, 0.467f, 0.784f, 1.0f);
+   style.Colors[ImGuiCol_PlotLines] = isEditor ? ImColor(EditorTheme::Fill) : ImColor(0.0f, 0.467f, 0.784f, 1.0f);
+   style.Colors[ImGuiCol_PlotLinesHovered] = isEditor ? ImColor(EditorTheme::FillHovered) : ImColor(0.114f, 0.592f, 0.925f, 1.0f);
+   style.Colors[ImGuiCol_PlotHistogram] = isEditor ? ImColor(EditorTheme::Fill) : ImColor(0.0f, 0.467f, 0.784f, 1.0f);
+   style.Colors[ImGuiCol_PlotHistogramHovered] = isEditor ? ImColor(EditorTheme::FillHovered) : ImColor(0.114f, 0.592f, 0.925f, 1.0f);
    style.Colors[ImGuiCol_TableHeaderBg] = ImVec4(0.188f, 0.188f, 0.2f, 1.0f);
    style.Colors[ImGuiCol_TableBorderStrong] = ImVec4(0.310f, 0.310f, 0.349f, 1.0f);
    style.Colors[ImGuiCol_TableBorderLight] = ImVec4(0.227f, 0.227f, 0.247f, 1.0f);
    style.Colors[ImGuiCol_TableRowBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f * 1.0f);
    style.Colors[ImGuiCol_TableRowBgAlt] = ImVec4(1.0f, 1.0f, 1.0f, 0.060f * 1.0f);
-   style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.0f, 0.467f, 0.784f, 1.0f);
+   style.Colors[ImGuiCol_TextSelectedBg] = isEditor ? ImColor(71, 114, 179, 153) : ImColor(0.0f, 0.467f, 0.784f, 1.0f); // Editor: Fill at ~60% alpha
    style.Colors[ImGuiCol_DragDropTarget] = ImVec4(0.145f, 0.145f, 0.149f, 1.0f);
    style.Colors[ImGuiCol_NavHighlight] = ImVec4(0.145f, 0.145f, 0.149f, 1.0f);
    style.Colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.0f, 1.0f, 1.0f, 0.700f);

@@ -26,8 +26,6 @@ ScriptPanel::ScriptPanel(EditorUI &editor)
 
 ScriptPanel::~ScriptPanel() { StopExternalSession(); }
 
-void ScriptPanel::Close() { m_visible = false; }
-
 // Split a command line into arguments, honoring double quotes (e.g. "C:\My Editor\editor.exe" --wait)
 static vector<string> SplitCommandLine(const string &cmd)
 {
@@ -155,9 +153,9 @@ void ScriptPanel::StopExternalSession()
    m_extFile.clear();
 }
 
-void ScriptPanel::Render()
+void ScriptPanel::Update()
 {
-   // External editing session housekeeping (kept running while the window is closed):
+   // External editing session housekeeping (kept running while the editor is not shown):
    // the session is bound to the edited (base) table, dropped when the table is replaced
    PinTable *const baseTable = m_editor.m_table->m_liveBaseTable ? m_editor.m_table->m_liveBaseTable : m_editor.m_table;
    if (m_extTable != nullptr && m_extTable != baseTable)
@@ -182,24 +180,25 @@ void ScriptPanel::Render()
          SyncExternalScript();
       }
    }
+}
 
-   if (!m_visible)
-      return;
-   if (m_focus)
-   {
-      m_focus = false;
-      ImGui::SetNextWindowFocus();
-   }
+void ScriptPanel::RenderInArea(const ImVec2 &pos, const ImVec2 &size)
+{
    if (!m_extCmdLoaded)
    {
       m_extCmdLoaded = true;
       m_extEditorCmd = g_settingsService.GetAppSettings().GetEditor_ExternalScriptEditor();
    }
 
-   const float dpi = m_editor.m_liveUI.GetDPI();
-   ImGui::SetNextWindowSize(ImVec2(640.f * dpi, 480.f * dpi), ImGuiCond_FirstUseEver);
-   if (ImGui::Begin("Table Script", &m_visible))
+   if (m_editor.BeginAreaWindow("SCRIPT", pos, size))
    {
+      // Header: editor type button and title
+      m_editor.RenderAreaTypeButton(EditorUI::AreaEditor::Script);
+      ImGui::SameLine();
+      ImGui::AlignTextToFramePadding();
+      ImGui::TextDisabled("Table Script");
+      ImGui::Separator();
+
       const bool readOnly = m_editor.IsInspectMode() || m_editor.m_table->IsLocked();
       if (m_editor.IsInspectMode())
          ImGui::TextDisabled("Inspecting a play test session: the script is read-only");
@@ -243,7 +242,7 @@ void ScriptPanel::Render()
       if (ImGui::InputTextMultiline("##script", &m_editor.m_table->m_script_text, ImVec2(-FLT_MIN, -FLT_MIN), flags))
          m_editor.m_table->SetDirtyScript(SaveDirtyState::Dirty);
    }
-   ImGui::End();
+   m_editor.EndAreaWindow();
 }
 
 }

@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "imgui/imgui.h"
+
 #include <SDL3/SDL_process.h>
 
 #include <filesystem>
@@ -13,7 +15,7 @@ namespace VPX::EditorUI
 
 class EditorUI;
 
-// Floating window holding the table script editor: a basic embedded text editor by
+// Table script editor, hosted by an editor area (Blender's editor type switcher): a basic embedded text editor by
 // default. Alternatively, when an external editor command is configured, the script
 // can be written to a temporary file opened in that editor, and synchronized back to
 // the table whenever the file changes on disk.
@@ -23,15 +25,8 @@ public:
    explicit ScriptPanel(EditorUI &editor);
    ~ScriptPanel();
 
-   void Show()
-   {
-      m_visible = true;
-      m_focus = true;
-   }
-   void Close();
-   bool IsVisible() const { return m_visible; }
-
-   void Render();
+   void Update(); // Every frame, whether the editor is shown or not: external editing session housekeeping
+   void RenderInArea(const ImVec2 &pos, const ImVec2 &size); // Window filling the given area rect, header included
 
 private:
    void OpenInExternalEditor();
@@ -39,8 +34,6 @@ private:
    void StopExternalSession();
 
    EditorUI &m_editor;
-   bool m_visible = false;
-   bool m_focus = false; // Focus the window on next render (Show was called while already open)
 
    string m_extEditorCmd; // External editor command, mirrored to the Editor.ExternalScriptEditor app setting
    bool m_extCmdLoaded = false;

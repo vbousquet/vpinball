@@ -42,21 +42,6 @@ bool ToolButton(const char *icon, bool active = false)
    return pressed;
 }
 
-// Magnet icon (the Lucide subset has none): a U shaped bar with light tips, centered at c, radius r
-void DrawMagnet(ImDrawList *drawList, const ImVec2 &c, const float r, const ImU32 color)
-{
-   const float w = r * 0.5f; // Half width of the U (arc radius)
-   const float thickness = max(2.f, r * 0.28f);
-   const float top = c.y - r * 0.2f; // Where the arc starts
-   const float bottom = c.y + r * 0.2f; // Where the legs end
-   drawList->PathArcTo(ImVec2(c.x, top), w, IM_PI, IM_PI * 2.f, 16);
-   drawList->PathStroke(color, 0, thickness);
-   drawList->AddLine(ImVec2(c.x - w, top), ImVec2(c.x - w, bottom), color, thickness);
-   drawList->AddLine(ImVec2(c.x + w, top), ImVec2(c.x + w, bottom), color, thickness);
-   drawList->AddLine(ImVec2(c.x - w, bottom), ImVec2(c.x - w, bottom + r * 0.25f), EditorTheme::Rgb(230, 230, 230), thickness); // Tips
-   drawList->AddLine(ImVec2(c.x + w, bottom), ImVec2(c.x + w, bottom + r * 0.25f), EditorTheme::Rgb(230, 230, 230), thickness);
-}
-
 // Text drawn over the render (view name, tool name): 1 px drop shadow so that it stays readable on light renders
 void ShadowedText(const char *text)
 {
@@ -102,11 +87,15 @@ void EditorChrome::Render(bool showFullUI)
    m_statusBarHeight = (showFullUI && m_showStatusBar) ? StatusBarHeight * m_editor.m_liveUI.GetDPI() : 0.f;
 
    if (!showFullUI)
+   {
+      m_toolShelfDrawn = false;
       return;
+   }
 
    RenderMenuBar();
    RenderToolbar();
-   RenderStatusOverlay();
+   if (m_editor.IsViewportVisible()) // No visible viewport (maximized panel): nothing to overlay
+      RenderStatusOverlay();
    RenderUndoHistory();
 }
 
@@ -167,10 +156,7 @@ void EditorChrome::RenderMenuBar()
          if (ImGui::MenuItem("Copy", "Ctrl+C", false, editor.CanCopy()))
             editor.CopySelection();
          if (ImGui::MenuItem("Paste", "Ctrl+V", false, editor.CanPaste()))
-         {
-            const ImGuiViewport *const viewport = ImGui::GetMainViewport();
-            editor.PasteSelection(ImVec2(viewport->GetCenter().x, viewport->GetCenter().y));
-         }
+            editor.PasteSelection(editor.GetViewportContentCenter());
          if (ImGui::MenuItem("Duplicate", "Shift+D", false, editor.CanDuplicate()))
             editor.DuplicateSelection();
          if (ImGui::MenuItem("Delete", "Del", false, editor.CanDelete()))
@@ -309,29 +295,19 @@ void EditorChrome::RenderMenuBar()
             editor.ToggleAreaEditor(EditorUI::AreaEditor::Outliner);
          if (ImGui::MenuItem("Properties", nullptr, editor.IsAreaEditorShown(EditorUI::AreaEditor::Properties)))
             editor.ToggleAreaEditor(EditorUI::AreaEditor::Properties);
-         // Editor type of the left and right areas (Blender's editor type switcher, also the button at the left of each area header)
-         for (int side = 0; side < 2; ++side)
+         // Reveals an editor, hosting it in its preferred area if no area shows it (the editor type button at the left of each area header re-types that area)
+         if (ImGui::BeginMenu("Show Editor"))
          {
-            const bool right = side == 1;
-            if (ImGui::BeginMenu(right ? "Right Area" : "Left Area"))
+            for (int i = 0; i < kPanelTypeCount; ++i)
             {
-               bool &shown = right ? editor.m_showProperties : editor.m_showOutliner;
-               if (ImGui::MenuItem("Visible", nullptr, shown))
-                  shown = !shown;
-               ImGui::Separator();
-               const EditorUI::AreaEditor current = right ? editor.m_rightEditor : editor.m_leftEditor;
-               for (int i = 0; i < static_cast<int>(EditorUI::AreaEditor::Count); ++i)
-               {
-                  const EditorUI::AreaEditor type = static_cast<EditorUI::AreaEditor>(i);
-                  if (ImGui::MenuItem(EditorUI::AreaEditorName(type), nullptr, current == type))
-                  {
-                     editor.SetAreaEditor(right, type);
-                     shown = true;
-                  }
-               }
-               ImGui::EndMenu();
+               const EditorUI::AreaEditor type = static_cast<EditorUI::AreaEditor>(i);
+               if (ImGui::MenuItem(EditorUI::AreaEditorName(type), nullptr, editor.IsAreaEditorShown(type)))
+                  editor.ShowAreaEditor(type);
             }
+            ImGui::EndMenu();
          }
+         if (ImGui::MenuItem("Toggle Maximize Area", "Ctrl+Space"))
+            editor.ToggleMaximizeArea();
          if (ImGui::MenuItem("Sidebar", "N", editor.m_showSidebar))
             editor.ToggleSidebar();
          if (ImGui::MenuItem("Quick Favorites", "Q"))
@@ -339,12 +315,12 @@ void EditorChrome::RenderMenuBar()
          if (ImGui::MenuItem("Menu Search...", "F3"))
          if (ImGui::MenuItem("Navigation Cube", nullptr, editor.m_showNavCube))
             editor.m_showNavCube = !editor.m_showNavCube;
-      if (ImGui::BeginMenu("View"))
-      {
-         if (ImGui::MenuItem("Pinned Properties", "P", editor.m_pinned.IsVisible()))
-            editor.m_pinned.ToggleVisible();
+         if (ImGui::MenuItem("Tool Shelf", nullptr, m_showToolShelf))
+            m_showToolShelf = !m_showToolShelf;
          if (ImGui::MenuItem("Status Bar", nullptr, m_showStatusBar))
             m_showStatusBar = !m_showStatusBar;
+         if (ImGui::MenuItem("Search Fields...", "Ctrl+K"))
+            editor.m_palette.Open();
          ImGui::EndMenu();
       if (editor.IsInspectMode() && !editor.m_table->IsLocked() && ImGui::BeginMenu("Debug"))
       {
@@ -498,7 +474,7 @@ void EditorChrome::RenderToolbar()
       ImGui::SameLine();
 
       // Edit mode selection: moved to the tool shelf when it is shown
-      if (!ToolShelfVisible())
+      if (!m_toolShelfDrawn) // Edit modes: in the tool shelf when it was drawn last frame
       {
          for (const auto &mode : editModes)
          {
@@ -610,7 +586,7 @@ void EditorChrome::RenderToolbar()
          }
       }
       // Add part button, opening the part type picker popup (same as the Shift+A shortcut)
-      if (!ToolShelfVisible()) // Moved to the tool shelf when it is shown (the popup below is shared)
+      if (!m_toolShelfDrawn) // Moved to the tool shelf when it is shown (the popup below is shared)
       {
          ImGui::BeginDisabled(editor.m_pointEditPart != nullptr || editor.m_table->IsLocked());
          const bool addPartActive = (editor.m_addPartType != eItemInvalid);
@@ -632,7 +608,7 @@ void EditorChrome::RenderToolbar()
       ImGui::SameLine(0.f, toolGap);
       ImGui::BeginDisabled(!editor.CanPaste());
       if (ToolButton(ICON_LC_CLIPBOARD_PASTE))
-         editor.PasteSelection(ImVec2(viewport->GetCenter().x, viewport->GetCenter().y));
+         editor.PasteSelection(editor.GetViewportContentCenter());
       if (ImGui::IsItemHovered())
          ImGui::SetTooltip("Paste\n[Ctrl+V]");
       ImGui::EndDisabled();
@@ -663,16 +639,10 @@ void EditorChrome::RenderToolbar()
       ImGui::EndDisabled();
 
       // Script editor button
-      ImGui::SameLine();
-      ImGui::Separator();
-      ImGui::SameLine();
-      const bool scriptActive = editor.m_scriptPanel.IsVisible();
-      if (scriptActive)
-         ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-      if (ImGui::Button(ICON_LC_CODE_XML))
-         editor.m_scriptPanel.Show();
-      if (scriptActive)
-         ImGui::PopStyleColor();
+      ToolSeparator();
+      const bool scriptActive = editor.IsAreaEditorShown(EditorUI::AreaEditor::Script);
+      if (ToolButton(ICON_LC_CODE_XML, scriptActive))
+         editor.ShowAreaEditor(EditorUI::AreaEditor::Script);
       if (ImGui::IsItemHovered())
          ImGui::SetTooltip("Edit table script");
 
@@ -771,7 +741,12 @@ bool EditorChrome::ToolShelfVisible() const
    const EditorUI &editor = m_editor;
    return m_showToolShelf && !editor.IsInspectMode() && !editor.m_table->IsLocked() && !editor.m_flyMode && !editor.m_inspectionModal.IsVisible()
       && editor.m_camMode != ViewMode::DesktopBackdrop;
-   if (!ToolShelfVisible())
+}
+
+void EditorChrome::RenderToolShelf(const AreaRect &viewportContent)
+{
+   m_toolShelfDrawn = false; // Set once the shelf is really drawn: the toolbar keeps the tools whenever the shelf is hidden (too small, overlap, no viewport)
+   if (!ToolShelfVisible() || !m_editor.IsViewportVisible())
       return;
    EditorUI &editor = m_editor;
    const float dpi = editor.m_liveUI.GetDPI();
@@ -793,8 +768,9 @@ bool EditorChrome::ToolShelfVisible() const
    // Do not overlap the nav cube / N-panel side (too narrow viewport) nor the F9 Adjust Last panel at the bottom left (last frame rect, if shown)
    if (viewportContent.Width() < estWidth + 220.f * dpi || pos.y + estHeight > viewportContent.y1 - 8.f * dpi)
       return;
-   if (const ImGuiWindow *adjust = ImGui::FindWindowByName("Adjust Last Operation"); adjust != nullptr && adjust->Active && pos.y + estHeight + 4.f * dpi > adjust->Pos.y)
+   if (const ImGuiWindow *adjust = ImGui::FindWindowByName("Adjust Last Operation"); adjust != nullptr && adjust->WasActive && pos.y + estHeight + 4.f * dpi > adjust->Pos.y)
       return;
+   m_toolShelfDrawn = true;
    ImGui::SetNextWindowPos(pos);
    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad, pad));
    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(gap, gap));
@@ -835,13 +811,20 @@ bool EditorChrome::ToolShelfVisible() const
             ImGui::SetTooltip("Transform orientation: %s\nClick to switch to %s\n[repeat G / R / S]", local ? "Local" : "Global", local ? "Global" : "Local");
          ImGui::EndDisabled();
    ImGui::End();
+void EditorChrome::RenderToolShelf(const AreaRect &viewportContent)
+{
+   // Stub: filled in by the tool shelf task (View > Tool Shelf, m_showToolShelf)
+   (void)viewportContent;
+}
+
 void EditorChrome::RenderStatusOverlay()
 {
    EditorUI &editor = m_editor;
-   const ImGuiIO &io = ImGui::GetIO();
 
-   // Overlay Info Text
-   const ImVec2 overlayPos((editor.m_showOutliner ? editor.m_outlinerWidth : 0.f) * editor.m_liveUI.GetDPI(), m_toolBarHeight + m_menuBarHeight + 5.f * editor.m_liveUI.GetDPI());
+   // Overlay Info Text: at the top left of the viewport area
+   const float dpi = editor.m_liveUI.GetDPI();
+   const AreaRect &vc = editor.m_viewportContentRect;
+   const ImVec2 overlayPos(vc.x0, vc.y0 + 5.f * dpi);
 
    // Camera orbit lock toggle (drawn in its own window as the status overlay does not capture inputs)
    ImGui::SetNextWindowPos(overlayPos);
@@ -860,15 +843,14 @@ void EditorChrome::RenderStatusOverlay()
    const float lockToggleWidth = ImGui::GetItemRectSize().x;
    ImGui::End();
 
-   ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x - (editor.m_showOutliner ? editor.m_outlinerWidth : 0.f) * editor.m_liveUI.GetDPI(),
-      io.DisplaySize.y - m_toolBarHeight - m_menuBarHeight - 5.f * editor.m_liveUI.GetDPI())); // Fixed outliner width (to be adjusted when moving ImGui to the docking branch)
+   ImGui::SetNextWindowSize(ImVec2(max(1.f, vc.Width()), max(1.f, vc.Height() - 5.f * dpi)));
    ImGui::SetNextWindowPos(overlayPos);
    ImGui::Begin("text overlay", nullptr, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav);
    const float labelAlign = ImGui::GetCursorPosX() + lockToggleWidth + ImGui::GetStyle().ItemSpacing.x;
    ImGui::SetCursorPos(ImVec2(labelAlign, ImGui::GetCursorPosY() + ImGui::GetStyle().FramePadding.y));
    switch (editor.m_camMode)
    {
-   case ViewMode::PreviewCam: ImGui::TextUnformatted("Preview Camera"); break;
+   case ViewMode::PreviewCam: ShadowedText("Preview Camera"); break;
    case ViewMode::EditorCam:
    {
       string text;
@@ -882,10 +864,10 @@ void EditorChrome::RenderStatusOverlay()
       case EditorUI::PredefinedView::Front: text = "Front"sv; break;
       case EditorUI::PredefinedView::Back: text = "Back"sv; break;
       }
-      ImGui::TextUnformatted((text + (editor.m_perspectiveCam ? " Perspective" : " Orthographic")).c_str());
+      ShadowedText((text + (editor.m_perspectiveCam ? " Perspective" : " Orthographic")).c_str());
       break;
    }
-   case ViewMode::DesktopBackdrop: ImGui::TextUnformatted("Desktop Backdrop"); break;
+   case ViewMode::DesktopBackdrop: ShadowedText("Desktop Backdrop"); break;
    }
    ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX() + ImGui::GetStyle().FramePadding.x, ImGui::GetCursorPosY() + ImGui::GetStyle().FramePadding.y));
    const char *gizmoIcon = nullptr;
@@ -912,12 +894,12 @@ void EditorChrome::RenderStatusOverlay()
    }
    if (gizmoIcon)
    {
-      ImGui::TextUnformatted(gizmoIcon);
+      ShadowedText(gizmoIcon);
       ImGui::SameLine(labelAlign);
-      ImGui::TextUnformatted(gizmoLabel);
+      ShadowedText(gizmoLabel);
    }
    if (editor.m_pointEditPart)
-      ImGui::TextUnformatted(editor.m_pointEditCenter ? "Center Edit (Tab to exit)" : "Drag Point Edit (Tab to exit)");
+      ShadowedText(editor.m_pointEditCenter ? "Center Edit (Tab to exit)" : "Drag Point Edit (Tab to exit)");
    ImGui::End();
 }
 

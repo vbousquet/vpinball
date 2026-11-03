@@ -103,6 +103,7 @@ private:
    bool m_pendingPin = false;
    size_t m_pending = 0;
    int m_sel = 0;
+   int m_pendingOp = -1; // Operator to run at the start of the next Render (never mid-frame)
    size_t m_indexParts = 0, m_indexMats = 0;
    string m_query;
    string m_lastQuery;

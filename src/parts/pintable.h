@@ -790,6 +790,8 @@ public:
       string prop; // Property pane label
    };
    vector<EditorPin> m_editorPins;
+   // Live editor workspaces (panel layout and pin set presets), kept as their JSON text ("editor_workspaces" of table.json)
+   string m_editorWorkspaces;
 
    LightSource m_Light[MAX_LIGHT_SOURCES];
    COLORREF m_lightAmbient;

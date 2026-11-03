@@ -312,6 +312,8 @@ set(VPX_SOURCES
    src/ui/live/editor/DispReelUIPart.cpp
    src/ui/live/editor/EditorChrome.h
    src/ui/live/editor/EditorChrome.cpp
+   src/ui/live/editor/AreaLayout.h
+   src/ui/live/editor/AreaLayout.cpp
    src/ui/live/editor/EditorUIPart.h
    src/ui/live/editor/EditorUIPart.cpp
    src/ui/live/editor/EditorUIPartRegistry.h
