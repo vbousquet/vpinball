@@ -164,6 +164,8 @@ void AreaLayout::ToLegacy(bool& outliner, bool& properties, float& outlinerW, fl
 
 namespace
 {
+constexpr const char* kPreviewViewNames[3] = { "desktop", "cabinet", "fss" }; // Indexed by ViewSetupID
+
 nlohmann::json NodeToJson(const std::vector<AreaNode>& nodes, const int idx)
 {
    const AreaNode& n = nodes[idx];
@@ -180,6 +182,8 @@ nlohmann::json NodeToJson(const std::vector<AreaNode>& nodes, const int idx)
       j["editor"] = AreaTypeJsonName(n.type);
       if (n.hidden)
          j["hidden"] = true;
+      if (n.type == AreaType::CameraPreview && n.previewView >= 0 && n.previewView < 3)
+         j["preview_view"] = kPreviewViewNames[n.previewView];
    }
    return j;
 }
@@ -256,6 +260,11 @@ bool AreaLayout::FromJson(const nlohmann::json& j)
          }
          tmp.m_nodes[idx].type = type;
          tmp.m_nodes[idx].hidden = n.value("hidden", false);
+         tmp.m_nodes[idx].previewView = -1; // Unknown or missing names mean Auto
+         if (type == AreaType::CameraPreview && n.contains("preview_view") && n["preview_view"].is_string())
+            for (int v = 0; v < 3; v++)
+               if (n["preview_view"].get<std::string>() == kPreviewViewNames[v])
+                  tmp.m_nodes[idx].previewView = v;
       }
       return idx;
    };
@@ -431,7 +440,7 @@ bool AreaLayout::operator==(const AreaLayout& other) const
       if (x.isSplit != y.isSplit)
          return false;
       if (!x.isSplit)
-         return x.type == y.type && x.hidden == y.hidden;
+         return x.type == y.type && x.hidden == y.hidden && (x.type != AreaType::CameraPreview || x.previewView == y.previewView);
       return x.axis == y.axis && x.fixed == y.fixed && x.size == y.size && self(self, x.child[0], y.child[0]) && self(self, x.child[1], y.child[1]);
    };
    return eq(eq, m_root, other.m_root);
@@ -750,6 +759,32 @@ bool AreaLayout::Join(const int keep, const int consume)
    return true;
 }
 
+bool AreaLayout::CanClose(const int leaf) const
+{
+   const int i = IndexOf(leaf);
+   return i >= 0 && !m_nodes[i].isSplit && m_nodes[i].type != AreaType::Viewport && m_nodes[i].parent >= 0;
+}
+
+bool AreaLayout::Close(const int leaf)
+{
+   if (!CanClose(leaf))
+      return false;
+   const int i = IndexOf(leaf);
+   const int p = m_nodes[i].parent;
+   const int g = m_nodes[p].parent;
+   const int sib = m_nodes[p].child[0] == i ? m_nodes[p].child[1] : m_nodes[p].child[0];
+   m_nodes[sib].parent = g;
+   if (g >= 0)
+   {
+      AreaNode& gn = m_nodes[g];
+      gn.child[gn.child[0] == p ? 0 : 1] = sib;
+   }
+   else
+      m_root = sib;
+   Compact(); // drops the old parent split and the closed leaf
+   return true;
+}
+
 bool AreaLayout::Swap(const int split)
 {
    const int i = IndexOf(split);
@@ -773,8 +808,24 @@ bool AreaLayout::SetType(const int leaf, const AreaType type)
       return true;
    const int o = IndexOf(FindLeaf(type));
    if (o >= 0)
+   {
       m_nodes[o].type = n.type; // each panel is a single instance: the other leaf takes the type this leaf leaves
+      std::swap(m_nodes[o].previewView, n.previewView); // the preview's view setup follows the preview
+      if (m_nodes[o].type != AreaType::CameraPreview)
+         m_nodes[o].previewView = -1;
+   }
    n.type = type;
+   if (n.type != AreaType::CameraPreview)
+      n.previewView = -1;
+   return true;
+}
+
+bool AreaLayout::SetPreviewView(const int leaf, const int view)
+{
+   const int i = IndexOf(leaf);
+   if (i < 0 || m_nodes[i].isSplit || view < -1 || view > 2)
+      return false;
+   m_nodes[i].previewView = view;
    return true;
 }
 

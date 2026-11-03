@@ -62,6 +62,7 @@ struct AreaNode
    // leaf
    AreaType type = AreaType::Viewport;
    bool hidden = false;
+   int previewView = -1; // CameraPreview leaf: view setup shown (-1 Auto, else 0 desktop / 1 cabinet / 2 fss); JSON key "preview_view", absent = Auto
 };
 
 // Result of AreaLayout::Compute for one leaf. Hidden leaves, leaves of an invisible subtree and leaves not
@@ -167,12 +168,17 @@ public:
    bool CanJoin(int keepLeaf, int consumeLeaf) const;
    // Replaces the parent split by keep (keeps its id); consume is removed. Returns false (no change) if !CanJoin.
    bool Join(int keep, int consume);
+   // Closes a leaf (not the Viewport, not the root): its parent split is replaced by the sibling subtree, which takes the freed space
+   bool CanClose(int leaf) const;
+   bool Close(int leaf);
    // Swaps the children (whole subtrees) of a split and sets fixed = 1 - fixed, so each side keeps its size
    bool Swap(int split);
    // Not for the Viewport leaf, nor to Viewport/Count/CameraPreview(disabled). If another leaf has the type, the two swap types.
    bool SetType(int leaf, AreaType type);
    // Not for the Viewport (refused)
    bool SetHidden(int leaf, bool hidden);
+   // Camera preview view setup of a leaf (-1 Auto, 0..2); no-op for out of range values
+   bool SetPreviewView(int leaf, int view);
    // Stored size (logical px) of child[fixed] of a split, clamped to a positive finite value
    bool SetSplitSize(int split, float logicalPx);
 

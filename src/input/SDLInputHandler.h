@@ -6,6 +6,7 @@
 
 #include "InputManager.h"
 #include "PlungerHandler.h" // PlungerSensor is constructed below: it must be a complete type wherever this header is included
+#include <atomic>
 #include "physics/cabinet/CabinetNudgeSensor.h"
 #include "physics/cabinet/GamepadNudge.h"
 
@@ -13,6 +14,16 @@
 class SDLInputHandler final : public InputManager::InputHandler
 {
 public:
+   // Live editor nav cube drawn over the running game: its mouse presses are not game input. The editor publishes (every frame it draws the cube, false
+   // when the cube is hidden or the editor closes) whether the pointer is over it. Only a button DOWN is judged against it; the matching UP is
+   // swallowed only if its DOWN was, so a button can neither stick down nor go dead
+   static void SetMouseOverEditorWidget(const bool over) { s_overEditorWidget = over; }
+   static void ClearSwallowedMouseButtons()
+   {
+      s_overEditorWidget = false;
+      s_swallowedButtons = 0;
+   }
+
    explicit SDLInputHandler(InputManager& pininput)
       : m_pininput(pininput)
    {
@@ -76,6 +87,9 @@ public:
          SDL_UpdateJoysticks();
    }
 
+   static inline std::atomic<bool> s_overEditorWidget { false };
+   static inline std::atomic<uint32_t> s_swallowedButtons { 0 };
+
    void HandleSDLEvent(const SDL_Event& e)
    {
       switch (e.type)
@@ -89,8 +103,26 @@ public:
       case SDL_EVENT_MOUSE_BUTTON_DOWN:
       case SDL_EVENT_MOUSE_BUTTON_UP:
          if (e.button.which != SDL_TOUCH_MOUSEID && e.button.which != SDL_PEN_MOUSEID)
+         {
+            const uint32_t bit = e.button.button < 32 ? (1u << e.button.button) : 0u;
+            if (e.button.down)
+            {
+               if (bit != 0 && s_overEditorWidget)
+               {
+                  s_swallowedButtons |= bit; // Pressed on the editor nav cube: not game input
+                  break;
+               }
+            }
+            else if ((s_swallowedButtons & bit) != 0)
+            {
+               s_swallowedButtons &= ~bit; // Release of a swallowed press only
+               break;
+            }
             m_pininput.PushButtonEvent(m_pininput.GetMouseDeviceId(), e.button.button, e.button.timestamp, e.button.down);
+         }
          break;
+
+      case SDL_EVENT_WINDOW_FOCUS_LOST: ClearSwallowedMouseButtons(); break;
 
       case SDL_EVENT_JOYSTICK_ADDED: OnJoystickAdded(e.jdevice.which); break;
 

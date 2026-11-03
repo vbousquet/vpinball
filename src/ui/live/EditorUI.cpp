@@ -56,6 +56,7 @@
 
 #include "imgui/imgui_stdlib.h"
 #include "imguizmo/ImGuizmo.h"
+#include "input/SDLInputHandler.h"
 #include "imgui_markdown/imgui_markdown.h"
 
 namespace VPX::EditorUI
@@ -216,6 +217,14 @@ void EditorUI::Close()
       return;
    m_isOpened = false;
    m_flyMode = false;
+   if (ImGuiContext *const context = ImGui::GetCurrentContext())
+      context->ConfigNavEnableTabbing = true; // Overridden each frame while the editor is open (see RenderUI)
+   ImGuizmo::Enable(false); // Clears a gizmo state left by a drag in progress
+   ImGuizmo::Enable(true);
+   SDLInputHandler::ClearSwallowedMouseButtons(); // The editor stops drawing: no nav cube press can stay swallowed
+   m_deferredStop = -1;
+   m_gizmoDragActive = false;
+   m_gizmoDragSelection.clear();
    ExitPointEditMode(false);
    RestorePartsVisibility();
    m_inspectionModal.Close();
@@ -226,6 +235,7 @@ void EditorUI::Close()
 
 void EditorUI::SetTable(PinTable *const table)
 {
+   SDLInputHandler::ClearSwallowedMouseButtons();
    assert(table != nullptr);
    // Only tables of a same base table / live copy pair are supported (guaranteed by the player's SetTable)
    PinTable *const baseTable = m_table->m_liveBaseTable ? m_table->m_liveBaseTable : m_table;
@@ -404,6 +414,14 @@ void EditorUI::LoadTableDialog(const bool folder)
 
 void EditorUI::RequestClose(const int closeState)
 {
+   // Stopping a play test pops the table under the async save of the base table: refused for every caller (Stop, X, Shift+F5, OS window close)
+   if (IsInspectMode() && m_fileOp != nullptr)
+   {
+      if (m_deferredStop != Player::CS_CLOSE_APP) // A Quit is the stronger request: a later Stop does not downgrade it
+         m_deferredStop = closeState; // Replayed once the save has finished
+      Report("Save in progress: the play test will stop when it finishes");
+      return;
+   }
    // Only closing a full editor session loses the edited table (a live edit started from the Win32 editor or a play test gets back to its editor)
    if (m_player->IsEditorMode() && !IsInspectMode() && m_table->GetDirtyState() != SaveDirtyState::Clean)
    {
@@ -573,6 +591,11 @@ void EditorUI::FinishFileOp()
       {
          PLOGE << "Save failed (hr=" << std::hex << static_cast<unsigned long>(result) << std::dec << ") for " << op->displayPath;
          m_liveUI.PushNotification("SAVE FAILED: '" + op->displayPath + "'", 15000);
+         if (m_deferredStop >= 0)
+         {
+            m_deferredStop = -1; // Never quit or stop on top of a failed save
+            Report("Save failed: close cancelled");
+         }
       }
       else
       {
@@ -934,15 +957,35 @@ bool EditorUI::ApplyAreaOp(const PendingAreaOp &op)
       if (node == nullptr || node->isSplit || node->type == op.type)
          return false;
       const int other = m_areas.FindLeaf(op.type);
+      const bool wasPreview = node->type == AreaType::CameraPreview;
       if (!m_areas.SetType(op.leaf, op.type)) // Each panel is a single instance: the other area takes the type this area leaves
          return false;
-      WidenArea(op.leaf, op.type);
-      if (other >= 0)
-         if (const AreaNode *const swapped = m_areas.Find(other))
-            WidenArea(other, swapped->type);
+      if (other >= 0 && wasPreview)
+      {
+         // The camera preview is dismissed by picking an editor shown elsewhere: the editor moves here and its old area (now the preview) closes.
+         // The widening runs on the rects of the layout without that area
+         if (m_maximizedLeafId == other)
+            m_maximizedLeafId = -1;
+         m_areas.Close(other);
+         ComputeAreaRects();
+         WidenArea(op.leaf, op.type);
+      }
+      else
+      {
+         WidenArea(op.leaf, op.type);
+         if (other >= 0)
+            if (const AreaNode *const swapped = m_areas.Find(other))
+               WidenArea(other, swapped->type);
+      }
       if (op.type == AreaEditor::PartLibrary)
          m_partLibrary.Show(); // Rescan the library folders
       return true;
+   }
+   case PendingAreaOp::Kind::Close:
+   {
+      if (m_maximizedLeafId == op.leaf)
+         m_maximizedLeafId = -1;
+      return m_areas.Close(op.leaf);
    }
    case PendingAreaOp::Kind::Show:
    case PendingAreaOp::Kind::Toggle:
@@ -1324,8 +1367,8 @@ void EditorUI::RenderAreaCorners()
    {
       if (!leaf.visible)
          continue;
-      const float side = min(4.f * dpi, 0.5f * min(leaf.rect.Width(), leaf.rect.Height()));
-      if (side < 2.f)
+      const float fullSide = min(14.f * dpi, 0.4f * min(leaf.rect.Width(), leaf.rect.Height()));
+      if (fullSide < 6.f)
          continue;
       for (int corner = 0; corner < 4; ++corner)
       {
@@ -1343,7 +1386,22 @@ void EditorUI::RenderAreaCorners()
          // the corner's own button while the zone is the one hovered
          ImGuiWindow *const cornerWindow = ImGui::FindWindowByName(name);
          const ImGuiID hoveredId = ImGui::GetHoveredID();
-         const bool overWidget = hoveredId != 0 && (cornerWindow == nullptr || hoveredId != cornerWindow->GetID("##corner"));
+         bool overWidget = hoveredId != 0 && (cornerWindow == nullptr || hoveredId != cornerWindow->GetID("##corner"));
+         ImGuiWindow *const hw = ImGui::GetCurrentContext()->HoveredWindow;
+         const char *const hwName = hw != nullptr ? hw->RootWindow->Name : "";
+         const bool overStrip = strncmp(hwName, "##Split", 7) == 0;
+         const bool overArea = hw == nullptr || strcmp(hwName, "OUTLINER") == 0 || strcmp(hwName, "PROPERTIES") == 0 || strcmp(hwName, "SCRIPT") == 0 || strcmp(hwName, "PARTLIBRARY") == 0
+            || strcmp(hwName, "CAMERAPREVIEW") == 0 || strcmp(hwName, "SIDEBAR") == 0
+            || strcmp(hwName, "orbit lock toggle") == 0; // The N-panel and the orbit lock button belong to the viewport area
+         // A floating window (popup, tooltip, palette, history, overlay) keeps all its clicks: no corner acts through it
+         const bool overFloating = !overArea && !overStrip && strncmp(hwName, "##Corner", 8) != 0;
+         if (overStrip)
+            overWidget = false; // The splitter strip overlaps the corner's edge band: the corner wins inside its triangle
+         else if (overWidget && (corner & 2) != 0 && overArea && hw != nullptr)
+            overWidget = hoveredId == ImGui::GetWindowScrollbarID(hw, ImGuiAxis_X)
+               || hoveredId == ImGui::GetWindowScrollbarID(hw, ImGuiAxis_Y); // Bottom, on an area window: list rows do not count, only scrollbars
+         if (overFloating)
+            overWidget = true;
          const bool inTriangle = lx >= 0.f && ly >= 0.f && lx + ly <= side && (!overWidget || m_areaDrag.active);
          ImGui::SetNextWindowPos(ImVec2(x, y));
          ImGui::SetNextWindowSize(ImVec2(side, side));
@@ -1351,17 +1409,27 @@ void EditorUI::RenderAreaCorners()
          ImGui::PushStyleVar(ImGuiStyleVar_WindowMinSize, ImVec2(1.f, 1.f));
          ImGui::Begin(name, nullptr,
             ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing
-               | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBringToFrontOnFocus);
+               | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBringToFrontOnFocus | ((inTriangle || m_areaDrag.active) ? 0 : ImGuiWindowFlags_NoInputs));
          if (raiseNow)
             ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
          ImGui::InvisibleButton("##corner", ImVec2(side, side));
-         const bool activated = ImGui::IsItemActivated();
-         if (ImGui::IsItemHovered() && !m_areaDrag.active)
+         const bool activated = ImGui::IsItemActivated() && inTriangle;
+         const ImVec2 origin((corner & 1) ? x + side : x, (corner & 2) ? y + side : y); // The area's corner
+         const float sx = (corner & 1) ? -1.f : 1.f, sy = (corner & 2) ? -1.f : 1.f;
+         const bool hot = ImGui::IsItemHovered() && inTriangle && !m_areaDrag.active;
+         ImDrawList *const dl = ImGui::GetWindowDrawList(); // Under tooltips and floating windows
+         if (hot)
          {
             ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
-            // 1 px diagonal cutting the corner
-            const bool anti = corner == 0 || corner == 3;
-            ImGui::GetWindowDrawList()->AddLine(anti ? ImVec2(x + side, y) : ImVec2(x, y), anti ? ImVec2(x, y + side) : ImVec2(x + side, y + side), EditorTheme::TextDim, 1.f);
+            dl->AddTriangleFilled(
+               origin, ImVec2(origin.x + sx * side, origin.y), ImVec2(origin.x, origin.y + sy * side), (EditorTheme::Accent & ~IM_COL32_A_MASK) | (70u << IM_COL32_A_SHIFT));
+         }
+         if (!m_areaDrag.active)
+         {
+            // Permanent hatch (two diagonal strokes), brighter while hovered
+            const ImU32 hatch = hot ? EditorTheme::Text : ((EditorTheme::TextDim & ~IM_COL32_A_MASK) | (90u << IM_COL32_A_SHIFT));
+            for (const float f : { 0.85f, 0.45f })
+               dl->AddLine(ImVec2(origin.x + sx * side * f, origin.y), ImVec2(origin.x, origin.y + sy * side * f), hatch, hot ? 1.5f : 1.f);
          }
          ImGui::End();
          ImGui::PopStyleVar(2);
@@ -1690,6 +1758,21 @@ void EditorUI::RenderAreas()
       case AreaEditor::PartLibrary: m_partLibrary.RenderInArea(pos, size); break;
       case AreaEditor::Viewport: break; // The 3D view shows through
       case AreaEditor::CameraPreview:
+         // The view setup is saved in the layout leaf: a change made in the panel is written to it, a different leaf value (workspace switch) is applied to the panel
+         if (const AreaNode *const node = m_areas.Find(leaf.id))
+         {
+            const int shown = m_cameraPreview.GetView();
+            if (shown != m_syncedPreviewView)
+            {
+               m_areas.SetPreviewView(leaf.id, shown);
+               m_syncedPreviewView = shown;
+            }
+            else if (node->previewView != shown)
+            {
+               m_cameraPreview.SetView(node->previewView);
+               m_syncedPreviewView = m_cameraPreview.GetView();
+            }
+         }
          m_cameraPreview.RenderInArea(pos, size);
          cameraPreviewDrawn = true;
          break;
@@ -1747,6 +1830,17 @@ void EditorUI::RenderAreaTypeButton(const AreaEditor current)
          const string label = string(AreaEditorIcon(type)) + "  " + AreaEditorName(type);
          if (ImGui::Selectable(label.c_str(), type == current))
             SetAreaEditor(leaf, type);
+      }
+      if (m_areas.CanClose(leaf))
+      {
+         ImGui::Separator();
+         if (ImGui::Selectable(ICON_LC_X "  Close Area"))
+         {
+            PendingAreaOp op;
+            op.kind = PendingAreaOp::Kind::Close;
+            op.leaf = leaf;
+            QueueAreaOp(op);
+         }
       }
       ImGui::EndPopup();
    }
@@ -1934,6 +2028,12 @@ void EditorUI::RenderUI()
    // Apply the result of a completed asynchronous file operation (running a worker thread load/save)
    if (m_fileOp && m_fileOp->completed)
       FinishFileOp();
+   if (m_deferredStop >= 0 && m_fileOp == nullptr)
+   {
+      const int closeState = m_deferredStop;
+      m_deferredStop = -1;
+      RequestClose(closeState);
+   }
 
    // Queued layout changes, then the rects of the areas (before any panel and the chrome overlays use them)
    UpdateAreaLayout();
@@ -2319,6 +2419,12 @@ void EditorUI::RenderUI()
       }
    }
 
+   if (IsInspectMode() && m_viewportVisible)
+   {
+      // Play test: 2 px accent frame around the viewport area, so the running copy is not mistaken for the edit session
+      const AreaRect &r = m_viewportRect;
+      ImGui::GetBackgroundDrawList()->AddRect(ImVec2(r.x0 + 1.f, r.y0 + 1.f), ImVec2(r.x1 - 1.f, r.y1 - 1.f), EditorTheme::Accent, 0.f, 0, 2.f);
+   }
    RenderNavCube();
 
    // Handle uncaught mouse & keyboard shortcuts (a modal transform in progress owns the mouse and keyboard)
@@ -2674,6 +2780,14 @@ void EditorUI::RenderUI()
    // Search to field palette (Cmd+K on macOS, where ImGui maps Cmd to Ctrl)
    if (ImGui::IsKeyPressed(ImGuiKey_K, false) && io.KeyCtrl && !io.KeyAlt && !io.KeyShift && (!io.WantTextInput || m_palette.IsOpen()))
       m_palette.Toggle();
+   if (!io.WantCaptureKeyboard && m_fileOp == nullptr)
+      // Shift+F5 stops the play test (as in IDEs), also while the game keys are routed to the game
+      if (IsInspectMode() && !io.WantTextInput && !io.KeyCtrl && !io.KeyAlt && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_F5, false))
+      {
+         // RequestClose defers the stop while a save is running, like the Stop button and the X
+         if (!modalWasActive)
+            RequestClose(Player::CS_STOP_PLAY);
+      }
    const bool paletteEsc = m_palette.ConsumedEscape() | m_pinned.ConsumedEscape() | ConsumedAreaEscape() | ConsumedPaneEscape(); // The Esc that closed a popup is not an editor Esc
    if (!io.WantCaptureKeyboard && m_fileOp == nullptr)
    {
@@ -3938,9 +4052,12 @@ void EditorUI::UpdateEditableList()
 
 void EditorUI::RenderNavCube()
 {
-   // Edit mode only: not in the 2D desktop backdrop view, nor in inspect (play) mode, nor with the side panels hidden
-   if (!m_showNavCube || !m_viewportVisible || IsInspectMode() || m_flyMode || m_table->IsLocked() || m_inspectionModal.IsVisible() || m_camMode == ViewMode::DesktopBackdrop)
+   // Not in the 2D desktop backdrop view, nor with the side panels hidden (it is kept in inspect mode to orbit the running game)
+   if (!m_showNavCube || !m_viewportVisible || m_flyMode || m_table->IsLocked() || m_inspectionModal.IsVisible() || m_camMode == ViewMode::DesktopBackdrop)
+   {
+      SDLInputHandler::SetMouseOverEditorWidget(false); // Hidden cube: nothing is filtered
       return;
+   }
 
    ImGuiIO &io = ImGui::GetIO();
    const float dpi = m_liveUI.GetDPI();
@@ -3999,6 +4116,7 @@ void EditorUI::RenderNavCube()
       io.MousePos = savedMousePos;
       io.MouseDown[0] = savedMouseDown;
    }
+   SDLInputHandler::SetMouseOverEditorWidget(!gizmoBusy && ImGuizmo::IsViewManipulateHovered()); // The game must not get a press made on the cube
 
    if (memcmp(viewG, viewGIn, sizeof(viewG)) == 0)
       return;
