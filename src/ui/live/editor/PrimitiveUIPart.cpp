@@ -363,6 +363,75 @@ void PrimitiveUIPart::UpdatePropertyPane(PropertyPane& props)
       props.SliderFloat<Primitive>(
       props.SliderFloat<Primitive>(
 
+      props.Separator("Flasher Dome"s);
+      props.SliderFloat<Primitive>(
+         m_part, "Dome Body"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_domeBody; }, //
+         [](Primitive* primitive, float v) { primitive->m_d.m_domeBody = clamp(v, 0.f, 1.f); }, 0.f, 1.f, 2,
+         "Thick body: 0 = see-through (the scene behind filters through the plastic), 1 = the scene behind is replaced by the scattered interior");
+      props.SliderFloat<Primitive>(
+         m_part, "Dome Scatter"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_domeScatter; }, //
+         [](Primitive* primitive, float v) { primitive->m_d.m_domeScatter = max(v, 0.f); }, 0.f, 4.f, 2,
+         "Body scatter driven by the dome's own lamp (milky glow in the lamp's colour; 0 = off)");
+      props.SliderFloat<Primitive>(
+         m_part, "Dome Cap Highlight"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_domeCap; }, //
+         [](Primitive* primitive, float v) { primitive->m_d.m_domeCap = max(v, 0.f); }, 0.f, 4.f, 2, "Highlight on the cap seam/bevel at the top (0 = off)");
+      props.InputInt<Primitive>(
+         m_part, "Dome Flutes"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_domeFlutes; }, //
+         [](Primitive* primitive, int v) { primitive->m_d.m_domeFlutes = clamp(v, 0, 96); }, "Flute count override, 0..96 (0 = measured from the mesh)");
+      props.SliderFloat<Primitive>(
+         m_part, "Dome Flute Depth"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_domeFluteDepth; }, //
+         [](Primitive* primitive, float v) { primitive->m_d.m_domeFluteDepth = clamp(v, 0.f, 3.f); }, 0.f, 3.f, 2, "Flute depth scale (1 = measured from the mesh)");
+      props.SliderFloat<Primitive>(
+         m_part, "Dome Peak White"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_domePeak; }, //
+         [](Primitive* primitive, float v) { primitive->m_d.m_domePeak = clamp(v, 0.f, 3.f); }, 0.f, 3.f, 2,
+         "At full power the lit body and the top go white-hot like a real flash (0 = stays red at the peak); also a hot spot in the middle of the cap");
+      props.SliderFloat<Primitive>(
+         m_part, "Dome Orb"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_domeOrb; }, //
+         [](Primitive* primitive, float v) { primitive->m_d.m_domeOrb = clamp(v, 0.f, 4.f); }, 0.f, 4.f, 2,
+         "The lit bulb seen through the ridges as a hot glowing ball that moves with the view (0 = off)");
+      props.SliderFloat<Primitive>(
+         m_part, "Dome Cooldown"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_domeCooldown; }, //
+         [](Primitive* primitive, float v) { primitive->m_d.m_domeCooldown = clamp(v, 0.f, 1.f); }, 0.f, 1.f, 2,
+         "How the white-hot peak follows a flash: 0 = it switches on only near full power (short flashes snap), 1 = a smooth blackbody pulse that cools from white through yellow and orange to red");
+      props.SliderFloat<Primitive>(
+         m_part, "Dome Flash Boost"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_domeBoost; }, //
+         [](Primitive* primitive, float v) { primitive->m_d.m_domeBoost = clamp(v, 0.f, 5.f); }, 0.f, 5.f, 2,
+         "Gain on the lamp level the dome sees: a flash the game drives below full (short pulses) reads hotter; the lamp's own light on the table is unchanged (1 = as is)");
+      props.SliderFloat<Primitive>(
+         m_part, "Dome Depth"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_domeDepth; }, //
+         [](Primitive* primitive, float v) { primitive->m_d.m_domeDepth = clamp(v, 0.f, 3.f); }, 0.f, 3.f, 2,
+         "Lamp off: the far wall's ridges seen through the cavity, each flute lensing its own slice, so something moves inside as you move (0 = off)");
+      props.SliderFloat<Primitive>(
+         m_part, "Dome Glints"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_domeGlint; }, //
+         [](Primitive* primitive, float v) { primitive->m_d.m_domeGlint = clamp(v, 0.f, 5.f); }, 0.f, 5.f, 2,
+         "The lamp-off sparkle: facet glints, ridge glints and needles along the flutes, the room seen in the plastic (1 = as tuned, 0 = none)");
+      props.SliderFloat<Primitive>(
+         m_part, "Dome Glint Lights"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_domeGlintLights; }, //
+         [](Primitive* primitive, float v) { primitive->m_d.m_domeGlintLights = clamp(v, 0.f, 1.f); }, 0.f, 1.f, 2,
+         "What the lamp-off sparkle reflects: 0 = a fixed studio room, 1 = the table's own lights near the dome (GI bulbs, inserts, other flashers), so the glints move and change as they light up");
+      props.SliderFloat<Primitive>(
+         m_part, "Dome Frost"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_domeFrost; }, //
+         [](Primitive* primitive, float v) { primitive->m_d.m_domeFrost = clamp(v, 0.f, 3.f); }, 0.f, 3.f, 2,
+         "Clear and pale domes: the thick parts of the plastic (ridges, top, base, rim) scatter the room's light to a milky white so the dome reads frosted, not grey (0 = off)");
+      props.InputRGB<Primitive>(
+         m_part, "Dome Tint"s, //
+         [](const Primitive* primitive) { return convertColor(primitive->m_d.m_domeTint); }, //
+         [](Primitive* primitive, const vec3& v) { primitive->m_d.m_domeTint = convertColorRGB(v); },
+         "Plastic colour at 2 mm thickness; black = the built-in red acrylic preset");
+
       props.EndSection();
    }
 

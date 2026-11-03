@@ -3511,11 +3511,27 @@ void Renderer::BuildPBRLightList()
       vec3 E(0.f, 0.f, 0.f);
       Vertex3Ds dir(0.f, 0.f, 0.f);
       float sum = 0.f;
+      // The OFF glints' lights (dome_glint_lights): the five strongest at the bulb by luminance (insertion sorted), other
+      // domes' lamps included; the four first go to the shader with the fifth's share taken off, so a light leaving the set
+      // has faded to nothing as it goes
+      int top[5] = { -1, -1, -1, -1, -1 };
+      float topLum[5] = { 0.f, 0.f, 0.f, 0.f, 0.f };
+      vec3 topE[5];
+      const bool glintLights = prim->m_d.m_domeGlintLights > 0.f;
+      const auto consider = [&](int li, vec3 Ei)
+      {
+         float lum = 0.2126f * Ei.x + 0.7152f * Ei.y + 0.0722f * Ei.z;
+         for (int k = 0; k < 5 && lum > 0.f; k++)
+            if (lum > topLum[k])
+            {
+               std::swap(lum, topLum[k]);
+               std::swap(li, top[k]);
+               std::swap(Ei, topE[k]);
+            }
+      };
       for (int i = 0; i < lightCount; i++)
       {
          const LightEntry& e = entries[i];
-         if (e.cookie > 0.f)
-            continue;
          const Vertex3Ds dl = e.pos - c;
          const float d2 = dl.Dot(dl);
          const float dist2 = max(d2, max(e.radius * e.radius, 1.f));
@@ -3524,6 +3540,13 @@ void Renderer::BuildPBRLightList()
          if (x <= 0.f)
             continue;
          float w = x * x / dist2;
+         if (e.cookie > 0.f)
+         {
+            // another dome's lamp (not this one's, at the bulb): a glint only, unshadowed
+            if (glintLights && d2 > 25.f * 25.f)
+               consider(i, vec3(e.radiance.x * w, e.radiance.y * w, e.radiance.z * w));
+            continue;
+         }
          if (e.upward)
             w *= clamp(-dl.z / sqrtf(max(d2, 1e-6f)), 0.f, 1.f);
          E.x += e.radiance.x * w;
@@ -3532,6 +3555,21 @@ void Renderer::BuildPBRLightList()
          const float lum = (0.2126f * e.radiance.x + 0.7152f * e.radiance.y + 0.0722f * e.radiance.z) * w;
          dir += dl * (lum / sqrtf(max(d2, 1e-6f)));
          sum += lum;
+         if (glintLights)
+            consider(i, vec3(e.radiance.x * w, e.radiance.y * w, e.radiance.z * w));
+      }
+      for (int k = 0; k < 4; k++)
+      {
+         if (top[k] < 0)
+         {
+            prim->m_domeLights[2 * k] = vec4(0.f, 0.f, 0.f, 1.f);
+            prim->m_domeLights[2 * k + 1] = vec4(0.f, 0.f, 0.f, 0.f);
+            continue;
+         }
+         const LightEntry& e = entries[top[k]];
+         const float f = max(1.f - topLum[4] / topLum[k], 0.f);
+         prim->m_domeLights[2 * k] = vec4(e.pos.x, e.pos.y, e.pos.z, max(e.radius, 1.f));
+         prim->m_domeLights[2 * k + 1] = vec4(topE[k].x * f, topE[k].y * f, topE[k].z * f, 0.f);
       }
       prim->m_domeGI = E;
       const float dirLen = dir.Length();
