@@ -298,6 +298,30 @@ void PrimitiveUIPart::UpdatePropertyPane(PropertyPane& props)
          m_part, "Refraction Thickness"s, //
          [](const Primitive* primitive) { return primitive->m_d.m_refractionThickness; }, //
          [](Primitive* primitive, float v) { primitive->m_d.m_refractionThickness = v; }, PropertyPane::Unit::None, 3, "Simulated thickness used to refract light through this part");
+      props.SliderFloat<Primitive>(
+         m_part, "Refraction Curvature"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_refractionCurvature; }, //
+         [](Primitive* primitive, float v) { primitive->m_d.m_refractionCurvature = max(v, 0.f); }, 0.f, 8.f, 2, "Curvature-driven refraction strength (0 = off)");
+      props.SliderFloat<Primitive>(
+         m_part, "Refraction Anisotropy"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_refractionAnisotropy; }, //
+         [](Primitive* primitive, float v) { primitive->m_d.m_refractionAnisotropy = clamp(v, 0.f, 1.f); }, 0.f, 1.f, 2);
+      props.SliderFloat<Primitive>(
+         m_part, "Refraction Wave"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_refractionWave; }, //
+         [](Primitive* primitive, float v) { primitive->m_d.m_refractionWave = max(v, 0.f); }, 0.f, 3.f, 2);
+      props.SliderFloat<Primitive>(
+         m_part, "Refraction Wave Flow"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_refractionWaveFlow; }, //
+         [](Primitive* primitive, float v) { primitive->m_d.m_refractionWaveFlow = clamp(v, 0.f, 1.f); }, 0.f, 1.f, 2);
+      props.SliderFloat<Primitive>(
+         m_part, "Refraction Noise"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_refractionNoise; }, //
+         [](Primitive* primitive, float v) { primitive->m_d.m_refractionNoise = max(v, 0.f); }, 0.f, 10.f, 2); // 1 = ~0.7 deg tilt; range far past "sensible" on purpose (Ben: dial past, then back)
+      props.SliderFloat<Primitive>(
+         m_part, "Refraction Noise Scale (mm)"s, //
+         [](const Primitive* primitive) { return primitive->m_d.m_refractionNoiseScale; }, //
+         [](Primitive* primitive, float v) { primitive->m_d.m_refractionNoiseScale = max(v, 0.01f); }, 0.5f, 10.f, 2);
 
       props.EndSection();
    }

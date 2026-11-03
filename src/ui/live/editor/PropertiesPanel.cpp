@@ -507,6 +507,10 @@ void PropertiesPanel::TableProperties(PropertyPane &props)
             editor.m_renderer->MarkShaderDirty(); // Needed to update shaders with new light settings
          },
          PropertyPane::Unit::None, 3);
+      props.InputFloat<PinTable>(
+         table, "Env. Reflection Scale"s, //
+         [](const PinTable *table) { return table->m_envReflectionScale; }, //
+         [](PinTable *table, float v) { table->m_envReflectionScale = max(v, 0.f); }, PropertyPane::Unit::None, 3);
 
       props.Separator("Render Options"s);
       props.Checkbox<PinTable>(
@@ -834,6 +838,55 @@ void PropertiesPanel::MaterialProperties(PropertyPane &props, Material *material
             material, "Absorption Light Tint"s, //
             [](const Material *material) { return material->m_fAbsorptionLightTint; }, //
             [](Material *material, float v) { material->m_fAbsorptionLightTint = clamp(v, 0.f, 1.f); }, 0.f, 1.f, 2);
+         props.Separator("See-Through Surface"s);
+         props.SliderFloat<Material>(
+            material, "Scatter"s, //
+            [](const Material *material) { return material->m_fScatter; }, //
+            [](Material *material, float v) { material->m_fScatter = clamp(v, 0.f, 1.f); }, 0.f, 1.f, 3);
+         props.SliderFloat<Material>(
+            material, "Scatter Floor"s, //
+            [](const Material *material) { return material->m_fScatterFloor; }, //
+            [](Material *material, float v) { material->m_fScatterFloor = clamp(v, 0.f, 1.f); }, 0.f, 0.3f, 3);
+         props.SliderFloat<Material>(
+            material, "Scatter Env Share"s, //
+            [](const Material *material) { return material->m_fScatterEnv; }, //
+            [](Material *material, float v) { material->m_fScatterEnv = max(v, 0.f); }, 0.f, 1.f, 3);
+         props.SliderFloat<Material>(
+            material, "Scatter Edge Angle"s, //
+            [](const Material *material) { return material->m_fScatterEdgeAngle; }, //
+            [](Material *material, float v) { material->m_fScatterEdgeAngle = clamp(v, 30.f, 89.f); }, 50.f, 89.f, 1);
+         props.SliderFloat<Material>(
+            material, "Rim Gain"s, //
+            [](const Material *material) { return material->m_fRimGain; }, //
+            [](Material *material, float v) { material->m_fRimGain = max(v, 0.f); }, 0.f, 8.f, 2);
+         props.SliderFloat<Material>(
+            material, "Rim Width"s, //
+            [](const Material *material) { return material->m_fRimWidth; }, //
+            [](Material *material, float v) { material->m_fRimWidth = clamp(v, 0.05f, 1.f); }, 0.2f, 1.f, 2);
+         props.SliderFloat<Material>(
+            material, "Bevel Brightening"s, //
+            [](const Material *material) { return material->m_fBevelBright; }, //
+            [](Material *material, float v) { material->m_fBevelBright = max(v, 0.f); }, 0.f, 2.f, 2);
+         props.SliderFloat<Material>(
+            material, "Scatter Locality"s, //
+            [](const Material *material) { return material->m_fScatterLocality; }, //
+            [](Material *material, float v) { material->m_fScatterLocality = clamp(v, 0.f, 1.f); }, 0.f, 1.f, 2);
+         props.SliderFloat<Material>(
+            material, "Scatter Width"s, //
+            [](const Material *material) { return material->m_fScatterWidth; }, //
+            [](Material *material, float v) { material->m_fScatterWidth = v <= 0.f ? 0.f : clamp(v, 0.05f, 1.f); }, 0.f, 1.f, 2); // 0 = no band
+         props.SliderFloat<Material>(
+            material, "Dense Edge Albedo"s, //
+            [](const Material *material) { return material->m_fDenseAlbedo; }, //
+            [](Material *material, float v) { material->m_fDenseAlbedo = max(v, 0.f); }, 0.f, 1.f, 3);
+         props.InputRGB<Material>(
+            material, "Absorption Color", //
+            [](const Material *material) { return convertColor(material->m_cAbsorption); }, //
+            [](Material *material, const vec3 &v) { material->m_cAbsorption = convertColorRGB(v); });
+         props.SliderFloat<Material>(
+            material, "Absorption"s, //
+            [](const Material *material) { return material->m_fAbsorption; }, //
+            [](Material *material, float v) { material->m_fAbsorption = max(v, 0.f); }, 0.f, 3.f, 3);
       }
       props.EndSection();
    }

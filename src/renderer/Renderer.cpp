@@ -3679,7 +3679,8 @@ Shader::PBRTextureSet Renderer::GetPBRTextureSet(const BaseProperty& partData, c
    }
    else
       m_renderDevice->m_basicShader->SetTextureNull(ShaderUniform::tex_pbr_refr);
-   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrProbeLods, probeLods[0], probeLods[1], probeLods[2], 0.f);
+   // w: the table's env_reflection_scale, a reflection-only env level (the room in reflections without brightening the ambient)
+   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrProbeLods, probeLods[0], probeLods[1], probeLods[2], m_table->m_envReflectionScale);
    return pbrMaps;
 }
 

@@ -788,6 +788,7 @@ public:
    float m_lightRange;
    float m_lightEmissionScale;
    float m_envEmissionScale;
+   float m_envReflectionScale = 1.0f; // PBR: env level in reflections only (the room at grazing without brightening the ambient)
    float m_globalEmissionScale = 1.f;
    float m_AOScale;
    float m_SSRScale;

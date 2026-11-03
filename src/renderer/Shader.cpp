@@ -354,6 +354,12 @@ ShaderUniformDef ShaderUniformDef::coreUniforms[static_cast<unsigned int>(Shader
    SHADER_UNIFORM(ShaderUniformType::Bool, doRefractions, 1), // OpenGL only
    SHADER_UNIFORM(ShaderUniformType::Float4, u_basic_shade_mode, 1), // BGFX Only
    SHADER_UNIFORM(ShaderUniformType::Float4, refractionTint_thickness, 1), SHADER_UNIFORM(ShaderUniformType::Float4, mirrorNormal_factor, 1),
+   SHADER_UNIFORM(ShaderUniformType::Float4, refractionParams, 1), // BGFX PBR only: x: curvature gain, y: anisotropy, z: soft in-front rejection
+   SHADER_UNIFORM(ShaderUniformType::Float4, refractionParams2, 1), // BGFX PBR only: x: forming wave strength, y: refraction noise strength, z: noise scale (mm), w: wave flow
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrAbsorption, 1), // BGFX PBR only: rgb: absorption colour, w: strength
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrPresence, 1), // BGFX PBR only: x: scatter floor, y: scatter env share, z: rim gain, w: dense albedo
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrPresence2, 1), // BGFX PBR only: x: rim width (1 = as is), y: bevel/light-guide brightening scale (1 = as is), z: scatter locality (0 = as is), w: scatter width (1 = as is)
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrPresence3, 1), // BGFX PBR only: x: absorption light tint (0 = as is), y: scatter saturation (1 = as is)
    SHADER_UNIFORM(ShaderUniformType::Bool, objectSpaceNormalMap, 1),
    SHADER_SAMPLER(tex_base_color, 0, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // base texture
    SHADER_SAMPLER(tex_base_transmission, 3, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // bulb light/transmission buffer texture
@@ -921,7 +927,15 @@ void Shader::SetTechniqueMaterial(
       SetVector(ShaderUniform::pbrMapFlags, pbrMaps->ormMap != nullptr ? 1.f : 0.f, pbrMaps->emissionMap != nullptr ? 1.f : 0.f, saturate(mat.m_fWrapLighting), pbrMaps->ownLampRadius);
       // Clear coat layer (on by default, VPX_COAT=0 disables it for A/B tests): a zero strength skips the coat lobe in the shaders
       static const bool coatEnabled = []() { const char* const v = std::getenv("VPX_COAT"); return v == nullptr || v[0] != '0'; }();
-      SetVector(ShaderUniform::pbrCoat, coatEnabled ? saturate(mat.m_fClearcoat) : 0.f, clamp(mat.m_fClearcoatRoughness, 0.02f, 1.f), 0.f, 0.f);
+      // z: see-through surface scatter (presence); absorption tint (colour, strength) in pbrAbsorption
+      SetVector(ShaderUniform::pbrCoat, coatEnabled ? saturate(mat.m_fClearcoat) : 0.f, clamp(mat.m_fClearcoatRoughness, 0.02f, 1.f), saturate(mat.m_fScatter),
+         // w: edge look-through start as (1-c)/c (c = |N.V|); the default angle maps to the former constant 3.8 exactly
+         mat.m_fScatterEdgeAngle == Material::kScatterEdgeAngleDefault ? 3.8f : (1.f - cosf(ANGTORAD(clamp(mat.m_fScatterEdgeAngle, 30.f, 89.5f)))) / cosf(ANGTORAD(clamp(mat.m_fScatterEdgeAngle, 30.f, 89.5f))));
+      const vec4 absorption = convertColor(mat.m_cAbsorption, max(mat.m_fAbsorption, 0.f));
+      SetVector(ShaderUniform::pbrAbsorption, &absorption);
+      SetVector(ShaderUniform::pbrPresence, saturate(mat.m_fScatterFloor), max(mat.m_fScatterEnv, 0.f), max(mat.m_fRimGain, 0.f), max(mat.m_fDenseAlbedo, 0.f));
+      SetVector(ShaderUniform::pbrPresence2, clamp(mat.m_fRimWidth, 0.05f, 1.f), max(mat.m_fBevelBright, 0.f), saturate(mat.m_fScatterLocality), mat.m_fScatterWidth <= 0.f ? 0.f : clamp(mat.m_fScatterWidth, 0.05f, 1.f)); // width 0 = no band
+      SetVector(ShaderUniform::pbrPresence3, saturate(mat.m_fAbsorptionLightTint), max(mat.m_fScatterSaturation, 0.f), 0.f, 0.f);
       // VPX_PBR_TI=0: the old routing (transparent parts on the opaque in-shader technique without the prepass), for A/B
       static const bool transparentInShader = []() { const char* const v = std::getenv("VPX_PBR_TI"); return v == nullptr || v[0] != '0'; }();
       if (pbrMaps->transparent && (!pbrMaps->inShaderSpecular || (transparentInShader && !(textured && doAlphaTest))))

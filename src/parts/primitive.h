@@ -68,6 +68,12 @@ public:
 
    string m_szRefractionProbe;
    float m_refractionThickness = 10.0f;
+   float m_refractionCurvature = 0.0f; // PBR: refraction offset & blur grow with the surface curvature (0 = off)
+   float m_refractionAnisotropy = 0.0f; // PBR: 0..1, refraction blur streaks along the part's long axis (0 = off)
+   float m_refractionNoise = 0.0f; // PBR: micro refraction imperfections strength (0 = off)
+   float m_refractionNoiseScale = 1.5f; // mm, noise feature size (table units are converted in the UI)
+   float m_refractionWaveFlow = 0.0f; // PBR: 0..1, stretches the wave along the sweep and keeps it at grazing (0 = plain wave)
+   float m_refractionWave = 0.0f; // PBR: forming waves, the view through the part undulates gently (0 = off)
 
    bool m_toy = false;
    bool m_backfacesEnabled = false;
@@ -421,4 +427,6 @@ private:
    std::shared_ptr<MeshBuffer> m_meshBuffer;
    std::shared_ptr<MeshBuffer> m_meshEdgeBuffer;
    bool m_vertexBufferRegenerate = true;
+   bool m_refrCurvatureEncoded = false; // the vertex buffer carries the per-vertex curvature in its normal lengths (PBR refraction options)
+   void UploadMeshToVB(const std::shared_ptr<VertexBuffer>& vb);
 };

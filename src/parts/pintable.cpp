@@ -594,6 +594,7 @@ PinTable* PinTable::CopyForPlay() const
    dst->m_lightRange = src->m_lightRange;
    dst->m_lightEmissionScale = src->m_lightEmissionScale;
    dst->m_envEmissionScale = src->m_envEmissionScale;
+   dst->m_envReflectionScale = src->m_envReflectionScale;
    dst->m_globalEmissionScale = src->m_globalEmissionScale;
    dst->m_AOScale = src->m_AOScale;
    dst->m_SSRScale = src->m_SSRScale;
@@ -1330,6 +1331,7 @@ void PinTable::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteFloat(FID(LZRA), m_lightRange);
    writer.WriteFloat(FID(LIES), m_lightEmissionScale);
    writer.WriteFloat(FID(ENES), m_envEmissionScale);
+   writer.WriteFloat(FID(ENRS), m_envReflectionScale);
    writer.WriteFloat(FID(GLES), m_globalEmissionScale);
    writer.WriteFloat(FID(AOSC), m_AOScale);
    writer.WriteFloat(FID(SSSC), m_SSRScale);
@@ -3924,6 +3926,7 @@ void PinTable::Load(IObjectReader& reader)
          case FID(LZRA): m_lightRange = reader.AsFloat(); break;
          case FID(LIES): m_lightEmissionScale = reader.AsFloat(); break;
          case FID(ENES): m_envEmissionScale = reader.AsFloat(); break;
+         case FID(ENRS): m_envReflectionScale = reader.AsFloat(); break;
          case FID(GLES): m_globalEmissionScale = reader.AsFloat(); break;
          case FID(AOSC): m_AOScale = reader.AsFloat(); break;
          case FID(SSSC): m_SSRScale = reader.AsFloat(); break;

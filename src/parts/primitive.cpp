@@ -868,7 +868,10 @@ void Primitive::RenderSetup(Renderer *renderer)
 
       // Compute and upload mesh to let a chance for renderdevice to share the buffers with other static objects
       RecalculateMatrices();
-      m_mesh.UploadToVB(vertexBuffer, m_currentFrame);
+      // The PBR refraction options (curvature, anisotropy) read a smooth per-vertex curvature from the normal lengths
+      const Material* const refrMat = m_ptable->GetMaterial(m_d.m_szMaterial);
+      m_refrCurvatureEncoded = (m_d.m_refractionCurvature > 0.f || m_d.m_refractionAnisotropy > 0.f || m_d.m_refractionWave > 0.f || (refrMat && refrMat->m_fScatter > 0.f)) && !m_d.m_szRefractionProbe.empty() && m_mesh.m_animationFrames.empty();
+      UploadMeshToVB(vertexBuffer);
    }
    else
    {
@@ -876,6 +879,96 @@ void Primitive::RenderSetup(Renderer *renderer)
       m_skipRendering = true;
    }
    m_vertexBufferRegenerate = false;
+}
+
+// Uploads the mesh, with the per-vertex curvature for the PBR refraction options when m_refrCurvatureEncoded is set: each
+// normal is stored with length 1 + k, k the surface curvature relative to a 10 VPU radius bend (vs_pbr passes length - 1 on
+// as v_refrCurv, every vertex shader normalizes the normal). Per-face curvature comes from the face's 3 vertex normals and
+// positions in table space (the largest singular value of the map from position to normal change over the face, the
+// same estimate fs_pbr makes per triangle from the screen derivatives); a vertex takes the area-weighted mean over its faces.
+// Area weighting keeps the term on narrow fillets (small faces) instead of spreading it across the big flat faces beside
+// them, and interpolating it removes the per-triangle steps. Vertices split only for UVs (same position and normal) are
+// welded first so a UV seam does not cut the average.
+void Primitive::UploadMeshToVB(const std::shared_ptr<VertexBuffer>& vb)
+{
+   if (!m_refrCurvatureEncoded)
+   {
+      m_mesh.UploadToVB(vb, m_currentFrame);
+      return;
+   }
+   const size_t nv = m_mesh.NumVertices();
+   const size_t nt = m_mesh.NumIndices() / 3;
+   vector<Vertex3Ds> pos(nv), nrm(nv);
+   for (size_t i = 0; i < nv; i++)
+   {
+      const Vertex3D_NoTex2& v = m_mesh.m_vertices[i];
+      pos[i] = m_fullMatrix * Vertex3Ds { v.x, v.y, v.z };
+      nrm[i] = m_fullMatrix.MultiplyVectorNoTranslateNormal(v);
+      nrm[i].Normalize();
+   }
+   // Weld vertices that share position (1e-3 VPU) and normal (~0.6 deg)
+   vector<uint32_t> order(nv), weld(nv);
+   const auto key = [&](size_t i) {
+      return std::array<int64_t, 6> { (int64_t)std::lround(pos[i].x * 1000.f), (int64_t)std::lround(pos[i].y * 1000.f), (int64_t)std::lround(pos[i].z * 1000.f),
+         (int64_t)std::lround(nrm[i].x * 100.f), (int64_t)std::lround(nrm[i].y * 100.f), (int64_t)std::lround(nrm[i].z * 100.f) };
+   };
+   vector<std::array<int64_t, 6>> keys(nv);
+   for (size_t i = 0; i < nv; i++)
+   {
+      keys[i] = key(i);
+      order[i] = (uint32_t)i;
+   }
+   std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b) { return keys[a] < keys[b]; });
+   for (size_t i = 0; i < nv; i++)
+      weld[order[i]] = (i > 0 && keys[order[i]] == keys[order[i - 1]]) ? weld[order[i - 1]] : order[i];
+   vector<double> kSum(nv, 0.), aSum(nv, 0.);
+   for (size_t t = 0; t < nt; t++)
+   {
+      const unsigned int i0 = m_mesh.m_indices[t * 3], i1 = m_mesh.m_indices[t * 3 + 1], i2 = m_mesh.m_indices[t * 3 + 2];
+      const Vertex3Ds e1 = pos[i1] - pos[i0], e2 = pos[i2] - pos[i0];
+      Vertex3Ds fn = CrossProduct(e1, e2);
+      const float area2 = fn.Length();
+      if (area2 < 1e-6f)
+         continue;
+      fn = fn * (1.f / area2);
+      Vertex3Ds t1 = e1;
+      t1.Normalize();
+      const Vertex3Ds t2 = CrossProduct(fn, t1);
+      const Vertex3Ds d1 = nrm[i1] - nrm[i0], d2 = nrm[i2] - nrm[i0];
+      // E: the edges in the face basis (columns), D: the normal changes along them; M = D.E^-1
+      const float E00 = e1.Dot(t1), E01 = e2.Dot(t1), E10 = e1.Dot(t2), E11 = e2.Dot(t2);
+      const float det = E00 * E11 - E01 * E10;
+      if (fabsf(det) < 1e-9f)
+         continue;
+      const float i00 = E11 / det, i01 = -E01 / det, i10 = -E10 / det, i11 = E00 / det;
+      const float D00 = d1.Dot(t1), D01 = d2.Dot(t1), D10 = d1.Dot(t2), D11 = d2.Dot(t2);
+      const float a = D00 * i00 + D01 * i10, b = D00 * i01 + D01 * i11, c = D10 * i00 + D11 * i10, d = D10 * i01 + D11 * i11;
+      const float s1 = a * a + b * b + c * c + d * d;
+      const float s2 = sqrtf((a * a + b * b - c * c - d * d) * (a * a + b * b - c * c - d * d) + 4.f * (a * c + b * d) * (a * c + b * d));
+      const float k = 10.f * sqrtf(max(0.5f * (s1 + s2), 0.f)); // max curvature relative to a 10 VPU radius
+      const double area = 0.5 * area2;
+      for (const unsigned int i : { i0, i1, i2 })
+      {
+         kSum[weld[i]] += area * k;
+         aSum[weld[i]] += area;
+      }
+   }
+   vector<Vertex3D_NoTex2> verts(m_mesh.m_vertices);
+   for (size_t i = 0; i < nv; i++)
+   {
+      const size_t w = weld[i];
+      const float k = aSum[w] > 0. ? (float)min(kSum[w] / aSum[w], 15.) : 0.f;
+      Vertex3Ds n { verts[i].nx, verts[i].ny, verts[i].nz };
+      n.Normalize();
+      n = n * (1.f + k);
+      verts[i].nx = n.x;
+      verts[i].ny = n.y;
+      verts[i].nz = n.z;
+   }
+   Vertex3D_NoTex2* buf;
+   vb->Lock(buf);
+   memcpy(buf, verts.data(), sizeof(Vertex3D_NoTex2) * nv);
+   vb->Unlock();
 }
 
 void Primitive::RenderRelease()
@@ -1158,7 +1251,7 @@ void Primitive::Render(const unsigned int renderMask)
       if (m_vertexBufferRegenerate)
       {
          // Vertex (keyframe/regen) motion is not captured by matWorldPrev and may cause visual glitches in the depth prepass motion vectors
-         m_mesh.UploadToVB(m_meshBuffer->m_vb, m_currentFrame);
+         UploadMeshToVB(m_meshBuffer->m_vb);
          m_vertexBufferRegenerate = false;
       }
    }
@@ -1470,7 +1563,11 @@ void Primitive::Render(const unsigned int renderMask)
          {
             refraction_probe->ExtendAreaOfInterest(xMin, xMax, yMin, yMax);
             const vec4 colorR = convertColor(mat->m_cRefractionTint, m_d.m_refractionThickness);
+            // Soft in-front rejection fallback in the PBR refraction (on by default, VPX_REFR_SOFT=0 restores the stepped one for A/B)
+            static const float refrSoftFallback = std::getenv("VPX_REFR_SOFT") ? (float)atof(std::getenv("VPX_REFR_SOFT")) : 1.f;
             m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::refractionTint_thickness, &colorR);
+            m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::refractionParams, m_d.m_refractionCurvature, clamp(m_d.m_refractionAnisotropy, 0.f, 1.f), refrSoftFallback, m_refrCurvatureEncoded ? 1.f : 0.f);
+            m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::refractionParams2, max(m_d.m_refractionWave, 0.f), max(m_d.m_refractionNoise, 0.f), max(m_d.m_refractionNoiseScale, 0.01f), clamp(m_d.m_refractionWaveFlow, 0.f, 1.f));
             m_renderer->m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_refraction, refractions->GetColorSampler());
             m_renderer->m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_probe_depth, refractions->GetDepthSampler());
             m_renderer->m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
@@ -1693,6 +1790,12 @@ void Primitive::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteFloat(FID(RSTR), m_d.m_reflectionStrength);
    writer.WriteString(FID(REFR), m_d.m_szRefractionProbe);
    writer.WriteFloat(FID(RTHI), m_d.m_refractionThickness);
+   writer.WriteFloat(FID(RCRV), m_d.m_refractionCurvature);
+   writer.WriteFloat(FID(RANI), m_d.m_refractionAnisotropy);
+   writer.WriteFloat(FID(RWAV), m_d.m_refractionWave);
+   writer.WriteFloat(FID(RWFL), m_d.m_refractionWaveFlow);
+   writer.WriteFloat(FID(RNOI), m_d.m_refractionNoise);
+   writer.WriteFloat(FID(RNSC), m_d.m_refractionNoiseScale);
 
    SaveSharedEditableFields(writer);
 
@@ -1924,6 +2027,12 @@ void Primitive::Load(IObjectReader& reader)
          case FID(RSTR): m_d.m_reflectionStrength = reader.AsFloat(); break;
          case FID(REFR): m_d.m_szRefractionProbe = reader.AsString(); break;
          case FID(RTHI): m_d.m_refractionThickness = reader.AsFloat(); break;
+         case FID(RCRV): m_d.m_refractionCurvature = reader.AsFloat(); break;
+         case FID(RANI): m_d.m_refractionAnisotropy = reader.AsFloat(); break;
+         case FID(RWAV): m_d.m_refractionWave = reader.AsFloat(); break;
+         case FID(RWFL): m_d.m_refractionWaveFlow = reader.AsFloat(); break;
+         case FID(RNOI): m_d.m_refractionNoise = reader.AsFloat(); break;
+         case FID(RNSC): m_d.m_refractionNoiseScale = reader.AsFloat(); break;
 
          default: LoadSharedEditableField(tag, reader); break;
          }

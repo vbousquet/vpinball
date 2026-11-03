@@ -60,6 +60,9 @@ public:
    template <class T> void Checkbox(T* obj, const string& label, const std::function<bool(const T*)>& getter, const std::function<void(T*, bool)>& setter, const char* tooltip = nullptr);
    template <class T> void InputInt(T* obj, const string& label, const std::function<int(const T*)>& getter, const std::function<void(T*, int)>& setter, const char* tooltip = nullptr);
    template <class T>
+   void SliderFloat(
+      T* obj, const string& label, const std::function<float(const T*)>& getter, const std::function<void(T*, float)>& setter, float vMin, float vMax, int nDecimals, const char* tooltip = nullptr);
+   template <class T>
    void InputFloat(
       T* obj, const string& label, const std::function<float(const T*)>& getter, const std::function<void(T*, float)>& setter, Unit unit, int nDecimals, const char* tooltip = nullptr);
    template <class T>
@@ -395,6 +398,33 @@ inline void PropertyPane::InputFloat(
    {
       value = displayValue;
       ConvertUnit(displayUnit, unit, value, nDecimalAdjust);
+      setter(sync.display, value);
+      for (const CoTarget<T>& target : targets)
+         setter(target.display, value);
+      m_modified = m_modifyFieldId;
+   }
+   ImGui::PopItemFlag();
+   WidgetTooltip(tooltip);
+   EndSyncField(sync, targets, getter, setter, value);
+   ImGui::PopID();
+}
+
+template <class T>
+inline void PropertyPane::SliderFloat(
+   T* obj, const string& label, const std::function<float(const T*)>& getter, const std::function<void(T*, float)>& setter, float vMin, float vMax, int nDecimals, const char* tooltip)
+{
+   assert(m_inSection);
+   m_modifyFieldId++;
+   const string format = "%." + std::to_string(max(0, nDecimals)) + 'f';
+   PropertyLabel(label, tooltip);
+   const SyncField<T> sync = BeginSyncField(obj);
+   const vector<CoTarget<T>> targets = GetCoTargets(sync, obj);
+   ImGui::PushID(label.c_str());
+   float value = getter(sync.display);
+   ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, IsMixed(getter, sync.display, targets));
+   // Slider range is a guide: ctrl+click types a value, which may go beyond it (the setters clamp where it matters)
+   if (ImGui::SliderFloat(("##" + label).c_str(), &value, vMin, vMax, format.c_str()))
+   {
       setter(sync.display, value);
       for (const CoTarget<T>& target : targets)
          setter(target.display, value);

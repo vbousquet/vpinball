@@ -4,7 +4,7 @@
 // normal and emission maps are bound on the base UVs even for untextured materials.
 
 $input a_position, a_normal, a_texcoord0
-$output v_worldPos, v_tablePos, v_normal, v_texcoord0
+$output v_worldPos, v_tablePos, v_normal, v_texcoord0, v_refrCurv
 #ifdef STEREO
     $output v_eye
 #endif
@@ -64,4 +64,7 @@ void main()
     vec3 wpos_rel = tpos.xyz - cCameraPosWorld;
     gl_Position = mul(mRotViewProj, vec4(wpos_rel, 1.0));
     v_texcoord0 = a_texcoord0;
+    // Per-vertex curvature for the PBR refraction options, stored in the normal length (Primitive::UploadMeshToVB); only read
+    // when refractionParams.w says the part's vertex buffer carries it
+    v_refrCurv = length(a_normal) - 1.0;
 }

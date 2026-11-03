@@ -129,6 +129,20 @@ public:
       , m_fFriction(pmat->m_fFriction)
       , m_fScatterAngle(pmat->m_fScatterAngle)
       , m_cRefractionTint(pmat->m_cRefractionTint)
+      , m_fScatter(pmat->m_fScatter)
+      , m_cAbsorption(pmat->m_cAbsorption)
+      , m_fAbsorption(pmat->m_fAbsorption)
+      , m_fScatterFloor(pmat->m_fScatterFloor)
+      , m_fScatterEnv(pmat->m_fScatterEnv)
+      , m_fScatterEdgeAngle(pmat->m_fScatterEdgeAngle)
+      , m_fRimGain(pmat->m_fRimGain)
+      , m_fDenseAlbedo(pmat->m_fDenseAlbedo)
+      , m_fRimWidth(pmat->m_fRimWidth)
+      , m_fBevelBright(pmat->m_fBevelBright)
+      , m_fScatterLocality(pmat->m_fScatterLocality)
+      , m_fScatterWidth(pmat->m_fScatterWidth)
+      , m_fAbsorptionLightTint(pmat->m_fAbsorptionLightTint)
+      , m_fScatterSaturation(pmat->m_fScatterSaturation)
    {
    }
 
@@ -201,6 +215,27 @@ public:
    float m_fFriction;
    float m_fScatterAngle;
    COLORREF m_cRefractionTint; // 10.8+ only
+   // PBR see-through surface presence (clear plastics): scatter = the plastic's own milkiness lit by the local light (edges,
+   // fillets, a dense opaque look on the thin edge faces; 0 = off), absorption = Beer-Lambert tint by the path through the
+   // plastic (colour = transmittance through one thickness, strength 0 = off)
+   float m_fScatter = 0.f;
+   COLORREF m_cAbsorption = 0xFFFFFF;
+   float m_fAbsorption = 0.f;
+   // Presence tuning (author sliders; defaults = the former shader constants): floor = scatter where neither edge-on nor bent,
+   // env = env/ambient share of the scatter light, edge angle (deg from the normal) where the look-through factor starts
+   // (full ~9.5 later in tan-like units), rim gain, albedo of the dense edge
+   static constexpr float kScatterEdgeAngleDefault = 77.9696f; // = acos(1/4.8): (1-c)/c = 3.8 exactly
+   float m_fScatterFloor = 0.03f;
+   float m_fScatterEnv = 0.25f;
+   float m_fScatterEdgeAngle = kScatterEdgeAngleDefault;
+   float m_fRimGain = 2.0f;
+   float m_fDenseAlbedo = 0.55f;
+   float m_fRimWidth = 1.0f; // 1 = the rim band as is; < 1 chokes it thinner at the same peak (flanks below the band core choked by exponent 1/width)
+   float m_fBevelBright = 1.0f; // scales the light-guide / bevel brightening of transmission and specular (1 = as is, 0 = off)
+   float m_fScatterLocality = 0.0f; // 0 = as is; 1 = scatter lit only near the lamps (unwrapped |N.L|, steeper falloff, no ambient share)
+   float m_fScatterWidth = 1.0f; // 1 = as is; < 1 chokes the scatter + rim band thinner at the same peak, thinner still where the surface is dimly lit
+   float m_fAbsorptionLightTint = 0.0f; // 0 = as is; 1 = the absorption colour takes the hue of the local lamp light (keeps its own luminance)
+   float m_fScatterSaturation = 1.0f; // saturation of the light colour in the scatter and rim lobes (1 = as is, 0 = grey, 2 = boosted)
    
    void Save(IObjectWriter& writer, const bool saveForUndo)
    {
@@ -230,6 +265,20 @@ public:
       writer.WriteFloat(FID(ELFO), m_fElasticityFalloff);
       writer.WriteFloat(FID(FRIC), m_fFriction);
       writer.WriteFloat(FID(SCAT), m_fScatterAngle);
+      writer.WriteFloat(FID(PSCT), m_fScatter);
+      writer.WriteInt(FID(ABSC), m_cAbsorption);
+      writer.WriteFloat(FID(ABSS), m_fAbsorption);
+      writer.WriteFloat(FID(PSFL), m_fScatterFloor);
+      writer.WriteFloat(FID(PSEN), m_fScatterEnv);
+      writer.WriteFloat(FID(PSEA), m_fScatterEdgeAngle);
+      writer.WriteFloat(FID(PRGN), m_fRimGain);
+      writer.WriteFloat(FID(PDAL), m_fDenseAlbedo);
+      writer.WriteFloat(FID(PRWD), m_fRimWidth);
+      writer.WriteFloat(FID(PBVB), m_fBevelBright);
+      writer.WriteFloat(FID(PSLC), m_fScatterLocality);
+      writer.WriteFloat(FID(PSWD), m_fScatterWidth);
+      writer.WriteFloat(FID(ABLT), m_fAbsorptionLightTint);
+      writer.WriteFloat(FID(PSSA), m_fScatterSaturation);
       writer.EndObject();
    }
 
@@ -264,6 +313,20 @@ public:
             case FID(ELFO): m_fElasticityFalloff = reader.AsFloat(); break;
             case FID(FRIC): m_fFriction = reader.AsFloat(); break;
             case FID(SCAT): m_fScatterAngle = reader.AsFloat(); break;
+            case FID(PSCT): m_fScatter = reader.AsFloat(); break;
+            case FID(ABSC): m_cAbsorption = reader.AsInt(); break;
+            case FID(ABSS): m_fAbsorption = reader.AsFloat(); break;
+            case FID(PSFL): m_fScatterFloor = reader.AsFloat(); break;
+            case FID(PSEN): m_fScatterEnv = reader.AsFloat(); break;
+            case FID(PSEA): m_fScatterEdgeAngle = reader.AsFloat(); break;
+            case FID(PRGN): m_fRimGain = reader.AsFloat(); break;
+            case FID(PDAL): m_fDenseAlbedo = reader.AsFloat(); break;
+            case FID(PRWD): m_fRimWidth = reader.AsFloat(); break;
+            case FID(PBVB): m_fBevelBright = reader.AsFloat(); break;
+            case FID(PSLC): m_fScatterLocality = reader.AsFloat(); break;
+            case FID(PSWD): m_fScatterWidth = reader.AsFloat(); break;
+            case FID(ABLT): m_fAbsorptionLightTint = reader.AsFloat(); break;
+            case FID(PSSA): m_fScatterSaturation = reader.AsFloat(); break;
             }
             return true;
          },
