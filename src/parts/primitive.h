@@ -77,6 +77,7 @@ public:
 
    bool m_toy = false;
    bool m_backfacesEnabled = false;
+   bool m_cullBackfaces = false; // depth mask off: draw front faces only instead of both (closed, double-walled transparent meshes)
    bool m_displayTexture = false;     // in editor
    bool m_objectSpaceNormalMap = false; // matches the +X,+Y,+Z object space export/baking of Blender
 };
@@ -429,4 +430,14 @@ private:
    bool m_vertexBufferRegenerate = true;
    bool m_refrCurvatureEncoded = false; // the vertex buffer carries the per-vertex curvature in its normal lengths (PBR refraction options)
    void UploadMeshToVB(const std::shared_ptr<VertexBuffer>& vb);
+
+   // Back-to-front triangle sort of Cull Back Faces parts (closed double-walled transparent shells): their front faces still
+   // overlap (near wall outer skin, far wall inner skin) and blend in index order without it
+   bool WantsTriangleSort() const;
+   void SortTrianglesForCamera();
+   vector<Vertex3Ds> m_sortCentroids; // per triangle, table space, for m_sortMatrix
+   Matrix3D m_sortMatrix;
+   Vertex3Ds m_sortCameraPos;
+   unsigned int m_sortFrame = 0;
+   bool m_sortValid = false;
 };

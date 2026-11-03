@@ -392,6 +392,7 @@ static const ankerl::unordered_dense::map<int, FieldMap>& GetFieldMaps()
             { FID(DIPT), "display_texture" },
             { FID(DTXI), "draw_textures_inside" },
             { FID(EBFC), "backfaces_enabled" },
+            { FID(CLBF), "cull_backfaces" },
             { FID(EFUI), "ui_edge_factor" },
             { FID(ELAS), "elasticity" },
             { FID(ELFO), "elasticity_falloff" },
