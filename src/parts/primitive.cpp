@@ -392,6 +392,14 @@ const Matrix3D& Primitive::RecalculateMatrices()
    return m_fullMatrix;
 }
 
+void Primitive::OnMeshVerticesChanged()
+{
+   m_mesh.m_validBounds = false; // UpdateBounds keeps cached bounds otherwise
+   m_mesh.UpdateBounds();
+   m_dome.measured = false;
+   // Not m_vertexBufferRegenerate: a static mesh has an immutable vertex buffer, the renderable reinit rebuilds it
+}
+
 // recalculate vertices for editor display & physics setup
 void Primitive::TransformVertices()
 {

@@ -322,6 +322,9 @@ public:
    void ExportMesh(ObjLoader &loader) final;
 
    const Matrix3D &RecalculateMatrices();
+   // The mesh vertices were edited in place (e.g. the live editor's Set Origin): drops what was derived from them (bounds, flasher dome
+   // shape). The caller reinitializes the renderable (vertex buffer) and the physics.
+   void OnMeshVerticesChanged();
    void TransformVertices();
 
    // Fills 'triangles' with 3 consecutive 2D vertices per mesh triangle, in reversed winding order

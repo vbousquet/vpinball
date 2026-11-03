@@ -356,6 +356,8 @@ set(VPX_SOURCES
    src/ui/live/editor/RampUIPart.cpp
    src/ui/live/editor/ConvertToPBRModal.h
    src/ui/live/editor/ConvertToPBRModal.cpp
+   src/ui/live/editor/SetOrigin.h
+   src/ui/live/editor/SetOrigin.cpp
    src/ui/live/editor/RendererInspectionModal.h
    src/ui/live/editor/RendererInspectionModal.cpp
    src/ui/live/editor/ResURIPicker.h
