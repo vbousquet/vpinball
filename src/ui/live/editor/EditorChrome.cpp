@@ -12,6 +12,7 @@
 #include "ui/live/EditorUI.h"
 #include "ui/live/LiveUI.h"
 #include "parts/light.h"
+#include "imgui/imgui_internal.h" // FindWindowByName (placement of the tool shelf relative to the Adjust Last Operation panel)
 
 namespace VPX::EditorUI
 {
@@ -75,6 +76,19 @@ void ToolSeparator()
    ImGui::Dummy(ImVec2(1.f, ToolButtonSize * s_toolDpi));
    ImGui::SameLine(0.f, half);
 }
+
+// Edit mode selection (same actions as the Esc, G, R and S keyboard shortcuts), shown in the tool shelf or in the top toolbar when the shelf is hidden
+const struct
+{
+   ImGuizmo::OPERATION operation;
+   const char *icon;
+   const char *tooltip;
+} editModes[] = {
+   { (ImGuizmo::OPERATION)0, ICON_LC_MOUSE_POINTER_2, "Select\n[Esc]" }, //
+   { ImGuizmo::TRANSLATE, ICON_LC_MOVE, "Grab\n[G]" }, //
+   { ImGuizmo::ROTATE, ICON_LC_ROTATE_3D, "Rotate\n[R]" }, //
+   { ImGuizmo::SCALE, ICON_LC_SCALE_3D, "Scale\n[S]" }, //
+};
 }
 
 void EditorChrome::Render(bool showFullUI)
@@ -483,30 +497,19 @@ void EditorChrome::RenderToolbar()
       ImGui::Separator();
       ImGui::SameLine();
 
-      // Edit mode selection (same actions as the Esc, G, S and R keyboard shortcuts)
-      static const struct
+      // Edit mode selection: moved to the tool shelf when it is shown
+      if (!ToolShelfVisible())
       {
-         ImGuizmo::OPERATION operation;
-         const char *icon;
-         const char *tooltip;
-      } editModes[] = {
-         { (ImGuizmo::OPERATION)0, ICON_LC_MOUSE_POINTER_2, "Select\n[Esc]" }, //
-         { ImGuizmo::TRANSLATE, ICON_LC_MOVE, "Grab\n[G]" }, //
-         { ImGuizmo::SCALE, ICON_LC_SCALE_3D, "Scale\n[S]" }, //
-         { ImGuizmo::ROTATE, ICON_LC_ROTATE_3D, "Rotate\n[R]" }, //
-      };
-      for (const auto &mode : editModes)
-      {
-         const bool active = (editor.m_gizmoOperation == mode.operation);
-         if (active)
-            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-         if (ImGui::Button(mode.icon))
-            editor.SetGizmoOperation(mode.operation);
-         if (active)
-            ImGui::PopStyleColor();
-         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s", mode.tooltip);
-         ImGui::SameLine();
+         for (const auto &mode : editModes)
+         {
+            const bool active = (editor.m_gizmoOperation == mode.operation);
+            if (ToolButton(mode.icon, active))
+               editor.SetGizmoOperation(mode.operation);
+            if (ImGui::IsItemHovered())
+               ImGui::SetTooltip("%s", mode.tooltip);
+            if (&mode != std::end(editModes) - 1)
+               ImGui::SameLine(0.f, toolGap);
+         }
       }
       ImGui::Separator();
       ImGui::SameLine();
@@ -607,17 +610,16 @@ void EditorChrome::RenderToolbar()
          }
       }
       // Add part button, opening the part type picker popup (same as the Shift+A shortcut)
-      ImGui::BeginDisabled(editor.m_pointEditPart != nullptr || editor.m_table->IsLocked());
-      const bool addPartActive = (editor.m_addPartType != eItemInvalid);
-      if (addPartActive)
-         ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-      if (ImGui::Button(ICON_LC_PLUS))
-         RequestAddPartPopup(ImGui::GetMousePos());
-      if (addPartActive)
-         ImGui::PopStyleColor();
-      if (ImGui::IsItemHovered())
-         ImGui::SetTooltip("Add part\n[Shift+A]");
-      ImGui::EndDisabled();
+      if (!ToolShelfVisible()) // Moved to the tool shelf when it is shown (the popup below is shared)
+      {
+         ImGui::BeginDisabled(editor.m_pointEditPart != nullptr || editor.m_table->IsLocked());
+         const bool addPartActive = (editor.m_addPartType != eItemInvalid);
+         if (ToolButton(ICON_LC_PLUS, addPartActive))
+            RequestAddPartPopup(ImGui::GetMousePos());
+         if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Add part\n[Shift+A]");
+         ImGui::EndDisabled();
+      }
 
       // Copy/Paste buttons (same actions as the Ctrl+C and Ctrl+V keyboard shortcuts)
       ImGui::SameLine(0.f, toolGap);
@@ -764,6 +766,75 @@ void EditorChrome::RenderToolbar()
    ImGui::End();
 }
 
+bool EditorChrome::ToolShelfVisible() const
+   // Same states as the nav cube (the fly mode and the renderer inspection are also handled by the caller, which only draws the chrome in the full UI)
+   const EditorUI &editor = m_editor;
+   return m_showToolShelf && !editor.IsInspectMode() && !editor.m_table->IsLocked() && !editor.m_flyMode && !editor.m_inspectionModal.IsVisible()
+      && editor.m_camMode != ViewMode::DesktopBackdrop;
+   if (!ToolShelfVisible())
+      return;
+   EditorUI &editor = m_editor;
+   const float dpi = editor.m_liveUI.GetDPI();
+   s_toolDpi = dpi;
+   const ImGuiStyle &style = ImGui::GetStyle();
+   // Below the status overlay texts (orbit lock + view name, tool name, optional point edit line): same metrics as RenderStatusOverlay
+   const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
+   float textStackHeight = style.WindowPadding.y + 2.f * style.FramePadding.y + 2.f * lineHeight;
+   if (editor.m_pointEditPart)
+      textStackHeight += lineHeight;
+   const ImVec2 pos(viewportContent.x0 + 6.f * dpi, viewportContent.y0 + 5.f * dpi + textStackHeight + 4.f * dpi);
+   // Estimated size (the window auto resizes): 4 edit modes, a separator, add, orientation toggle
+   const float pad = 3.f * dpi;
+   const float gap = 2.f * dpi;
+   const float button = ToolButtonSize * dpi;
+   const float sepHeight = ToolGroupGap * dpi;
+   const float estWidth = button + 2.f * pad;
+   const float estHeight = 6.f * button + 4.f * gap + 2.f * sepHeight + 2.f * pad;
+   // Do not overlap the nav cube / N-panel side (too narrow viewport) nor the F9 Adjust Last panel at the bottom left (last frame rect, if shown)
+   if (viewportContent.Width() < estWidth + 220.f * dpi || pos.y + estHeight > viewportContent.y1 - 8.f * dpi)
+      return;
+   if (const ImGuiWindow *adjust = ImGui::FindWindowByName("Adjust Last Operation"); adjust != nullptr && adjust->Active && pos.y + estHeight + 4.f * dpi > adjust->Pos.y)
+      return;
+   ImGui::SetNextWindowPos(pos);
+   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad, pad));
+   ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(gap, gap));
+   ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 4.f * dpi);
+   ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.f);
+   ImGui::PushStyleColor(ImGuiCol_WindowBg, EditorTheme::V((EditorTheme::Strip & 0x00FFFFFFu) | (217u << 24))); // ~85% alpha
+   ImGui::PushStyleColor(ImGuiCol_Border, EditorTheme::V(EditorTheme::Border));
+   const bool open = ImGui::Begin("##ToolShelf", nullptr,
+      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing
+         | ImGuiWindowFlags_NoNav);
+   ImGui::PopStyleColor(2);
+   ImGui::PopStyleVar(4);
+   if (open)
+      // Edit modes
+      for (const auto &mode : editModes)
+         const bool active = (editor.m_gizmoOperation == mode.operation);
+         if (ToolButton(mode.icon, active))
+            editor.SetGizmoOperation(mode.operation);
+         if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", mode.tooltip);
+      // Separator
+         const ImVec2 sp = ImGui::GetCursorScreenPos();
+         ImGui::GetWindowDrawList()->AddLine(ImVec2(sp.x + 3.f * dpi, sp.y + 0.5f * sepHeight), ImVec2(sp.x + button - 3.f * dpi, sp.y + 0.5f * sepHeight), EditorTheme::TabActive, 1.f);
+         ImGui::Dummy(ImVec2(button, sepHeight));
+      // Add part: opens the part type picker popup of the top toolbar (consumed there next frame), anchored at the bottom right of the button
+      ImGui::BeginDisabled(editor.m_pointEditPart != nullptr || editor.m_table->IsLocked());
+      if (ToolButton(ICON_LC_PLUS, editor.m_addPartType != eItemInvalid))
+         RequestAddPartPopup(ImVec2(ImGui::GetItemRectMax().x + 2.f * dpi, ImGui::GetItemRectMax().y));
+      if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+         ImGui::SetTooltip("Add part\n[Shift+A]");
+      ImGui::EndDisabled();
+      // Orientation of the gizmo (Global / Local), only meaningful for Grab, Rotate and Scale
+         const bool local = (editor.m_gizmoMode == ImGuizmo::LOCAL);
+         ImGui::BeginDisabled(editor.m_gizmoOperation == ImGuizmo::OPERATION(0));
+         if (ToolButton(ICON_LC_BOX, local))
+            editor.m_gizmoMode = local ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
+         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("Transform orientation: %s\nClick to switch to %s\n[repeat G / R / S]", local ? "Local" : "Global", local ? "Global" : "Local");
+         ImGui::EndDisabled();
+   ImGui::End();
 void EditorChrome::RenderStatusOverlay()
 {
    EditorUI &editor = m_editor;

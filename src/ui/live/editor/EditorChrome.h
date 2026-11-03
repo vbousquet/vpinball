@@ -53,6 +53,7 @@ public:
 private:
    void RenderMenuBar();
    void RenderToolbar();
+   bool ToolShelfVisible() const; // Shelf shown and allowed in the current state: the toolbar then omits the edit modes and the Add button
    void RenderStatusOverlay();
    void RenderUndoHistory();
 
