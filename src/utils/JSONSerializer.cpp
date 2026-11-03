@@ -773,6 +773,8 @@ static const ankerl::unordered_dense::map<int, FieldMap>& GetFieldMaps()
          { FID(PSWD), "scatter_width" },
          { FID(ABLT), "absorption_light_tint" },
          { FID(PSSA), "scatter_saturation" },
+         { FID(PEGL), "edge_glow" },
+         { FID(PEGT), "edge_glow_tint" },
       });
 
       m[JSONSerializer::kRenderProbeNode] = MakeMap({

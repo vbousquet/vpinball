@@ -887,6 +887,12 @@ void PropertiesPanel::MaterialProperties(PropertyPane &props, Material *material
             material, "Absorption"s, //
             [](const Material *material) { return material->m_fAbsorption; }, //
             [](Material *material, float v) { material->m_fAbsorption = max(v, 0.f); }, 0.f, 3.f, 3);
+            material, "Edge Glow"s, //
+            [](const Material *material) { return material->m_fEdgeGlow; }, //
+            [](Material *material, float v) { material->m_fEdgeGlow = clamp(v, 0.f, 5.f); }, 0.f, 5.f, 2);
+            material, "Edge Glow Tint"s, //
+            [](const Material *material) { return material->m_fEdgeGlowTint; }, //
+            [](Material *material, float v) { material->m_fEdgeGlowTint = clamp(v, 0.f, 1.f); }, 0.f, 1.f, 2);
       }
       props.EndSection();
    }

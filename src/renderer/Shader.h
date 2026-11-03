@@ -372,7 +372,7 @@ enum class ShaderUniform : unsigned int
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrAbsorption, 1), // BGFX PBR only: rgb: absorption colour, w: strength
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrPresence, 1), // BGFX PBR only: x: scatter floor, y: scatter env share, z: rim gain, w: dense albedo
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrPresence2, 1), // BGFX PBR only: x: rim width (1 = as is), y: bevel/light-guide brightening scale (1 = as is), z: scatter locality (0 = as is), w: scatter width (1 = as is)
-   SHADER_UNIFORM(ShaderUniformType::Float4, pbrPresence3, 1), // BGFX PBR only: x: absorption light tint (0 = as is), y: scatter saturation (1 = as is)
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrPresence3, 1), // BGFX PBR only: x: absorption light tint (0 = as is), y: scatter saturation (1 = as is), z: edge glow gain (0 = off), w: edge glow tint (0 = white)
    SHADER_UNIFORM(ShaderUniformType::Bool, objectSpaceNormalMap, 1),
    SHADER_SAMPLER(tex_base_color, 0, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // base texture
    SHADER_SAMPLER(tex_base_transmission, 3, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // bulb light/transmission buffer texture

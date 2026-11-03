@@ -138,7 +138,7 @@ uniform vec4 refractionParams; // x: curvature gain (0 = off), y: anisotropy 0..
 uniform vec4 refractionParams2; // x: forming wave strength (refraction_wave, 0 = off), y: refraction noise strength, z: noise scale mm, w: wave flow 0..1
 uniform vec4 pbrPresence; // x: scatter floor, y: env/ambient share, z: rim gain, w: dense edge albedo (material sliders; defaults = the old constants)
 uniform vec4 pbrPresence2; // x: rim width (1 = as is, < 1 chokes the rim band thinner), y: bevel / light-guide brightening scale (1 = as is), z: scatter locality (0 = as is), w: scatter width (1 = as is)
-uniform vec4 pbrPresence3; // x: absorption light tint (0 = as is), y: scatter saturation (1 = as is)
+uniform vec4 pbrPresence3; // x: absorption light tint (0 = as is), y: scatter saturation (1 = as is), z: edge glow gain (0 = off), w: edge glow tint (0 = white)
 uniform vec4 pbrAbsorption; // rgb: material absorption colour (transmittance through one thickness), w: strength (0 = off)
 #endif
 
@@ -1464,6 +1464,20 @@ void main() {
                   #endif
                }
             }
+         }
+         // Edge glow (material edge glow 0..5, 0 = off; set on a frosted cut-face material only): light enters the sheet's big
+         // faces, is trapped by total internal reflection and leaves at the rough cut faces, so the cut glows with the light the
+         // sheet gathers, nearly view-independent and white (the tint barely shows over a 1.8 mm cut). Approximated by the light
+         // at this pixel: the clustered lamps from both sides, unshadowed and wrapped (0.5 + 0.5 |N.L|: the cut face's normal is
+         // not the sheet's, so a lamp beside the wall still counts), plus the env/ambient share; no N.V or Fresnel factor.
+         // Emission, after absorption, before tonemapping (the tonemapper clips it).
+         BRANCH if (pbrPresence3.z > 0.0)
+         {
+            const vec3 wNg = mul(vec4(Ng, 0.0), mView).xyz;
+            const vec3 envIrr = texNoLod(tex_diffuse_env, ray_to_equirectangular_uv(wNg)).xyz * fenvEmissionScale_TexWidth.x + cAmbient_LightRange.xyz;
+            const vec3 gather = pbr_scatter_light(v_tablePos, wNg, 0.0) * (1.0 / PI) + pbrPresence.y * envIrr;
+            const vec3 glowC = mix(vec3_splat(1.0), pbrAbsorption.rgb, pbrPresence3.w);
+            spec += (pbrPresence3.z * dot(gather, vec3(0.2126, 0.7152, 0.0722))) * glowC;
          }
          gl_FragData[0] = vec4(color.rgb * alpha + behind * (1.0 - alpha) + spec, 1.0);
          if (pbrLightGrid2.w == 1.0)

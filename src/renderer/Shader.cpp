@@ -359,7 +359,7 @@ ShaderUniformDef ShaderUniformDef::coreUniforms[static_cast<unsigned int>(Shader
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrAbsorption, 1), // BGFX PBR only: rgb: absorption colour, w: strength
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrPresence, 1), // BGFX PBR only: x: scatter floor, y: scatter env share, z: rim gain, w: dense albedo
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrPresence2, 1), // BGFX PBR only: x: rim width (1 = as is), y: bevel/light-guide brightening scale (1 = as is), z: scatter locality (0 = as is), w: scatter width (1 = as is)
-   SHADER_UNIFORM(ShaderUniformType::Float4, pbrPresence3, 1), // BGFX PBR only: x: absorption light tint (0 = as is), y: scatter saturation (1 = as is)
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrPresence3, 1), // BGFX PBR only: x: absorption light tint (0 = as is), y: scatter saturation (1 = as is), z: edge glow gain (0 = off), w: edge glow tint (0 = white)
    SHADER_UNIFORM(ShaderUniformType::Bool, objectSpaceNormalMap, 1),
    SHADER_SAMPLER(tex_base_color, 0, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_TRILINEAR), // base texture
    SHADER_SAMPLER(tex_base_transmission, 3, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_BILINEAR), // bulb light/transmission buffer texture
@@ -935,7 +935,7 @@ void Shader::SetTechniqueMaterial(
       SetVector(ShaderUniform::pbrAbsorption, &absorption);
       SetVector(ShaderUniform::pbrPresence, saturate(mat.m_fScatterFloor), max(mat.m_fScatterEnv, 0.f), max(mat.m_fRimGain, 0.f), max(mat.m_fDenseAlbedo, 0.f));
       SetVector(ShaderUniform::pbrPresence2, clamp(mat.m_fRimWidth, 0.05f, 1.f), max(mat.m_fBevelBright, 0.f), saturate(mat.m_fScatterLocality), mat.m_fScatterWidth <= 0.f ? 0.f : clamp(mat.m_fScatterWidth, 0.05f, 1.f)); // width 0 = no band
-      SetVector(ShaderUniform::pbrPresence3, saturate(mat.m_fAbsorptionLightTint), max(mat.m_fScatterSaturation, 0.f), 0.f, 0.f);
+      SetVector(ShaderUniform::pbrPresence3, saturate(mat.m_fAbsorptionLightTint), max(mat.m_fScatterSaturation, 0.f), clamp(mat.m_fEdgeGlow, 0.f, 5.f), saturate(mat.m_fEdgeGlowTint));
       // VPX_PBR_TI=0: the old routing (transparent parts on the opaque in-shader technique without the prepass), for A/B
       static const bool transparentInShader = []() { const char* const v = std::getenv("VPX_PBR_TI"); return v == nullptr || v[0] != '0'; }();
       if (pbrMaps->transparent && (!pbrMaps->inShaderSpecular || (transparentInShader && !(textured && doAlphaTest))))
