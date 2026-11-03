@@ -596,12 +596,31 @@ TEST_CASE("AreaLayout set type and hidden")
       CHECK_FALSE(l.SetType(vp, AreaType::Script));
       CHECK_FALSE(l.SetType(out, AreaType::Viewport));
       CHECK_FALSE(l.SetType(out, AreaType::Count));
-      CHECK_FALSE(l.SetType(out, AreaType::CameraPreview)); // disabled until task 5
       CHECK_FALSE(l.SetType(static_cast<int>(l.Nodes()[l.Root()].id), AreaType::Script)); // a split
       CHECK_FALSE(l.SetHidden(vp, true));
       CHECK_FALSE(l.SetHidden(-1, true));
       CHECK(l == before);
       CHECK(l.Validate());
+   }
+
+   SUBCASE("CameraPreview: chosen by type only, single instance, never in the legacy keys")
+   {
+      AreaLayout l = FromLegacy(kLayout);
+      const int out = l.FindLeaf(AreaType::Outliner);
+      const int props = l.FindLeaf(AreaType::Properties);
+      REQUIRE(l.SetType(out, AreaType::CameraPreview));
+      CHECK(l.Validate());
+      CHECK(l.FindLeaf(AreaType::CameraPreview) == out);
+      CHECK_FALSE(l.IsHosted(AreaType::Outliner));
+      REQUIRE(l.SetType(props, AreaType::CameraPreview)); // swaps with the leaf that has it
+      CHECK(l.FindLeaf(AreaType::CameraPreview) == props);
+      CHECK(l.Find(out)->type == AreaType::Properties);
+      Legacy legacy {};
+      Legacy2(l, legacy);
+      CHECK(legacy.left == static_cast<int>(AreaType::Properties));
+      CHECK(legacy.right != static_cast<int>(AreaType::CameraPreview));
+      CHECK(legacy.right >= 0);
+      CHECK(legacy.right < kPanelTypeCount);
    }
 }
 
@@ -655,10 +674,18 @@ TEST_CASE("AreaLayout invalid JSON is rejected")
          j = Split("vertical", "second", 100, j, Leaf(n));
       CheckRejected(j);
    }
-   SUBCASE("CameraPreview is rejected until task 5")
+   SUBCASE("CameraPreview is accepted once (rejected by builds where it is disabled)")
    {
       if (!AreaLayout::cameraPreviewEnabled)
          CheckRejected(Split("vertical", "first", 200, Leaf("CameraPreview"), Leaf("Viewport")));
+      else
+      {
+         AreaLayout l;
+         CHECK(l.FromJson(Split("vertical", "first", 200, Leaf("CameraPreview"), Leaf("Viewport"))));
+         CHECK(l.Validate());
+         CHECK(l.FindLeaf(AreaType::CameraPreview) >= 0);
+         CheckRejected(Split("vertical", "first", 200, Leaf("CameraPreview"), Split("vertical", "second", 200, Leaf("Viewport"), Leaf("CameraPreview"))));
+      }
    }
    SUBCASE("hidden Viewport")
    {

@@ -573,6 +573,9 @@
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/PartLibraryPanel.cpp">
       <Filter>ui\live\editor</Filter>
     </ClCompile>
+    <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/CameraPreviewPanel.cpp">
+      <Filter>ui\live\editor</Filter>
+    </ClCompile>
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/PinnedPanel.cpp">
       <Filter>ui\live\editor</Filter>
     </ClCompile>
@@ -1713,6 +1716,9 @@
       <Filter>ui\live\editor</Filter>
     </ClInclude>
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/PartLibraryPanel.h">
+      <Filter>ui\live\editor</Filter>
+    </ClInclude>
+    <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/CameraPreviewPanel.h">
       <Filter>ui\live\editor</Filter>
     </ClInclude>
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/PinnedPanel.h">

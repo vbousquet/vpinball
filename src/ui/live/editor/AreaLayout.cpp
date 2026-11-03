@@ -21,7 +21,8 @@ constexpr const char* kTypeNames[] = { "Outliner", "Properties", "Script", "Part
 static_assert(std::size(kTypeNames) == static_cast<size_t>(AreaType::Count));
 
 // Types a split may give to a new leaf, in order
-constexpr AreaType kNewLeafOrder[] = { AreaType::Outliner, AreaType::Properties, AreaType::Script, AreaType::PartLibrary, AreaType::CameraPreview };
+// A split never creates a CameraPreview: it is only chosen through the editor type menu (SetType), like the EditorUI split preview
+constexpr AreaType kNewLeafOrder[] = { AreaType::Outliner, AreaType::Properties, AreaType::Script, AreaType::PartLibrary };
 
 AreaRect Empty(const AreaRect& r) { return { r.x0, r.y0, r.x0, r.y0 }; }
 }
@@ -113,7 +114,7 @@ void AreaLayout::ToLegacy(bool& outliner, bool& properties, float& outlinerW, fl
    float leftCx = 0.f, rightCx = 0.f;
    for (const LeafRect& lr : leaves)
    {
-      if (lr.type == AreaType::Viewport)
+      if (lr.type == AreaType::Viewport || lr.type == AreaType::CameraPreview) // Legacy keys only know the 4 panel types
          continue;
       const float cx = (lr.rect.x0 + lr.rect.x1) * 0.5f;
       if (cx < vcx && (!left || cx > leftCx))
@@ -665,8 +666,6 @@ int AreaLayout::FirstFreeType() const
 {
    for (const AreaType t : kNewLeafOrder)
    {
-      if (t == AreaType::CameraPreview && !cameraPreviewEnabled)
-         continue;
       if (FindLeaf(t) < 0)
          return static_cast<int>(t);
    }

@@ -74,6 +74,7 @@ EditorUI::EditorUI(LiveUI &liveUI)
    , m_inspectionModal(*this)
    , m_pbrConvertModal(*this)
    , m_partLibrary(*this)
+   , m_cameraPreview(*this)
    , m_scriptPanel(*this)
    , m_pinned(*this)
    , m_palette(*this)
@@ -788,8 +789,8 @@ const char *EditorUI::AreaEditorIcon(const AreaEditor type)
    case AreaEditor::Properties: return ICON_LC_SLIDERS_HORIZONTAL;
    case AreaEditor::Script: return ICON_LC_CODE_XML;
    case AreaEditor::PartLibrary: return ICON_LC_BOX;
+   case AreaEditor::CameraPreview: return ICON_LC_EYE;
    case AreaEditor::Viewport:
-   case AreaEditor::CameraPreview:
    case AreaEditor::Count: break;
    }
    return "";
@@ -1665,12 +1666,13 @@ void EditorUI::RenderAreas()
    if (m_table->IsLocked())
    {
       m_properties.ClearMouseOver();
+      m_cameraPreview.NotHosted();
       return;
    }
    // The leaves are read once: picking a type in the header of an area re-types them, which takes effect on the next frame. Each panel
    // is a single instance (one leaf per type), so it is drawn at most once
    const vector<LeafRect> leaves = m_leafRects;
-   bool propertiesDrawn = false;
+   bool propertiesDrawn = false, cameraPreviewDrawn = false;
    for (const LeafRect &leaf : leaves)
    {
       if (!leaf.visible)
@@ -1688,11 +1690,16 @@ void EditorUI::RenderAreas()
       case AreaEditor::PartLibrary: m_partLibrary.RenderInArea(pos, size); break;
       case AreaEditor::Viewport: break; // The 3D view shows through
       case AreaEditor::CameraPreview:
+         m_cameraPreview.RenderInArea(pos, size);
+         cameraPreviewDrawn = true;
+         break;
       case AreaEditor::Count: break;
       }
    }
    if (!propertiesDrawn)
       m_properties.ClearMouseOver(); // A panel that is not hosted this frame must not keep last frame's hover
+   if (!cameraPreviewDrawn)
+      m_cameraPreview.NotHosted(); // Zero cost when not shown: no render request, targets released
 }
 
 void EditorUI::RenderAreaTypeButton(const AreaEditor current)
@@ -1732,9 +1739,11 @@ void EditorUI::RenderAreaTypeButton(const AreaEditor current)
       ImGui::TextUnformatted("Editor Type");
       ImGui::PopStyleColor();
       ImGui::Separator();
-      for (int i = 0; i < kPanelTypeCount; ++i)
+      for (int i = 0; i <= kPanelTypeCount; ++i)
       {
-         const AreaEditor type = static_cast<AreaEditor>(i);
+         const AreaEditor type = i < kPanelTypeCount ? static_cast<AreaEditor>(i) : AreaEditor::CameraPreview; // The panels, then the camera preview
+         if (type == AreaEditor::CameraPreview && !AreaLayout::cameraPreviewEnabled)
+            continue;
          const string label = string(AreaEditorIcon(type)) + "  " + AreaEditorName(type);
          if (ImGui::Selectable(label.c_str(), type == current))
             SetAreaEditor(leaf, type);

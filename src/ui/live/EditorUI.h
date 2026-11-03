@@ -8,6 +8,7 @@
 #include "imguizmo/ImGuizmo.h"
 #include "imgui_markdown/imgui_markdown.h"
 #include "editor/AreaLayout.h"
+#include "editor/CameraPreviewPanel.h"
 #include "editor/EditorUIPart.h"
 #include "editor/Selection.h"
 #include "editor/EditorChrome.h"
@@ -59,6 +60,7 @@ class EditorUI final
    friend class RendererInspectionModal;
    friend class ConvertToPBRModal;
    friend class PartLibraryPanel;
+   friend class CameraPreviewPanel;
    friend class ScriptPanel;
    friend class PinnedPanel;
    friend class SearchPalette;
@@ -106,6 +108,7 @@ private:
    RendererInspectionModal m_inspectionModal;
    ConvertToPBRModal m_pbrConvertModal;
    PartLibraryPanel m_partLibrary;
+   CameraPreviewPanel m_cameraPreview;
    ScriptPanel m_scriptPanel;
    PinnedPanel m_pinned; // Floating overlay of pinned properties
    SearchPalette m_palette; // Cmd/Ctrl+K search to field

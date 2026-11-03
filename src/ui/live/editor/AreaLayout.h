@@ -92,8 +92,8 @@ struct SplitterRect
 class AreaLayout // value type, copyable (each Workspace holds one)
 {
 public:
-   // Until task 5 (camera preview) lands, CameraPreview leaves are rejected and never offered.
-   static constexpr bool cameraPreviewEnabled = false;
+   // Camera preview leaves (task 5). Builds where this is false reject a tree holding one, and fall back to the legacy keys.
+   static constexpr bool cameraPreviewEnabled = true;
 
    static constexpr int kMaxDepth = 8;  // split levels from the root to a leaf
    static constexpr int kMaxLeaves = 6;
@@ -114,7 +114,7 @@ public:
    // A width <= 0 or not finite means the default. Editors out of range 0..3, or equal, mean Outliner/Properties.
    static AreaLayout FromLegacy(bool outliner, bool properties, float outlinerW, float propertiesW, int leftEditor, int rightEditor);
 
-   // Legacy keys for older builds: left/right = the non-Viewport leaf whose rect centre is nearest to the left/right
+   // Legacy keys for older builds: left/right = the non-Viewport, non-CameraPreview leaf whose rect centre is nearest to the left/right
    // of the Viewport's centre, computed on a 1920x1080 reference rect at dpi 1 with hidden leaves laid out as
    // visible; widths = those leaves' widths; outliner/properties = their visibility. With no leaf on a side, that
    // side is reported hidden with the default width and a free panel type.
@@ -156,7 +156,7 @@ public:
 
    // --- Mutations (tree is compacted afterwards, ids survive) ---
 
-   // At least one type not hosted (Outliner, Properties, Script, PartLibrary, then CameraPreview if enabled),
+   // At least one type not hosted (Outliner, Properties, Script, PartLibrary; never CameraPreview, which only SetType gives),
    // the leaf exists, and the tree stays within kMaxDepth / kMaxLeaves.
    bool CanSplit(int leaf) const;
    // Replaces the leaf by a split of the leaf (keeps its id) and a new leaf of the first free type. The new leaf is

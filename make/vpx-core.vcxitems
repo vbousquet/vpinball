@@ -969,6 +969,7 @@
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/LiveRenderContext.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/OutlinerPanel.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/PartLibraryPanel.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/CameraPreviewPanel.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/PinnedPanel.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/AreaLayout.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/SearchPalette.cpp" />
@@ -1957,6 +1958,7 @@
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/LiveRenderContext.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/OutlinerPanel.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/PartLibraryPanel.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/CameraPreviewPanel.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/PinnedPanel.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/AreaLayout.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/SearchPalette.h" />
