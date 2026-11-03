@@ -33,7 +33,7 @@ public:
 
    // History labels for the undo history (index 0: the next record to undo / redo, then going away from it)
    void SetLabel(const string &label); // Complete label of the last record (being recorded, or just ended) (e.g. "Move 3 parts")
-   void SetFieldLabel(const string &field); // Edited field, shown after the name of the part(s) of the record (e.g. "PBR_DOME_f125: Rim Width")
+   void SetFieldLabel(const string &field); // Edited field, shown after the name of the part(s) of the record (e.g. "Rim Width: PBR_DOME_f125")
    size_t UndoCount() const;
    size_t RedoCount() const;
    string UndoLabel(size_t index) const;

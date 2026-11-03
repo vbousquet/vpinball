@@ -36,6 +36,7 @@ private:
    EditorUI &m_editor;
 
    string m_extEditorCmd; // External editor command, mirrored to the Editor.ExternalScriptEditor app setting
+   bool m_wrap = true; // Word wrap on (off for very long scripts); decided while the editor is not active
    bool m_extCmdLoaded = false;
 
    // External editing session: m_script_text of the armed table is written to a temporary file,

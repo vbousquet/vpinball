@@ -48,7 +48,7 @@ public:
 
    // Description shown by the undo history
    string m_label; // Complete label set by the editor (e.g. "Move 3 parts")
-   string m_field; // Edited field/operation, composed with the subject part name (e.g. "PBR_DOME_f125: Rim Width")
+   string m_field; // Edited field/operation, composed with the subject part name (e.g. "Rim Width: PBR_DOME_f125")
    string m_subject; // Name of the first part involved in the record
    size_t m_subjectCount = 0; // Number of parts involved in the record
    void NoteSubject(IEditable *const pie);
@@ -82,8 +82,8 @@ string UndoRecord::Label() const
    if (!m_field.empty())
    {
       if (m_subjectCount > 1)
-         return m_field + " (" + std::to_string(m_subjectCount) + " parts)";
-      return m_subject.empty() ? m_field : m_subject + ": " + m_field;
+         return m_field + ": " + std::to_string(m_subjectCount) + " parts";
+      return m_subject.empty() ? m_field : m_field + ": " + m_subject;
    }
    if (m_subjectCount > 1)
       return std::to_string(m_subjectCount) + " parts";
@@ -244,14 +244,19 @@ void PinUndo::BeginUndo()
       if (m_undoRecords.size() > MAXUNDO)
       {
          m_undoRecords.erase(m_undoRecords.begin());
-         m_cleanpoint = (m_cleanpoint == 0 || m_cleanpoint == NoCleanPoint) ? NoCleanPoint : m_cleanpoint - 1;
+         const auto shift = [](const size_t point) { return (point == 0 || point == NoCleanPoint) ? NoCleanPoint : point - 1; };
+         m_cleanpoint = shift(m_cleanpoint);
+         for (const auto &remaining : m_undoRecords) // The clean points kept by the records to restore on cancel / discard shift too
+            remaining->m_cleanpointAtBegin = shift(remaining->m_cleanpointAtBegin);
       }
       m_undoRecords.push_back(std::make_unique<UndoRecord>());
       UndoRecord &record = *m_undoRecords.back();
       record.m_id = ++m_lastRecordId;
       record.m_dirtyStateAtBegin = m_dirtyState;
-      // A new edit invalidates the redo records. They are only set aside in the new record: if it ends up discarded or canceled (see Discard, the
-      // editor begins and discards a record every frame while the mouse is over a property pane) they are restored
+      // A new edit invalidates the redo records. They are set aside in the new record, which restores them if it ends up discarded or canceled (see
+      // Discard, and Undo(false) for a canceled modal transform: the editor also begins and discards a record every frame while the mouse is over a
+      // property pane, so the stash of a record can not be released while other records come and go on top of it). A stash is released with its record
+      // (undone, truncated or dropped)
       record.m_cleanpointAtBegin = m_cleanpoint;
       if (!m_redoRecords.empty())
       {

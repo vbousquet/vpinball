@@ -145,7 +145,6 @@ private:
    bool IsEditablePickable(const IEditable *editable) const;
    void BoxSelectParts(const ImVec2 &cornerA, const ImVec2 &cornerB, bool add);
    void SelectAllParts();
-   void FrameSelection(); // Editor camera centered on the selection, zoomed to fill the view (Blender's View Selected, numpad .)
 
    // Selection snapshot stored in undo records and restored on undo
    struct UndoSelectionState
@@ -175,6 +174,7 @@ private:
    bool m_pointDragActive = false; // Left button drag is moving the selected points
    float m_pointDragZ = 0.f; // Table Z coordinate of the plane in which points are dragged
    Vertex2D m_pointDragPos; // Last drag position in table coordinates
+   bool CanEnterPointEdit() const; // A part with points (or an edit center) is selected and point edit is not active
    void EnterPointEditMode();
    void ExitPointEditMode(bool restoreSelection);
    bool IsPointSelected(const DragPoint *point) const;
@@ -208,6 +208,7 @@ private:
    void PushUndo(IEditable *part, unsigned int editId, const string &label = string());
    PinUndo m_undo;
    static string CountLabel(const char *verb, size_t count, const string &name); // "Move PartName" / "Move 3 parts"
+   bool IsDragInProgress() const; // Gizmo, point or modal drag: undo and redo are off
    bool CanUndo() const;
    bool CanRedo() const;
    void UndoSteps(size_t count); // Edit > Undo (Ctrl+Z), count > 1 for the undo history
@@ -216,6 +217,7 @@ private:
    void SwitchWorkspace(int index); // Applies a workspace and reports it in the status bar
 
    // Edit menu actions (also the keyboard shortcuts and the F3 operators)
+   bool CanFrameSelection() const { return m_selection.GetType() == Selection::S_EDITABLE; }
    bool CanCopy() const;
    bool CanPaste() const;
    bool CanDuplicate() const;
@@ -375,7 +377,7 @@ private:
 
    // Clipboard (copy/paste of parts through the OS clipboard, and of drag point coordinates in point edit mode)
    void CopySelection();
-   void PasteSelection(const ImVec2 &pos);
+   void PasteSelection(const ImVec2 &pos, bool inPlace = false); // inPlace: the parts keep their coordinates (Duplicate), pos is ignored
 
    // Rendering
    enum class PhysicOverlay
@@ -442,6 +444,9 @@ private:
       vector<Vertex2D> snapPoints; // Snap targets of the 'points' snapping (centers and drag points of the unselected parts), built on first use
       bool snapPointsBuilt = false;
    } m_modal;
+   vector<std::shared_ptr<EditorUIPart>> m_gizmoDragSelection; // Selection the current gizmo drag started on
+   uint64_t m_gizmoDragRecordId = 0; // Undo record pushed when the current gizmo drag began
+   bool m_gizmoDragActive = false; // A gizmo drag is in progress (its undo record was pushed)
    Matrix3D m_gizmoStartTransform; // Selection transform when the current gizmo drag began
    bool m_gizmoDragTranslate = false; // The current gizmo drag is a translation
    void BeginModalTransform(ModalOp op);
@@ -479,8 +484,8 @@ private:
    bool m_navOrbitSelection = true; // Navigation preference: orbit and zoom around the selection
    void SetView(PredefinedView view); // Axis aligned view (also reachable from the View menu)
    void CycleCamera();
-   void FrameSelection();
-   void FrameAll();
+   void FrameSelection(); // Editor camera centered on the selection, zoomed to fill the view (Blender's View Selected, F / numpad .)
+   void FrameAll(); // Same for the whole table (Home)
    void OrbitStep(bool yaw, float sign); // 15 degree orbit step
    bool m_orbitLock = false; // When locked, camera drags pan instead of orbiting
    bool m_fitPlayfieldCamera = false;

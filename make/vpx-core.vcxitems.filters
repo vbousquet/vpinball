@@ -1730,6 +1730,15 @@
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/SearchPalette.h">
       <Filter>ui\live\editor</Filter>
     </ClInclude>
+    <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/EditorTheme.h">
+      <Filter>ui\live\editor</Filter>
+    </ClInclude>
+    <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/IconsLucide.h">
+      <Filter>ui\live\editor</Filter>
+    </ClInclude>
+    <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/LucideFont.h">
+      <Filter>ui\live\editor</Filter>
+    </ClInclude>
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/PartGroupUIPart.h">
       <Filter>ui\live\editor</Filter>
     </ClInclude>

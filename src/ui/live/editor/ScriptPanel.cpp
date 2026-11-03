@@ -5,6 +5,8 @@
 
 #include "core/SettingsService.h"
 #include "fonts/IconsForkAwesome.h"
+#include "IconsLucide.h"
+#include "EditorTheme.h"
 #include "parts/pintable.h"
 #include "ui/live/EditorUI.h"
 #include "ui/live/LiveUI.h"
@@ -197,6 +199,35 @@ void ScriptPanel::RenderInArea(const ImVec2 &pos, const ImVec2 &size)
       ImGui::SameLine();
       ImGui::AlignTextToFramePadding();
       ImGui::TextDisabled("Table Script");
+      {
+         // External editor: open button and a settings popover for the command (launched on a temporary copy of the script)
+         const ImGuiStyle &style = ImGui::GetStyle();
+         const float dpi = m_editor.m_liveUI.GetDPI();
+         const float openW = ImGui::CalcTextSize(ICON_FK_EXTERNAL_LINK).x + 2.f * style.FramePadding.x;
+         const float gearW = ImGui::CalcTextSize(ICON_LC_SLIDERS_HORIZONTAL).x + 2.f * style.FramePadding.x;
+         const float rightEdge = ImGui::GetWindowContentRegionMax().x - 12.f * dpi;
+         ImGui::SameLine(max(ImGui::GetCursorPosX(), rightEdge - openW - gearW - style.ItemSpacing.x));
+         const bool readOnlyHeader = m_editor.IsInspectMode() || m_editor.m_table->IsLocked();
+         const bool canOpenExternal = !readOnlyHeader && !m_extEditorCmd.empty();
+         ImGui::BeginDisabled(!canOpenExternal);
+         if (ImGui::Button(ICON_FK_EXTERNAL_LINK "##ScriptOpenExt"))
+            OpenInExternalEditor();
+         ImGui::EndDisabled();
+         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip(canOpenExternal ? "Open the script in the external editor" : "Configure an external editor command (gear) to open the script in it");
+         ImGui::SameLine();
+         if (ImGui::Button(ICON_LC_SLIDERS_HORIZONTAL "##ScriptExtSettings"))
+            ImGui::OpenPopup("##ScriptExtPopup");
+         ImGui::SetItemTooltip("External editor settings");
+         if (ImGui::BeginPopup("##ScriptExtPopup"))
+         {
+            ImGui::TextUnformatted("External Editor");
+            ImGui::SetNextItemWidth(280.f * dpi);
+            if (ImGui::InputTextWithHint("##exteditor", "Editor command, e.g. notepad++ {file}", &m_extEditorCmd))
+               g_settingsService.GetAppSettings().SetEditor_ExternalScriptEditor(m_extEditorCmd, false);
+            ImGui::EndPopup();
+         }
+      }
       ImGui::Separator();
 
       const bool readOnly = m_editor.IsInspectMode() || m_editor.m_table->IsLocked();
@@ -209,37 +240,34 @@ void ScriptPanel::RenderInArea(const ImVec2 &pos, const ImVec2 &size)
       if (m_extTable != nullptr)
          ImGui::TextDisabled("Editing externally: %s", PathToUTF8(m_extFile).c_str());
 
-      // External editor: user configured command launched on a temporary copy of the script
-      ImGui::AlignTextToFramePadding();
-      ImGui::TextUnformatted("External editor:");
-      ImGui::SameLine();
-      const float buttonWidth = ImGui::CalcTextSize(ICON_FK_EXTERNAL_LINK, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2.0f;
-      ImGui::SetNextItemWidth(-buttonWidth - ImGui::GetStyle().ItemSpacing.x);
-      ImGui::InputTextWithHint("##exteditor", "Editor command, e.g. notepad++ {file}", &m_extEditorCmd);
-      if (ImGui::IsItemDeactivatedAfterEdit())
-         g_settingsService.GetAppSettings().SetEditor_ExternalScriptEditor(m_extEditorCmd, false);
-      ImGui::SameLine();
-      const bool canOpenExternal = !readOnly && !m_extEditorCmd.empty();
-      ImGui::BeginDisabled(!canOpenExternal);
-      if (ImGui::Button(ICON_FK_EXTERNAL_LINK))
-         OpenInExternalEditor();
-      ImGui::EndDisabled();
-      if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-         ImGui::SetTooltip(canOpenExternal ? "Open the script in the external editor" : "Configure an external editor command to open the script in it");
-
-      // Esc must not revert the typing: ImGui restores the text the field had when it was activated (the edits are applied on
-      // every keystroke), so the field is deactivated before it sees the key. The text is kept, the focus leaves the editor,
-      // and the Esc is not an editor Esc.
+      // Basic embedded text editor, applied to the table script on every edit
+      ImGuiInputTextFlags flags = ImGuiInputTextFlags_AllowTabInput;
+      // Long lines wrap instead of clipping, but wrapping relays out the whole buffer every frame (measured ~0.75 ms at 4800 lines vs 0.09 ms
+      // unwrapped), so it is off for scripts of 6000+ lines. Decided only while the field is not being typed in: flipping the flag mid-edit
+      // would jump the scroll position.
+      if (ImGui::GetActiveID() != ImGui::GetID("##script"))
+      {
+         const string &text = m_editor.m_table->m_script_text;
+         m_wrap = std::count(text.begin(), text.end(), '\n') < 6000;
+      }
+      if (m_wrap)
+         flags |= ImGuiInputTextFlags_WordWrap | ImGuiInputTextFlags_NoHorizontalScroll;
+      if (readOnly)
+         flags |= ImGuiInputTextFlags_ReadOnly;
+      // Esc must not revert the typing: ImGui restores the text the field had when it was activated (the edits are applied on every keystroke), so
+      // the field is deactivated before it sees the key. The text is kept and the focus leaves the editor, and the Esc is not an editor Esc.
       if (ImGui::GetActiveID() == ImGui::GetID("##script") && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
       {
          ImGui::ClearActiveID();
-         m_editor.m_suppressNextEscape = true;
+         m_editor.m_paneEscPending = true;
       }
-      // Basic embedded text editor, applied to the table script on every edit
-      ImGuiInputTextFlags flags = ImGuiInputTextFlags_AllowTabInput;
-      if (readOnly)
-         flags |= ImGuiInputTextFlags_ReadOnly;
-      if (ImGui::InputTextMultiline("##script", &m_editor.m_table->m_script_text, ImVec2(-FLT_MIN, -FLT_MIN), flags))
+      // Code-editor look: a darker well than the other fields
+      ImGui::PushStyleColor(ImGuiCol_FrameBg, EditorTheme::V(EditorTheme::WorkspaceOff));
+      ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.f, 6.f));
+      const bool scriptEdited = ImGui::InputTextMultiline("##script", &m_editor.m_table->m_script_text, ImVec2(-FLT_MIN, -FLT_MIN), flags);
+      ImGui::PopStyleVar();
+      ImGui::PopStyleColor();
+      if (scriptEdited)
          m_editor.m_table->SetDirtyScript(SaveDirtyState::Dirty);
    }
    m_editor.EndAreaWindow();

@@ -27,18 +27,23 @@ public:
 
    void Render();
 
+   // True while the Esc press that closed the palette is still held, and on the frame of its release: the editor's own Esc
+   // handler (which acts on the release) must skip that Esc. Call it every frame the editor checks for Esc.
+   bool ConsumedEscape();
+
 private:
    struct Field
    {
       string label, group;
       string labelLower, groupLower;
+      string shown, shownLower; // Label shown in the UI (label is the stable key)
    };
    // Object type (table, material or part item type) with the fields learned from the pin registry
    struct TypeInfo
    {
       string name, lower;
       vector<Field> fields;
-      bool queued = false; // A representative object was queued for harvest
+      int queued = 0; // Representative objects queued for harvest (conditional fields differ per object)
    };
    struct Object
    {
@@ -57,6 +62,7 @@ private:
       string label, group; // Cached display strings
       string right;
       int op = -1; // Index in m_ops
+      string chip; // Operator shortcut, drawn as a key chip
    };
    // Menu command (Blender's menu search); path is the full menu path, its last component is the label
    struct Operator
@@ -111,6 +117,9 @@ private:
    vector<TypeInfo> m_types;
    std::unordered_map<string, int> m_typeByKey;
    std::unordered_map<string, int> m_partType; // Part name -> type
+   std::unordered_map<int, int> m_itemTypeIdx; // Item type -> type index
+   bool m_escPending = false;
+   bool m_ctrlHeldFromOpen = false; // Ctrl (Cmd) of the Ctrl+K that opened the palette is still down: not a Ctrl+Enter
    int m_tableType = -1, m_matType = -1;
    vector<Object> m_objects;
    vector<Operator> m_ops;

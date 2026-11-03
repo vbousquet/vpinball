@@ -27,6 +27,16 @@ public:
    {
    }
 
+   enum class ChevronDir
+   {
+      Down,
+      Right
+   };
+   // Line chevron (Lucide style, replaces ImGui's filled triangles), centered at c, half width 'size'
+   static void DrawChevron(ImDrawList *drawList, const ImVec2 &center, ChevronDir dir, float size, ImU32 color);
+   // Blender style tooltip for the last item (also when it is disabled): Title Case name, dim shortcut chip, optional dim sentence case description
+   static void Tip(const char *title, const char *shortcut = nullptr, const char *description = nullptr);
+
    void Render(bool showFullUI);
    float GetTopBarHeight() const { return m_menuBarHeight + m_toolBarHeight; }
    // Height of the status bar at the bottom of the window (0 when hidden, including when the full UI is hidden): the areas end above it

@@ -9,6 +9,9 @@
 #define ICON_LC_ARROW_UP "\xee\x81\x8e" // U+E04E
 #define ICON_LC_ATOM "\xee\x8f\x9b" // U+E3DB
 #define ICON_LC_BOX "\xee\x81\xa5" // U+E065
+#define ICON_LC_CHEVRON_DOWN "\xee\x81\xb1" // U+E071
+#define ICON_LC_CHEVRON_RIGHT "\xee\x81\xb3" // U+E073
+#define ICON_LC_CHEVRON_UP "\xee\x81\xb4" // U+E074
 #define ICON_LC_CIRCLE "\xee\x81\xba" // U+E07A
 #define ICON_LC_CIRCLE_ARROW_LEFT "\xee\x81\xbd" // U+E07D
 #define ICON_LC_CIRCLE_DOT "\xee\x8d\x89" // U+E349
@@ -25,12 +28,14 @@
 #define ICON_LC_FOLDER "\xee\x83\x9c" // U+E0DC
 #define ICON_LC_FOLDER_OPEN "\xee\x89\x87" // U+E247
 #define ICON_LC_IMAGE "\xee\x83\xb9" // U+E0F9
+#define ICON_LC_LAYERS "\xee\x84\x84" // U+E104
 #define ICON_LC_LIGHTBULB "\xee\x87\x82" // U+E1C2
 #define ICON_LC_LINK "\xee\x84\x88" // U+E108
 #define ICON_LC_LIST "\xee\x84\x8c" // U+E10C
 #define ICON_LC_LIST_FILTER "\xee\x91\xa5" // U+E465
 #define ICON_LC_LOCK "\xee\x84\x8f" // U+E10F
 #define ICON_LC_LOCK_OPEN "\xee\x84\x90" // U+E110
+#define ICON_LC_MAGNET "\xee\x8a\xb5" // U+E2B5
 #define ICON_LC_MINUS "\xee\x84\xa0" // U+E120
 #define ICON_LC_MOUSE_POINTER_2 "\xee\x87\x83" // U+E1C3
 #define ICON_LC_MOVE "\xee\x84\xa5" // U+E125
