@@ -495,6 +495,12 @@ void PropertiesPanel::TableProperties(PropertyPane &props)
             editor.m_renderer->MarkShaderDirty(); // Needed to update shaders with new light settings
          },
          PropertyPane::Unit::Percent, 3, "Intensity of the environment lighting");
+         [&editor](PinTable *table, float v)
+         {
+            table->m_envReflectionScale = max(v, 0.f);
+            editor.m_renderer->MarkShaderDirty(); // Needed to update shaders with new light settings
+         },
+         PropertyPane::Unit::None, 3);
 
       props.Separator("Render Options"s);
       props.Checkbox<PinTable>(
@@ -509,7 +515,12 @@ void PropertiesPanel::TableProperties(PropertyPane &props)
       props.InputFloat<PinTable>(
          table, "Ambient Occlusion Scale"s, //
          [](const PinTable *table) { return table->m_AOScale; }, //
-         [](PinTable *table, float v) { table->m_AOScale = v; }, PropertyPane::Unit::Percent, 1, "Strength of the ambient occlusion");
+         [&editor](PinTable *table, float v)
+         {
+            table->m_AOScale = v;
+            editor.m_renderer->MarkShaderDirty(); // Needed to update shaders with new light settings
+         },
+         PropertyPane::Unit::Percent, 1, "Strength of the ambient occlusion");
       props.Checkbox<PinTable>(
          table, "Enable Sc. Sp. Reflections"s, //
          [](const PinTable *table) { return table->m_enableSSR; }, //

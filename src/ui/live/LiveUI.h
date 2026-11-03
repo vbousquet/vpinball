@@ -36,6 +36,7 @@ public:
 
    void OpenEditorUI() { m_editorUI.Open(); }
    bool IsEditorUIOpened() const { return m_editorUI.IsOpened(); }
+   bool IsEditorDigitNavKey(int digit) const { return m_editorUI.IsOpened() && m_editorUI.IsDigitNavKey(digit); }
    bool IsEditorViewMode() const { return m_editorUI.IsOpened() && !m_editorUI.IsPreview(); }
    bool IsEditorBackdropViewMode() const { return m_editorUI.IsOpened() && m_editorUI.IsBackdropEditMode(); }
 

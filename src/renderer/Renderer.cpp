@@ -2860,8 +2860,9 @@ void Renderer::UpdateVirtualShadowMaps()
    // Content invalidation samples the dirty state once per frame: undo bookkeeping began-and-discarded
    // within the same frame (e.g. on selection) must not reset the maps, real edits persist and still do
    const SaveDirtyState tableDirty = m_table->GetDirtyState();
-   const bool contentDirty = tableDirty != m_vsmLastTableDirty;
+   const bool contentDirty = tableDirty != m_vsmLastTableDirty || m_vsmContentSerial != m_vsmLastContentSerial;
    m_vsmLastTableDirty = tableDirty;
+   m_vsmLastContentSerial = m_vsmContentSerial;
    for (Matrix3D& vp : m_vsmShadowVP)
       vp.SetIdentity();
    for (vec4& v : m_vsmParams)

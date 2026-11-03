@@ -78,6 +78,9 @@ public:
 
    bool IsInspectMode() const { return m_table->m_liveBaseTable != nullptr; }
 
+   // True if the top row digit (0..9) is a view navigation key (numpad emulation) rather than a game key: editor UI up and game not running (edit mode, or inspect mode while paused)
+   bool IsDigitNavKey(int digit) const;
+
 private:
    // UI Context
    LiveUI &m_liveUI;
@@ -110,6 +113,9 @@ private:
    Texture *m_outlinerImageAnchor = nullptr; // Anchors for shift+click range selection in the outliner
    VPX::Sound *m_outlinerSoundAnchor = nullptr;
    Material *m_outlinerMaterialAnchor = nullptr;
+   bool m_pickListOpen = false; // Ctrl+click list of the parts under the cursor
+   ImVec2 m_pickListPos;
+   vector<std::shared_ptr<EditorUIPart>> m_pickList;
    bool m_boxSelectActive = false;
    ImVec2 m_boxSelectStart;
    bool IsPartSelected(const std::shared_ptr<EditorUIPart> &part) const;
@@ -322,10 +328,35 @@ private:
 
    // 3D editor
    ImGuizmo::OPERATION m_gizmoOperation = (ImGuizmo::OPERATION)0;
+   bool m_hadSelectionTransform = false; // Whether the previous frame had a selection to transform
    ImGuizmo::MODE m_gizmoMode = ImGuizmo::WORLD;
    void SetGizmoOperation(ImGuizmo::OPERATION operation); // Edit mode actions of the Esc (select), G (grab), S (scale) and R (rotate) shortcuts
    bool GetSelectionTransform(Matrix3D &transform) const;
    bool GetSelectionBounds(FRect3D &bounds) const;
+
+   // Blender style modal transform (G / R / S then move the mouse, X / Y / Z to constrain to an axis (Shift for the plane
+   // perpendicular to it), type a number for an exact value, Enter / left click to confirm, Esc / right click to cancel)
+   enum class ModalOp { Grab, Rotate, Scale };
+   struct ModalTransform
+   {
+      bool active = false;
+      ModalOp op = ModalOp::Grab;
+      int axis = -1; // Constraint axis (0..2 for X/Y/Z), -1 for none (view plane / view axis / uniform)
+      bool plane = false; // Constrain to the plane perpendicular to the axis
+      bool hasUndo = false; // An undo record was started when the transform began (canceling reverts it)
+      string typed; // Typed numeric value
+      string hud; // Status text drawn over the render
+      ImGuizmo::OPERATION savedGizmo = ImGuizmo::OPERATION(0); // Gizmo tool to restore when the transform ends
+      ImVec2 startMouse;
+      float startAngle = 0.f, startDist = 1.f; // Angle and distance of the start mouse position around the pivot on screen
+      Matrix3D initial; // Selection transform when the operation began
+   } m_modal;
+   void BeginModalTransform(ModalOp op);
+   void UpdateModalTransform();
+   void EndModalTransform(bool confirm);
+   void FrameBounds(const FRect3D &bounds); // Center the editor camera on the bounds and adjust the zoom to fit them
+   bool IsNumpadPressed(int digit) const;
+   bool GetNavPivot(vec3 &target) const; // Orbit / zoom pivot (selection center), false if none
    void SetSelectionTransform(const Matrix3D &transform, bool clearPosition = false, bool clearScale = false, bool clearRotation = false) const;
 
    // Editor camera
@@ -336,10 +367,34 @@ private:
    {
       None, Front, Back, Right, Left, Top, Bottom
    } m_predefinedView = PredefinedView::None;
+   bool m_navZoomToMouse = true; // Navigation preference: wheel zoom goes toward the cursor
+   int m_navSelectionDisplay = 0; // 0 = edges only, 1 = edges and tint, 2 = hidden
+   bool m_navAutoDepth = true; // Navigation preference: with no selection, orbit around the 3D point under the cursor
+   bool m_orbitDragging = false; // Orbit / pan drag in progress
+   bool m_orbitPivotValid = false; // m_orbitPivot (camera space) is the orbit pivot of the current drag
+   vec3 m_orbitPivot;
+   bool PickDepthPoint(const ImVec2 &mousePos, vec3 &point) const;
+   float m_navFovY = 39.6f; // Editor perspective camera vertical field of view in degrees (50 mm lens equivalent)
+   void SetFov(float fovY);
+   bool m_navInvertZoom = false; // Navigation preferences (stored in the Editor section of the settings)
+   bool m_navAltMiddleButton = true;
+   bool m_navTrackpad = true;
+   float m_navOrbitSensitivity = 1.f;
+   void LoadNavPreferences();
+   bool m_navBlenderTransform = true; // Navigation preference: G / R / S start a modal transform instead of the gizmo
+   bool m_navEmulateNumpad = true; // Navigation preference: top row digits act as the numpad view keys
+   bool m_navOrbitSelection = true; // Navigation preference: orbit and zoom around the selection
+   void SetView(PredefinedView view); // Axis aligned view (also reachable from the View menu)
+   void CycleCamera();
+   void FrameSelection();
+   void FrameAll();
+   void OrbitStep(bool yaw, float sign); // 15 degree orbit step
    bool m_orbitLock = false; // When locked, camera drags pan instead of orbiting
    bool m_fitPlayfieldCamera = false;
    Matrix3D m_camView, m_camProj;
    float m_camDistance;
+   bool m_showNavCube = true; // View > Navigation Cube
+   void RenderNavCube(); // ImGuizmo view cube: drag orbits around the orbit pivot, click a face snaps to the axis view
 };
 
 }

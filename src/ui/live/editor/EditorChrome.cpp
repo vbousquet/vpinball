@@ -10,6 +10,7 @@
 #include "ui/EditorClipboard.h"
 #include "ui/live/EditorUI.h"
 #include "ui/live/LiveUI.h"
+#include "parts/light.h"
 
 namespace VPX::EditorUI
 {
@@ -74,8 +75,118 @@ void EditorChrome::RenderMenuBar()
             editor.m_pbrConvertModal.Show();
          if (ImGui::MenuItem("Import Unity Prefab...", nullptr, false, !editor.m_table->IsLocked()))
             editor.PickUnityPrefab();
+         if (ImGui::BeginMenu("Light States"))
+         {
+            // The editor does not run the table script (which usually sets the lamp states): set the light state of the table or of a collection here
+            const auto setStates = [&](const vector<IEditable *> &parts, const float state)
+            {
+               for (IEditable *const part : parts)
+                  if (part->GetItemType() == eItemLight)
+                     static_cast<Light *>(part)->put_State(state);
+            };
+            const float states[] = { 0.f, 0.706f, 1.f };
+            const char *stateNames[] = { "Off", "0.706 (lamp top)", "On" };
+            if (ImGui::BeginMenu("All Lights"))
+            {
+               for (int i = 0; i < 3; i++)
+                  if (ImGui::MenuItem(stateNames[i]))
+                     setStates(editor.m_table->GetParts(), states[i]);
+               ImGui::EndMenu();
+            }
+            for (auto *const collection : editor.m_table->GetCollections())
+            {
+               bool hasLight = false;
+               for (const IEditable *const part : collection->GetParts())
+                  hasLight |= part->GetItemType() == eItemLight;
+               if (hasLight && ImGui::BeginMenu(collection->m_name.c_str()))
+               {
+                  for (int i = 0; i < 3; i++)
+                     if (ImGui::MenuItem(stateNames[i]))
+                        setStates(collection->GetParts(), states[i]);
+                  ImGui::EndMenu();
+               }
+            }
+            ImGui::EndMenu();
+         }
+         if (ImGui::BeginMenu("Navigation"))
+         {
+            Settings &settings = g_settingsService.GetAppSettings();
+            if (ImGui::MenuItem("Orbit Around Selection", nullptr, &editor.m_navOrbitSelection))
+               settings.SetEditor_NavOrbitSelection(editor.m_navOrbitSelection, false);
+            if (ImGui::MenuItem("Zoom To Mouse Position", nullptr, &editor.m_navZoomToMouse))
+               settings.SetEditor_NavZoomToMouse(editor.m_navZoomToMouse, false);
+            if (ImGui::MenuItem("Auto Depth (Orbit Around Point Under Cursor)", nullptr, &editor.m_navAutoDepth))
+               settings.SetEditor_NavAutoDepth(editor.m_navAutoDepth, false);
+            if (ImGui::MenuItem("Invert Zoom", nullptr, &editor.m_navInvertZoom))
+               settings.SetEditor_NavInvertZoom(editor.m_navInvertZoom, false);
+            if (ImGui::MenuItem("Alt + Drag Acts As Middle Button", nullptr, &editor.m_navAltMiddleButton))
+               settings.SetEditor_NavAltMiddleButton(editor.m_navAltMiddleButton, false);
+            if (ImGui::MenuItem("Trackpad (Scroll Pans, Ctrl/Cmd+Scroll Zooms)", nullptr, &editor.m_navTrackpad))
+               settings.SetEditor_NavTrackpad(editor.m_navTrackpad, false);
+            if (ImGui::MenuItem("Emulate Numpad (Top Row Digits)", nullptr, &editor.m_navEmulateNumpad))
+               settings.SetEditor_NavEmulateNumpad(editor.m_navEmulateNumpad, false);
+            if (ImGui::MenuItem("Blender Transform Keys (G / R / S)", nullptr, &editor.m_navBlenderTransform))
+               settings.SetEditor_NavBlenderTransform(editor.m_navBlenderTransform, false);
+            float fov = editor.m_navFovY;
+            if (ImGui::SliderFloat("Field Of View", &fov, 15.f, 100.f, "%.1f deg"))
+            {
+               editor.SetFov(fov);
+               settings.SetEditor_NavFovY(editor.m_navFovY, false);
+            }
+            const char *selectionModes[] = { "Selection: Edges", "Selection: Edges + Tint", "Selection: Hidden" };
+            if (ImGui::BeginMenu(selectionModes[editor.m_navSelectionDisplay]))
+            {
+               for (int i = 0; i < 3; i++)
+                  if (ImGui::MenuItem(selectionModes[i] + 11, nullptr, editor.m_navSelectionDisplay == i))
+                  {
+                     editor.m_navSelectionDisplay = i;
+                     settings.SetEditor_NavSelectionDisplay(i, false);
+                  }
+               ImGui::EndMenu();
+            }
+            if (ImGui::SliderFloat("Orbit Sensitivity", &editor.m_navOrbitSensitivity, 0.1f, 5.f, "%.1f"))
+               settings.SetEditor_NavOrbitSensitivity(editor.m_navOrbitSensitivity, false);
+            ImGui::EndMenu();
+         }
          ImGui::EndMenu();
       }
+         using PV = EditorUI::PredefinedView;
+         const auto viewItem = [&](const char *label, const char *keys, PV view)
+            if (ImGui::MenuItem(label, keys, editor.m_camMode == ViewMode::EditorCam && editor.m_predefinedView == view))
+               editor.SetView(view);
+         };
+         viewItem("Top", "7", PV::Top);
+         viewItem("Bottom", "Ctrl+7", PV::Bottom);
+         viewItem("Front", "1", PV::Front);
+         viewItem("Back", "Ctrl+1", PV::Back);
+         viewItem("Left", "3", PV::Left);
+         viewItem("Right", "Ctrl+3", PV::Right);
+         ImGui::Separator();
+         if (ImGui::MenuItem("Perspective / Orthographic", "5"))
+            editor.m_camMode = ViewMode::EditorCam;
+            editor.m_perspectiveCam = !editor.m_perspectiveCam;
+         }
+         if (ImGui::MenuItem("Cycle Camera (Preview / Editor / Backdrop)", "0"))
+            editor.CycleCamera();
+         if (ImGui::MenuItem("Lock Orbit", "Numpad /", editor.m_orbitLock))
+            editor.m_orbitLock = !editor.m_orbitLock;
+         ImGui::Separator();
+         if (ImGui::MenuItem("Orbit Left", "4"))
+            editor.OrbitStep(true, 1.f);
+         if (ImGui::MenuItem("Orbit Right", "6"))
+            editor.OrbitStep(true, -1.f);
+         if (ImGui::MenuItem("Orbit Up", "8"))
+            editor.OrbitStep(false, 1.f);
+         if (ImGui::MenuItem("Orbit Down", "2"))
+            editor.OrbitStep(false, -1.f);
+         ImGui::Separator();
+         if (ImGui::MenuItem("Frame Selected", "F"))
+            editor.FrameSelection();
+         if (ImGui::MenuItem("Frame All", "Home"))
+            editor.FrameAll();
+         ImGui::Separator();
+         if (ImGui::MenuItem("Navigation Cube", nullptr, editor.m_showNavCube))
+            editor.m_showNavCube = !editor.m_showNavCube;
       if (editor.IsInspectMode() && !editor.m_table->IsLocked() && ImGui::BeginMenu("Debug"))
       {
          if (ImGui::MenuItem("Open debugger"))

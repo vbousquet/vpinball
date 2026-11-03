@@ -183,6 +183,7 @@ public:
    bool IsTranslucentShadowCaster(const Material* mat) const; // Shared per-material caster classification of the SHADOW_MAP branches
    void BindTranslucentShadowCaster(const Material* mat, Texture* image, float partAlpha) const; // pbr_shadow_trans technique + tint bindings
 
+   void InvalidateShadowContent() { m_vsmContentSerial++; } // Static shadow pages are cached: call after moving or editing a shadow caster
    void ReinitRenderable(IRenderable* part) { if (part) m_renderableToInit.push_back(part); }
    void SetupRenderable(IRenderable* part) { if (part) m_renderableToSetup.push_back(part); }
    void DropRenderable(IRenderable* part) { std::erase(m_renderableToInit, part); std::erase(m_renderableToSetup, part); }
@@ -348,6 +349,7 @@ private:
    int m_vsmPoolPages = 1024; // physical pool size in pages (Player_PBRShadowPoolPages)
    int m_vsmVirtRes = 8192; // ortho virtual map edge in texels (Player_PBRShadowMapSize)
    int m_vsmMaxLights = VSM::MAX_LIGHTS; // shadowed-light cap (Player_PBRShadowMaxLights)
+   unsigned int m_vsmContentSerial = 0, m_vsmLastContentSerial = 0; // Bumped when shadow caster content changed (editor moves), forces a rebuild of the cached shadow pages
    SaveDirtyState m_vsmLastTableDirty = SaveDirtyState::Clean; // table dirty state sampled per VSM frame
    int m_vsmPageBudget = 32; // dirty pages rendered per frame (Player_PBRShadowPagesPerFrame)
 #endif

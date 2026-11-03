@@ -1170,6 +1170,11 @@ void Primitive::Render(const unsigned int renderMask)
 
    if (isUIPass)
    {
+      if (m_meshBuffer == nullptr)
+      {
+         m_renderer->UpdateBasicShaderMatrix();
+         return;
+      }
       // FIXME use correct point for depth sorting
       RenderMeshDesc body;
       body.mesh = m_meshBuffer;
