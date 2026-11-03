@@ -2556,6 +2556,11 @@ static void LoadJSONTableInfo(PinTable *const table, const nlohmann::ordered_jso
    table->m_description = doc.value("description", ""s);
    table->m_rules = doc.value("rules", ""s);
    table->m_numTimesSaved = doc.value("save_rev", 0u);
+   table->m_editorPins.clear();
+   if (const nlohmann::json pins = doc.value("editor_pins", nlohmann::json::array()); pins.is_array())
+      for (const auto &pin : pins)
+         if (pin.is_object())
+            table->m_editorPins.push_back({ pin.value("kind", ""s), pin.value("name", ""s), pin.value("prop", ""s) });
    table->m_customInfo.clear();
    if (const nlohmann::json tags = doc.value("custom_tags", nlohmann::json::object()); tags.is_object())
       for (const auto &[tag, tagContent] : tags.items())
@@ -3130,6 +3135,13 @@ HRESULT PinTable::SaveToJSON(const std::filesystem::path &path, VPXFileFeedback 
          dateSaved.pop_back();
       doc["date_saved"] = dateSaved;
       doc["save_rev"] = ++m_numTimesSaved;
+      if (!m_editorPins.empty())
+      {
+         nlohmann::ordered_json pins = nlohmann::ordered_json::array();
+         for (const EditorPin &pin : m_editorPins)
+            pins.push_back({ { "kind", pin.kind }, { "name", pin.name }, { "prop", pin.prop } });
+         doc["editor_pins"] = pins;
+      }
       // Materials are saved as asset files of the pack (in materials/), table.json keeps the ordered name list
       if (doc.contains("materials"))
       {

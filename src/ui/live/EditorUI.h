@@ -12,6 +12,7 @@
 #include "editor/EditorChrome.h"
 #include "editor/OutlinerPanel.h"
 #include "editor/PartLibraryPanel.h"
+#include "editor/PinnedPanel.h"
 #include "editor/PropertiesPanel.h"
 #include "editor/RendererInspectionModal.h"
 #include "editor/ConvertToPBRModal.h"
@@ -56,6 +57,7 @@ class EditorUI final
    friend class ConvertToPBRModal;
    friend class PartLibraryPanel;
    friend class ScriptPanel;
+   friend class PinnedPanel;
 
 public:
    EditorUI(LiveUI &liveUI);
@@ -97,6 +99,7 @@ private:
    ConvertToPBRModal m_pbrConvertModal;
    PartLibraryPanel m_partLibrary;
    ScriptPanel m_scriptPanel;
+   PinnedPanel m_pinned; // Floating overlay of pinned properties
 
    Selection m_selection;
 
@@ -394,6 +397,27 @@ private:
    Matrix3D m_camView, m_camProj;
    float m_camDistance;
    bool m_showNavCube = true; // View > Navigation Cube
+   bool m_showOutliner = true; // View > Outliner (workspaces)
+   bool m_showProperties = true; // View > Properties (workspaces)
+   // Areas (Blender-style fixed layout: outliner | viewport + N-panel | properties): widths in logical pixels, resized by the
+   // splitters between areas, saved per workspace
+   float m_outlinerWidth = OutlinerPanel::PaneWidth;
+   float m_propertiesWidth = PropertiesPanel::PaneWidth;
+   float m_sidebarWidth = 300.f;
+   // N-panel (Blender's sidebar at the viewport's right edge): tabs Item (selection transform), Favorites (the Quick Favorites set), View
+   enum class SidebarTab
+   {
+      Item,
+      Favorites,
+      View
+   };
+   bool m_showSidebar = false;
+   SidebarTab m_sidebarTab = SidebarTab::Item;
+   void ToggleSidebar(); // N
+   void RenderSplitters();
+   void ShowSidebar(SidebarTab tab);
+   void OpenQuickFavorites() { m_openQuickFavorites = true; } // Q: popup of the Quick Favorites at the mouse
+   bool m_openQuickFavorites = false;
    void RenderNavCube(); // ImGuizmo view cube: drag orbits around the orbit pivot, click a face snaps to the axis view
 };
 

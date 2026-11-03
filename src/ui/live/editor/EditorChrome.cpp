@@ -186,8 +186,18 @@ void EditorChrome::RenderMenuBar()
          if (ImGui::MenuItem("Frame All", "Home"))
             editor.FrameAll();
          ImGui::Separator();
+         if (ImGui::MenuItem("Sidebar", "N", editor.m_showSidebar))
+            editor.ToggleSidebar();
+         if (ImGui::MenuItem("Quick Favorites", "Q"))
+            editor.OpenQuickFavorites();
+         if (ImGui::MenuItem("Menu Search...", "F3"))
          if (ImGui::MenuItem("Navigation Cube", nullptr, editor.m_showNavCube))
             editor.m_showNavCube = !editor.m_showNavCube;
+      if (ImGui::BeginMenu("View"))
+      {
+         if (ImGui::MenuItem("Pinned Properties", "P", editor.m_pinned.IsVisible()))
+            editor.m_pinned.ToggleVisible();
+         ImGui::EndMenu();
       if (editor.IsInspectMode() && !editor.m_table->IsLocked() && ImGui::BeginMenu("Debug"))
       {
          if (ImGui::MenuItem("Open debugger"))
@@ -203,6 +213,25 @@ void EditorChrome::RenderMenuBar()
          if (ImGui::MenuItem("Renderer Inspection"))
             editor.m_inspectionModal.Show();
          ImGui::EndMenu();
+      }
+      // Workspace tabs (Blender's top bar), centered in the menu bar
+      if (!editor.m_table->IsLocked())
+      {
+         float tabsWidth = 0.f;
+         for (int i = 0; i < PinnedPanel::WorkspaceCount; i++)
+            tabsWidth += ImGui::CalcTextSize(editor.m_pinned.GetWorkspace(i).name.c_str()).x + ImGui::GetStyle().FramePadding.x * 2.f + ImGui::GetStyle().ItemSpacing.x;
+         const float startX = max(ImGui::GetCursorPosX() + ImGui::GetStyle().ItemSpacing.x, 0.5f * (ImGui::GetWindowWidth() - tabsWidth));
+         ImGui::SetCursorPosX(startX);
+         for (int i = 0; i < PinnedPanel::WorkspaceCount; i++)
+         {
+            const string &name = editor.m_pinned.GetWorkspace(i).name;
+            const bool active = editor.m_pinned.GetActiveWorkspace() == i;
+            ImGui::PushStyleColor(ImGuiCol_Button, active ? ImGui::GetStyleColorVec4(ImGuiCol_Header) : ImVec4(0.f, 0.f, 0.f, 0.f));
+            if (ImGui::Button((name + "##Workspace").c_str()))
+               editor.m_pinned.ApplyWorkspace(i);
+            ImGui::PopStyleColor();
+            ImGui::SetItemTooltip("Workspace (Ctrl+%d)", i + 1);
+         }
       }
       float buttonWidth = 0.f;
       if (editor.IsInspectMode())
@@ -547,7 +576,7 @@ void EditorChrome::RenderStatusOverlay()
    const ImGuiIO &io = ImGui::GetIO();
 
    // Overlay Info Text
-   const ImVec2 overlayPos(OutlinerPanel::PaneWidth * editor.m_liveUI.GetDPI(), m_toolBarHeight + m_menuBarHeight + 5.f * editor.m_liveUI.GetDPI());
+   const ImVec2 overlayPos((editor.m_showOutliner ? editor.m_outlinerWidth : 0.f) * editor.m_liveUI.GetDPI(), m_toolBarHeight + m_menuBarHeight + 5.f * editor.m_liveUI.GetDPI());
 
    // Camera orbit lock toggle (drawn in its own window as the status overlay does not capture inputs)
    ImGui::SetNextWindowPos(overlayPos);
@@ -566,7 +595,7 @@ void EditorChrome::RenderStatusOverlay()
    const float lockToggleWidth = ImGui::GetItemRectSize().x;
    ImGui::End();
 
-   ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x - OutlinerPanel::PaneWidth * editor.m_liveUI.GetDPI(),
+   ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x - (editor.m_showOutliner ? editor.m_outlinerWidth : 0.f) * editor.m_liveUI.GetDPI(),
       io.DisplaySize.y - m_toolBarHeight - m_menuBarHeight - 5.f * editor.m_liveUI.GetDPI())); // Fixed outliner width (to be adjusted when moving ImGui to the docking branch)
    ImGui::SetNextWindowPos(overlayPos);
    ImGui::Begin("text overlay", nullptr, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav);

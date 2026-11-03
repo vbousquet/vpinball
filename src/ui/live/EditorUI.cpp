@@ -69,6 +69,7 @@ EditorUI::EditorUI(LiveUI &liveUI)
    , m_pbrConvertModal(*this)
    , m_partLibrary(*this)
    , m_scriptPanel(*this)
+   , m_pinned(*this)
    , m_undo(m_player->m_ptable)
 {
    m_table = m_player->m_ptable;
@@ -443,6 +444,7 @@ void EditorUI::StartFileOp(std::unique_ptr<AsyncFileOp> op)
          RestorePartsVisibility(); // Save the authored visibility, not the editor display state
       AsyncFileOp *const fileOp = op.get();
       PinTable *const table = op->saveTable != nullptr ? op->saveTable : m_table;
+      m_pinned.SaveTo(table); // The pinned properties list is saved with the table (table.json of packs)
       op->worker = std::thread(
          [fileOp, table]()
          {
@@ -594,7 +596,8 @@ Vertex2D EditorUI::GetUIVisibleFraction() const
    // Otherwise, the top chrome (and the side panes, unless the table is locked) are drawn over the render:
    // evaluate the remaining visible fraction, applied as a symmetric margin so that fitted content stays centered
    const ImGuiIO &io = ImGui::GetIO();
-   const float marginX = m_table->IsLocked() ? 0.f : max(OutlinerPanel::PaneWidth, PropertiesPanel::PaneWidth) * m_liveUI.GetDPI();
+   const float rightWidth = (m_showProperties ? m_propertiesWidth : 0.f) + (m_showSidebar ? m_sidebarWidth : 0.f);
+   const float marginX = m_table->IsLocked() ? 0.f : max(m_showOutliner ? m_outlinerWidth : 0.f, rightWidth) * m_liveUI.GetDPI();
    const float marginY = m_chrome.GetTopBarHeight();
    return Vertex2D(max(0.1f, 1.f - 2.f * marginX / io.DisplaySize.x), max(0.1f, 1.f - 2.f * marginY / io.DisplaySize.y));
 }
@@ -724,6 +727,17 @@ void EditorUI::RenderUI()
       m_outliner.Render(m_chrome.GetTopBarHeight());
       m_properties.Render(m_chrome.GetTopBarHeight());
    }
+   if (!m_inspectionModal.IsVisible())
+      m_pinned.Render(m_chrome.GetTopBarHeight()); // N-panel
+   if (!showFullUI)
+      m_openQuickFavorites = false;
+   if (showFullUI)
+   {
+      m_pinned.RenderQuickFavorites(); // Q
+      RenderSplitters();
+   }
+   if (showFullUI)
+      m_palette.Render();
    m_inspectionModal.Render();
    m_pbrConvertModal.Render();
    m_partLibrary.Render();
@@ -1340,7 +1354,13 @@ void EditorUI::RenderUI()
       if (!io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_S, false) && io.KeyCtrl && !io.KeyAlt && !io.KeyShift)
          SaveTable();
    {
-      if (ImGui::IsKeyReleased(ImGuiKey_Escape))
+      m_showOutliner = true;
+      m_outliner.FocusFilter();
+   }
+   const bool paletteEsc = m_palette.ConsumedEscape() | m_pinned.ConsumedEscape(); // The Esc that closed a popup is not an editor Esc
+   if (!io.WantCaptureKeyboard && m_fileOp == nullptr)
+   {
+      if (ImGui::IsKeyReleased(ImGuiKey_Escape) && !paletteEsc)
       {
          if (m_suppressNextEscape)
             m_suppressNextEscape = false; // Consumed by a field the Esc deactivated (e.g. the script editor)
@@ -1399,6 +1419,10 @@ void EditorUI::RenderUI()
             EnterPointEditMode();
       }
       else if (ImGui::IsKeyPressed(ImGuiKey_F) && io.KeyShift && !io.KeyCtrl && !io.KeyAlt) // Hide the UI (F frames the selection)
+      else if (ImGui::IsKeyPressed(ImGuiKey_N, false) && !io.KeyCtrl && !io.KeyAlt && !io.KeyShift)
+         ToggleSidebar(); // Blender's N-panel
+      else if (ImGui::IsKeyPressed(ImGuiKey_Q, false) && !io.KeyCtrl && !io.KeyAlt && !io.KeyShift)
+         OpenQuickFavorites(); // Blender's Quick Favorites
       {
          m_flyMode = !m_flyMode;
       }
@@ -2401,7 +2425,7 @@ void EditorUI::RenderNavCube()
    ImGuiIO &io = ImGui::GetIO();
    const float dpi = m_liveUI.GetDPI();
    const float size = 128.f * dpi;
-   const ImVec2 pos(io.DisplaySize.x - PropertiesPanel::PaneWidth * dpi - size - 16.f * dpi, m_chrome.GetTopBarHeight() + 8.f * dpi);
+   const ImVec2 pos(io.DisplaySize.x - ((m_showProperties ? m_propertiesWidth : 0.f) + (m_showSidebar ? m_sidebarWidth : 0.f)) * dpi - size - 16.f * dpi, m_chrome.GetTopBarHeight() + 8.f * dpi);
 
    // The cube is computed in a right handed, Y up world, while the editor world is X right, Y down the table, Z down (height is -Z):
    // R (row vector convention) maps editor Z (down) to -Y and editor Y to Z, a pure rotation about X. viewG = R^-1 * viewV, viewV = R * viewG
