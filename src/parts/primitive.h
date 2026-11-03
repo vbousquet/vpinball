@@ -301,6 +301,8 @@ public:
       const std::filesystem::path &filename, const MeshUnits units, const bool importAbsolutePosition, const bool centerMesh, const bool importMaterial, const bool importAnimation, const bool doForsyth);
 
    bool IsPlayfield() const { return StrCompareNoCase(m_name, "playfield_mesh"s); }
+   // Traced insert prototype: an additive card whose image is a multi-view traced bake ('TRACED_' image name prefix)
+   bool IsTracedInsert() const;
 
    float GetAlpha() const { return m_d.m_alpha; }
    void SetAlpha(const float value) { m_d.m_alpha = max(value, 0.f); }

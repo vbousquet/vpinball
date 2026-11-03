@@ -1168,6 +1168,8 @@ bool Primitive::GetFlasherDomeCookie(vec3 &cookie)
    return true;
 }
 
+bool Primitive::IsTracedInsert() const { return m_d.m_addBlend && lowerCase(m_d.m_szImage).rfind("traced_", 0) == 0; }
+
 void Primitive::Render(const unsigned int renderMask)
 {
    assert(m_renderer != nullptr);
@@ -1350,7 +1352,7 @@ void Primitive::Render(const unsigned int renderMask)
 
    // Traced insert prototype: an additive card whose image is a multi-view traced bake ('TRACED_' image name prefix). It is
    // drawn with the lamp off too, since the room still glints in its facets
-   const bool tracedInsert = m_d.m_addBlend && lowerCase(m_d.m_szImage).rfind("traced_", 0) == 0;
+   const bool tracedInsert = IsTracedInsert();
 
    // don't render additive primitive if there is nothing to add
    if (!isUIPass && m_d.m_addBlend && !tracedInsert && (m_d.m_color == 0 || alpha == 0.f))

@@ -358,10 +358,8 @@ void PrimitiveUIPart::UpdatePropertyPane(PropertyPane& props)
          m_part, "Bulb Offset Y (mm)"s, //
          [](const Primitive* primitive) { return primitive->m_d.m_bulbOffsetY; }, //
          [](Primitive* primitive, float v) { primitive->m_d.m_bulbOffsetY = v; }, -25.f, 25.f, 1, "Moves the hot spot along the card's Y");
-
-      props.SliderFloat<Primitive>(
-      props.SliderFloat<Primitive>(
-      props.SliderFloat<Primitive>(
+      if (!props.IsSkippingRest() && props.GetEditedPart<Primitive>(m_part)->IsTracedInsert())
+         props.ApplyBulbToAllButton(m_part);
 
       props.Separator("Flasher Dome"s);
       props.SliderFloat<Primitive>(

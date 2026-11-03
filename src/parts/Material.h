@@ -4,6 +4,8 @@
 
 #include "utils/fileio.h"
 
+#include <atomic>
+
 // only used for backward compatibility loading and saving (VPX version < 10.8)
 struct SaveMaterial //!! could still squeeze some stuff in here, due to implicit padding after the bool & unsigned chars!
 {
@@ -35,6 +37,22 @@ struct SavePhysicsMaterial
 };
 
 #define MATERIAL_VERSION 1 // for im/export
+
+// Runtime-only identity of a material (never saved, not part of the pack format): a new one for every material created, loaded or copied,
+// so that it tells apart a material from a later one of the same name that reuses its address. Assigning a material over another keeps
+// the identity of the destination (restoring a snapshot must not change who the material is)
+class MaterialUid final
+{
+public:
+   MaterialUid() : m_value(++s_next) { }
+   MaterialUid(const MaterialUid&) : MaterialUid() { }
+   MaterialUid& operator=(const MaterialUid&) { return *this; }
+   uint64_t Value() const { return m_value; }
+
+private:
+   uint64_t m_value;
+   static inline std::atomic<uint64_t> s_next { 0 };
+};
 
 class Material final
 {
@@ -187,6 +205,7 @@ public:
    }
 
    string m_name;
+   MaterialUid m_uid; // Runtime identity (see MaterialUid), used by the editor's undo records
 
    // shading properties
    MaterialType m_type;
