@@ -335,7 +335,9 @@ private:
    int m_vsmPoolTexLayers = 0; // layer count the pool texture was created with (framebuffers are created transiently per page job)
    bgfx::TextureHandle m_vsmPoolTex = BGFX_INVALID_HANDLE; // depth texture array backing the pool
    std::shared_ptr<Sampler> m_vsmPoolSampler;
-   bgfx::TextureHandle m_vsmTransTex = BGFX_INVALID_HANDLE; // RGBA8 texture array parallel to the pool: translucent casters' absorbance + nearness
+   bgfx::TextureHandle m_vsmTransTex = BGFX_INVALID_HANDLE; // RGBA16 texture array parallel to the pool: translucent casters' absorbance + nearness
+   bgfx::TextureFormat::Enum m_vsmTransFormat = bgfx::TextureFormat::RGBA16; // RGBA16, else RGBA16F, else RGBA8 (render target caps)
+   float m_vsmTransNearStep = 1.f / 65535.f; // nearness quantization step of m_vsmTransFormat (main pass pbrShadowParams.z)
    std::shared_ptr<Sampler> m_vsmTransSampler;
    bgfx::TextureHandle m_vsmPageTableTex = BGFX_INVALID_HANDLE; // CPU-generated page table (physical layer+1 per virtual page)
    std::shared_ptr<Sampler> m_vsmPageTableSampler;

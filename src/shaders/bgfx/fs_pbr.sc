@@ -124,12 +124,12 @@ uniform vec4 pbrProbeLods;   // x/y: max mip level of probe0/1, z: max mip level
 
 SAMPLER2DARRAY(tex_vsm_pool, 3);     // VSM physical page pool: depth texture array, one 128^2 page per layer
 SAMPLER2D     (tex_vsm_pagetables, 5); // VSM page table: physical layer+1 per virtual page (0 = not resident)
-SAMPLER2DARRAY(tex_vsm_trans, 6);    // VSM page pool transmittance: translucent casters' absorbance (rgb) and nearness (a)
+SAMPLER2DARRAY(tex_vsm_trans, 6);    // VSM page pool transmittance: translucent casters' absorbance (rgb) and nearness (a, 16 bit)
 
 uniform mat4 matShadowVP[32];   // ortho virtual map view-projection per shadowed light
 uniform vec4 pbrVSMParams[32];  // x: page-table texel base, y: pages across (face grid for cube), z: pages down, w: ortho depth range
 uniform vec4 pbrVSMBox[32];     // x/y: world->virtual-uv scale (1/ortho box extents), z: ortho near depth (used CPU side)
-uniform vec4 pbrShadowParams;   // x: 1/page size, y: slope-scaled depth bias, z/w: page render linear depth start + 1/range (SHADOW_TRANS)
+uniform vec4 pbrShadowParams;   // x: 1/page size, y: slope-scaled depth bias, z/w: page render linear depth start + 1/range (SHADOW_TRANS); main pass z: transmittance nearness quantization step
 
 #ifdef TRANSPARENT
 uniform vec4 refractionTint_thickness;
@@ -191,16 +191,43 @@ float pbr_vsm_fetch(const int idx, const vec2 luv)
 
 // Coloured transmittance of the translucent casters (printed and clear plastics) between the light and a receiver: the
 // page holds the strongest absorbance per channel and the nearness (1 - normalized linear depth) of the nearest
-// translucent caster, so receivers behind it get the plastic's colour while those in front of it (or none) stay white
+// translucent caster, so receivers behind it get the plastic's colour while those in front of it (or none) stay white.
+// phys = the page-table value of the page (pbr_vsm_tint below resolves it from a virtual page index).
+// The behind/in-front test is made per texel and filtered over the 4x4 texels around the lookup (4 bilinear gathers 1 texel
+// off on the diagonals, a ~3 texel tent): one test of the filtered nearness drew the plastics' silhouettes as stairs,
+// stretched along the floor by a low light's grazing angle (PF f125 on the playfield, Ben 2026-11-02). The absorbance is
+// the summed bilinear one over the covered fraction (the mean over the texels holding a caster), so the colour does not
+// fade toward the edge on top of the coverage ramp; fully covered gives the unfiltered value. Lookups with no translucent
+// caster in the 2x2 around them return after one gather.
+vec3 pbr_vsm_tint_phys(const float phys, const vec2 luv, const float receiverNearness)
+{
+   if (phys <= 0.0)
+      return vec3_splat(1.0);
+   const vec3 at = vec3((floor(luv * 128.0 - 0.5) + 1.0) * (1.0 / 128.0), phys - 1.0); // must match VSM::PAGE_DIM
+   BRANCH if (all(lessThan(textureGather(tex_vsm_trans, at, 3), vec4_splat(1e-4))))
+      return vec3_splat(1.0); // no translucent caster in the 2x2 around the lookup
+   // 4 bilinear taps 1 texel off the lookup on the diagonals: a ~3 texel tent over the 4x4 around it
+   float behind = 0.0, covered = 0.0;
+   vec3 absorb = vec3_splat(0.0);
+   UNROLL for (int k = 0; k < 4; k++)
+   {
+      const vec2 tuv = luv + vec2(float(k & 1) * 2.0 - 1.0, float(k >> 1) * 2.0 - 1.0) * (1.0 / 128.0);
+      const vec2 tc = tuv * 128.0 - 0.5;
+      const vec2 f = fract(tc);
+      const vec4 w = vec4((1.0 - f.x) * f.y, f.x * f.y, f.x * (1.0 - f.y), (1.0 - f.x) * (1.0 - f.y)); // gather order (i0,j1) (i1,j1) (i1,j0) (i0,j0)
+      const vec4 a = textureGather(tex_vsm_trans, vec3((floor(tc) + 1.0) * (1.0 / 128.0), phys - 1.0), 3);
+      behind += dot(w, step(vec4_splat(receiverNearness), a));
+      covered += dot(w, step(vec4_splat(1e-4), a));
+      absorb += texture2DArrayLod(tex_vsm_trans, vec3(tuv, phys - 1.0), 0.0).rgb;
+   }
+   return vec3_splat(1.0) - (behind * 0.25) * min(absorb / max(covered, 1e-4), vec3_splat(1.0));
+}
+
 vec3 pbr_vsm_tint(const int idx, const vec2 luv, const float receiverNearness)
 {
    if (idx < 0)
       return vec3_splat(1.0);
-   const float phys = texelFetch(tex_vsm_pagetables, ivec2(idx & 511, idx >> 9), 0).x;
-   if (phys <= 0.0)
-      return vec3_splat(1.0);
-   const vec4 t = texture2DArrayLod(tex_vsm_trans, vec3(luv, phys - 1.0), 0.0);
-   return receiverNearness < t.a ? vec3_splat(1.0) - t.rgb : vec3_splat(1.0);
+   return pbr_vsm_tint_phys(texelFetch(tex_vsm_pagetables, ivec2(idx & 511, idx >> 9), 0).x, luv, receiverNearness);
 }
 
 // Linear virtual-page index of a virtual-map uv, or -1 when outside the grid
@@ -226,16 +253,23 @@ float pbr_vsm_depth(const float ptBase, const vec2 grid, const vec2 vuv)
    #endif
 }
 
-// Cube paged depth for a lookup (cl.xy = face uv in [0,1], cl.z = face index)
-float pbr_vsm_cube_depth(const float ptBase, const float faceGrid, const vec4 cl)
+// Cube lookup (cl.xy = face uv in [0,1], cl.z = face index): its linear virtual-page index, then the page-local depth
+// sample of an already resolved physical page (page-table value, -1 when not resident)
+int pbr_vsm_cube_page(const float ptBase, const float faceGrid, const vec4 cl)
 {
    const int g = int(faceGrid + 0.5);
    const vec2 pg = floor(cl.xy * vec2_splat(faceGrid));
-   const int idx = int(ptBase + 0.5) + int(cl.z + 0.5) * g * g + int(pg.y) * g + int(pg.x);
+   return int(ptBase + 0.5) + int(cl.z + 0.5) * g * g + int(pg.y) * g + int(pg.x);
+}
+float pbr_vsm_page_depth(const float phys, const float faceGrid, const vec4 cl)
+{
+   if (phys <= 0.0)
+      return -1.0;
    #if TEX_V_IS_UP
-      return pbr_vsm_fetch(idx, vec2(fract(cl.x * faceGrid), 1.0 - fract(cl.y * faceGrid)));
+      const float d = texture2DArrayLod(tex_vsm_pool, vec3(fract(cl.x * faceGrid), 1.0 - fract(cl.y * faceGrid), phys - 1.0), 0.0).x;
+      return d * 2.0 - 1.0;
    #else
-      return pbr_vsm_fetch(idx, fract(cl.xy * vec2_splat(faceGrid)));
+      return texture2DArrayLod(tex_vsm_pool, vec3(fract(cl.xy * vec2_splat(faceGrid)), phys - 1.0), 0.0).x;
    #endif
 }
 
@@ -868,8 +902,11 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 
                   const float d = pbr_vsm_depth(vsmP.x, grid, tuv);
                   shadowAcc += d < 0.0 ? 1.0 : smoothstep(-cmpWin, cmpWin, (d - sc.z + bias) * vsmP.w);
                }
-               // Translucent casters: one bilinear tap at the centre (receiver 2 VPU behind them at least)
-               const float nearness = 1.0 - sc.z + 2.0 / max(vsmP.w, 1.0);
+               // Translucent casters: one bilinear tap at the centre (receiver 2 VPU behind them at least, plus the stored
+               // nearness quantization step and half a texel of slope, so a tilted plastic never tints itself in bands)
+               const vec2 texelW = pbrShadowParams.x / max(grid * vsmB.xy, vec2_splat(1e-6));
+               const float slopeW = 0.5 * max(texelW.x, texelW.y) * min(sqrt(1.0 - NdotLs * NdotLs) / NdotLs, 8.0);
+               const float nearness = 1.0 - sc.z + max((2.0 + slopeW) / max(vsmP.w, 1.0), 1.5 * pbrShadowParams.z);
                shadow = shadowAcc * (1.0 / 16.0) * pbr_vsm_tint(pbr_vsm_index(vsmP.x, grid, suv), fract(suv * grid), nearness);
             }
          }
@@ -892,7 +929,9 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 
          const float zN = 2.0; // near plane, must match the renderer's cube face projection
          const float zF = max(lPos.w, 60.0);
          const vec4 cl = pbr_shadow_cube_lookup(ldir);
-         const float blockerNdc = pbr_vsm_cube_depth(vsmP.x, faceGrid, cl);
+         const int cpage = pbr_vsm_cube_page(vsmP.x, faceGrid, cl);
+         const float cphys = texelFetch(tex_vsm_pagetables, ivec2(cpage & 511, cpage >> 9), 0).x;
+         const float blockerNdc = pbr_vsm_page_depth(cphys, faceGrid, cl);
          if (blockerNdc >= 0.0)
          {
             const float blocker = zN * zF / (zF - blockerNdc * (zF - zN));
@@ -913,14 +952,18 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 
                const vec2 toff = pbr_vsm_rot(vsmDisk[t], vsmRot);
                const vec3 tdir = normalize(ldir + (toff.x * tX + toff.y * tY) * filterRadius);
                const vec4 tl = pbr_shadow_cube_lookup(tdir);
-               const float tapNdc = pbr_vsm_cube_depth(vsmP.x, faceGrid, tl);
+               const int tpage = pbr_vsm_cube_page(vsmP.x, faceGrid, tl);
+               const float tphys = texelFetch(tex_vsm_pagetables, ivec2(tpage & 511, tpage >> 9), 0).x;
+               const float tapNdc = pbr_vsm_page_depth(tphys, faceGrid, tl);
                const float tapBlocker = tapNdc < 0.0 ? -1.0 : zN * zF / (zF - tapNdc * (zF - zN));
                shadowAcc += tapBlocker < 0.0 ? 1.0 : smoothstep(-cmpWin, cmpWin, tapBlocker - (dist * tl.w - bias));
             }
-            const int g = int(faceGrid + 0.5);
-            const vec2 pg = floor(cl.xy * vec2_splat(faceGrid));
-            const int cidx = int(vsmP.x + 0.5) + int(cl.z + 0.5) * g * g + int(pg.y) * g + int(pg.x);
-            shadow = shadowAcc * (1.0 / 16.0) * pbr_vsm_tint(cidx, fract(cl.xy * vec2_splat(faceGrid)), 1.0 - (dist * cl.w - 2.0) / zF);
+            // Translucent casters: receiver 2 VPU behind them at least, plus the nearness quantization step and half a texel of slope
+            const float slopeW = dist * invFaceRes * min(sqrt(1.0 - NdotLs * NdotLs) / NdotLs, 8.0);
+            const float transMargin = max((2.0 + slopeW) / zF, 1.5 * pbrShadowParams.z);
+            shadow = vec3_splat(shadowAcc * (1.0 / 16.0));
+            BRANCH if (shadowAcc > 0.0) // fully shadowed: no light left to tint
+               shadow *= pbr_vsm_tint_phys(cphys, fract(cl.xy * vec2_splat(faceGrid)), 1.0 - dist * cl.w / zF + transMargin);
          }
       }
       BRANCH if (shadowMode == 1 || shadowMode >= 3) // RAYTRACED_BALL_SHADOWS or PBR ball shadow tiers

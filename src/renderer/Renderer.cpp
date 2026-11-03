@@ -2697,10 +2697,20 @@ void Renderer::CreateVSMPagePoolTargets()
       m_vsmTransSampler = nullptr;
       if (bgfx::isValid(m_vsmTransTex))
          bgfx::destroy(m_vsmTransTex);
-      m_vsmTransTex = bgfx::createTexture2D(VSM::PAGE_DIM, VSM::PAGE_DIM, false, static_cast<uint16_t>(m_vsmPoolPages), bgfx::TextureFormat::RGBA8, BGFX_TEXTURE_RT);
+      // The nearness (alpha) is normalized over the light's whole depth range: 8 bits step ~9 VPU on a ~2400 VPU room key,
+      // beyond the 2 VPU self-tint margin, so a tilted plastic tinted itself in bands. 16 bit unorm (half float fallback)
+      // keeps it well under; the main pass margin also covers the step (pbrShadowParams.z)
+      constexpr uint32_t transCaps = BGFX_CAPS_FORMAT_TEXTURE_2D | BGFX_CAPS_FORMAT_TEXTURE_FRAMEBUFFER;
+      const uint32_t* const fmtCaps = bgfx::getCaps()->formats;
+      m_vsmTransFormat = (fmtCaps[bgfx::TextureFormat::RGBA16] & transCaps) == transCaps ? bgfx::TextureFormat::RGBA16
+         : (fmtCaps[bgfx::TextureFormat::RGBA16F] & transCaps) == transCaps              ? bgfx::TextureFormat::RGBA16F
+                                                                                         : bgfx::TextureFormat::RGBA8;
+      m_vsmTransNearStep = m_vsmTransFormat == bgfx::TextureFormat::RGBA16 ? 1.f / 65535.f : m_vsmTransFormat == bgfx::TextureFormat::RGBA16F ? 1.f / 2048.f : 1.f / 255.f;
+      if (m_vsmTransFormat == bgfx::TextureFormat::RGBA8)
+         PLOGW << "VSM transmittance: no 16 bit render target format, translucent shadow nearness falls back to 8 bit";
+      m_vsmTransTex = bgfx::createTexture2D(VSM::PAGE_DIM, VSM::PAGE_DIM, false, static_cast<uint16_t>(m_vsmPoolPages), m_vsmTransFormat, BGFX_TEXTURE_RT);
       bgfx::setName(m_vsmTransTex, "VSM Page Transmittance");
-      m_vsmTransSampler
-         = std::make_shared<Sampler>(m_renderDevice, "VSM Page Transmittance"s, SurfaceType::RT_DEFAULT, m_vsmTransTex, bgfx::TextureFormat::RGBA8, VSM::PAGE_DIM, VSM::PAGE_DIM, true);
+      m_vsmTransSampler = std::make_shared<Sampler>(m_renderDevice, "VSM Page Transmittance"s, SurfaceType::RT_DEFAULT, m_vsmTransTex, m_vsmTransFormat, VSM::PAGE_DIM, VSM::PAGE_DIM, true);
       m_renderDevice->m_basicShader->SetTexture(ShaderUniform::tex_vsm_trans, m_vsmTransSampler);
    }
    if (!bgfx::isValid(m_vsmPageTableTex))
@@ -3172,7 +3182,7 @@ void Renderer::UpdateVirtualShadowMaps()
          for (const Caster& caster : casters)
          {
             std::fill(markTmp.begin(), markTmp.end(), uint8_t(0));
-            // Same PCF bleed as the ortho maps: taps reach up to 8/(grid*PAGE_SIZE) of a face
+            // Same PCF bleed as the ortho maps: taps reach up to 8/(grid*PAGE_DIM) of a face
             // (see fs_pbr filterRadius clamp), under a page, so one page ring covers it
             VSM::MarkCubePages(lPos, zNear, caster.boundsMin, caster.boundsMax, VSM::CUBE_FACE_GRID, 1, markTmp.data());
             const bool dynDirty = dynamicTier && !caster.isStatic;
@@ -3362,7 +3372,7 @@ void Renderer::UpdateVirtualShadowMaps()
    m_renderDevice->m_basicShader->SetMatrix(ShaderUniform::matShadowVP, m_vsmShadowVP, VSM::MAX_LIGHTS);
    m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrVSMParams, m_vsmParams, VSM::MAX_LIGHTS);
    m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrVSMBox, m_vsmBox, VSM::MAX_LIGHTS);
-   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrShadowParams, 1.f / VSM::PAGE_DIM, 0.002f, 0.f, 0.f);
+   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrShadowParams, 1.f / VSM::PAGE_DIM, 0.002f, m_vsmTransNearStep, 0.f);
 }
 #endif
 
