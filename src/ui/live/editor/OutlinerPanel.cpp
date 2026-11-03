@@ -2,6 +2,7 @@
 
 #include "core/stdafx.h"
 #include "OutlinerPanel.h"
+#include "IconsLucide.h"
 
 #include "fonts/IconsForkAwesome.h"
 #include "parts/Collection.h"
@@ -32,6 +33,157 @@ static void PushInactiveSelectionColor()
    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(color.x, color.y, color.z, color.w * 0.4f));
 }
 
+namespace
+{
+// Type display names, with an alias also accepted by the 't:' filter token
+struct TypeInfo
+{
+   ItemTypeEnum type;
+   const char *name;
+   const char *alias;
+};
+constexpr TypeInfo TypeInfos[] = {
+   { eItemSurface, "Surface", "wall" },
+   { eItemFlipper, "Flipper", "" },
+   { eItemTimer, "Timer", "" },
+   { eItemPlunger, "Plunger", "" },
+   { eItemTextbox, "Textbox", "" },
+   { eItemBumper, "Bumper", "" },
+   { eItemTrigger, "Trigger", "" },
+   { eItemLight, "Light", "" },
+   { eItemKicker, "Kicker", "" },
+   { eItemDecal, "Decal", "" },
+   { eItemGate, "Gate", "" },
+   { eItemSpinner, "Spinner", "" },
+   { eItemRamp, "Ramp", "" },
+   { eItemDispReel, "Display Reel", "dispreel" },
+   { eItemLightSeq, "Light Seq", "lightseq" },
+   { eItemPrimitive, "Primitive", "" },
+   { eItemFlasher, "Flasher", "" },
+   { eItemRubber, "Rubber", "" },
+   { eItemHitTarget, "Target", "hittarget" },
+   { eItemBall, "Ball", "" },
+   { eItemPartGroup, "Part Group", "partgroup" },
+};
+
+const TypeInfo *FindTypeInfo(ItemTypeEnum type)
+{
+   for (const TypeInfo &info : TypeInfos)
+      if (info.type == type)
+         return &info;
+   return nullptr;
+}
+
+// prefix must already be lowercase
+bool StartsWithNoCase(const char *text, const string &prefix)
+{
+   for (const char p : prefix)
+   {
+      if (*text == '\0' || cLower(*text) != p)
+         return false;
+      ++text;
+   }
+   return true;
+}
+
+// Object type categories of the filter popover (bit index in the type mask)
+enum TypeCategory
+{
+   CatPrimitives,
+   CatLights,
+   CatFlashers,
+   CatRamps,
+   CatWalls,
+   CatRubbers,
+   CatFlippers,
+   CatBumpers,
+   CatTargets,
+   CatGatesSpinners,
+   CatTriggersKickers,
+   CatOther,
+   CatCount
+};
+static_assert(OutlinerPanel::AllTypesMask == (1u << CatCount) - 1u);
+constexpr const char *CategoryLabels[CatCount] = { "Primitives", "Lights", "Flashers", "Ramps", "Walls", "Rubbers", "Flippers", "Bumpers", "Targets", "Gates / Spinners", "Triggers / Kickers", "Other" };
+
+TypeCategory CategoryOf(ItemTypeEnum type)
+{
+   switch (type)
+   {
+   case eItemPrimitive: return CatPrimitives;
+   case eItemLight: return CatLights;
+   case eItemFlasher: return CatFlashers;
+   case eItemRamp: return CatRamps;
+   case eItemSurface: return CatWalls;
+   case eItemRubber: return CatRubbers;
+   case eItemFlipper: return CatFlippers;
+   case eItemBumper: return CatBumpers;
+   case eItemHitTarget: return CatTargets;
+   case eItemGate:
+   case eItemSpinner: return CatGatesSpinners;
+   case eItemTrigger:
+   case eItemKicker: return CatTriggersKickers;
+   default: return CatOther;
+   }
+}
+
+const char *TypeIcon(ItemTypeEnum type)
+{
+   switch (type)
+   {
+   case eItemPrimitive: return ICON_LC_BOX;
+   case eItemLight: return ICON_LC_LIGHTBULB;
+   case eItemFlasher: return ICON_LC_ZAP;
+   case eItemRamp: return ICON_LC_ROUTE;
+   case eItemSurface: return ICON_LC_SQUARE;
+   case eItemRubber: return ICON_LC_CIRCLE;
+   case eItemFlipper: return ICON_LC_POINTER;
+   case eItemBumper: return ICON_LC_DISC;
+   case eItemHitTarget: return ICON_LC_CIRCLE_DOT;
+   case eItemGate: return ICON_LC_MOVE_HORIZONTAL;
+   case eItemSpinner: return ICON_LC_REFRESH_CW;
+   case eItemTrigger: return ICON_LC_MINUS;
+   case eItemKicker: return ICON_LC_CIRCLE;
+   case eItemPlunger: return ICON_LC_ARROW_UP;
+   case eItemTimer: return ICON_LC_TIMER;
+   case eItemTextbox: return ICON_LC_TYPE;
+   case eItemDecal: return ICON_LC_IMAGE;
+   default: return ICON_LC_TAG;
+   }
+}
+}
+
+void OutlinerPanel::ParseFilter()
+{
+   if (m_filter == m_parsedFilter)
+      return;
+   m_parsedFilter = m_filter;
+   m_tokens.names.clear();
+   m_tokens.types.clear();
+   m_tokens.materials.clear();
+   const string lowered = lowerCase(m_filter);
+   size_t pos = 0;
+   while (pos < lowered.size())
+   {
+      const size_t end = std::min(lowered.find(' ', pos), lowered.size());
+      string token = lowered.substr(pos, end - pos);
+      pos = end + 1;
+      if (token.empty())
+         continue;
+      vector<string> *target = &m_tokens.names;
+      if (token.size() >= 2 && token[1] == ':' && (token[0] == 't' || token[0] == 'm' || token[0] == 'n'))
+      {
+         target = token[0] == 't' ? &m_tokens.types : token[0] == 'm' ? &m_tokens.materials : &m_tokens.names;
+         token.erase(0, 2);
+         if (token.empty())
+            continue;
+      }
+      target->push_back(std::move(token));
+   }
+   m_openMatchesPending = true;
+   ++m_filterGeneration;
+}
+
 bool OutlinerPanel::MatchesFilter(const string &name) const
 {
    if (m_filter.empty())
@@ -51,7 +203,7 @@ void OutlinerPanel::Render(float topBarHeight)
    const float pane_width = PaneWidth * editor.m_liveUI.GetDPI();
    ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + topBarHeight));
    ImGui::SetNextWindowSize(ImVec2(pane_width, viewport->Size.y - topBarHeight));
-   constexpr ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove
+   constexpr ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove
       | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f * editor.m_liveUI.GetDPI(), 4.0f * editor.m_liveUI.GetDPI()));
    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
@@ -61,7 +213,7 @@ void OutlinerPanel::Render(float topBarHeight)
       const bool popStyle = m_syncToSelection;
       if (popStyle)
          ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-      if (ImGui::Button(ICON_FK_LINK "##SyncTree"))
+      if (ImGui::Button(ICON_LC_LINK "##SyncTree"))
       {
          m_syncToSelection = !m_syncToSelection;
          m_lastSyncedPart = nullptr; // Reveal the current selection on next render
@@ -72,17 +224,54 @@ void OutlinerPanel::Render(float topBarHeight)
          ImGui::SetTooltip("Sync tree with selection");
    }
    {
-      ImGui::SameLine();
-      const float clearFilterWidth = ImGui::CalcTextSize(ICON_FK_TIMES).x + ImGui::GetStyle().FramePadding.x * 2.0f;
-      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - clearFilterWidth - ImGui::GetStyle().ItemSpacing.x);
-      ImGui::InputTextWithHint("##OutlinerFilter", "Name part filter", &m_filter);
-   }
-   {
+      const float buttonWidth = ImGui::CalcTextSize(ICON_LC_X).x + style.FramePadding.x * 2.0f;
+      const float filterWidth = ImGui::CalcTextSize(ICON_LC_LIST_FILTER).x + style.FramePadding.x * 2.0f;
+      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - buttonWidth - filterWidth - style.ItemSpacing.x * 2.0f);
+      if (m_focusFilter)
+      {
+         ImGui::SetKeyboardFocusHere();
+         m_focusFilter = false;
+      }
+      ImGui::InputTextWithHint("##OutlinerFilter", "Search", &m_filter);
+      ImGui::SetItemTooltip("Name words, t:light, m:<material>, n:<name> (Ctrl+F)");
       ImGui::SameLine();
       ImGui::BeginDisabled(m_filter.empty());
-      if (ImGui::Button(ICON_FK_TIMES "##ClearOutlinerFilter"))
+      if (ImGui::Button(ICON_LC_X "##ClearOutlinerFilter"))
          m_filter.clear();
       ImGui::EndDisabled();
+      ImGui::SameLine();
+      const bool typeFilterActive = m_typeMask != AllTypesMask || m_selectedOnly;
+      if (typeFilterActive)
+         ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+      if (ImGui::Button(ICON_LC_LIST_FILTER "##OutlinerFilterButton"))
+         ImGui::OpenPopup("##OutlinerFilterPopup");
+      if (typeFilterActive)
+         ImGui::PopStyleColor();
+      ImGui::SetItemTooltip("Filters");
+      ImGui::SetNextWindowPos(ImVec2(ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y), ImGuiCond_Always, ImVec2(1.f, 0.f));
+      if (ImGui::BeginPopup("##OutlinerFilterPopup"))
+      {
+         bool changed = false;
+         if (ImGui::SmallButton("All"))
+         {
+            m_typeMask = AllTypesMask;
+            changed = true;
+         }
+         ImGui::SameLine();
+         if (ImGui::SmallButton("None"))
+         {
+            m_typeMask = 0;
+            changed = true;
+         }
+         ImGui::Separator();
+         for (int cat = 0; cat < CatCount; ++cat)
+            changed |= ImGui::CheckboxFlags(CategoryLabels[cat], &m_typeMask, 1u << cat);
+         ImGui::Separator();
+         changed |= ImGui::Checkbox("Selected only", &m_selectedOnly);
+         if (changed)
+            m_openMatchesPending = true;
+         ImGui::EndPopup();
+      }
    }
    ImGui::Separator();
 
@@ -209,6 +398,7 @@ void OutlinerPanel::Render(float topBarHeight)
       {
          vector<PartGroup *> groupStack;
          for (const auto &edit : editor.m_editables)
+         if (ImGui::SmallButton(((editable->IsUIVisible(false) ? ICON_LC_EYE : ICON_LC_EYE_OFF) + "##Eye__"s + editable->GetName()).c_str()))
          {
             IEditable *const editable = edit->GetEditable();
             while (!groupStack.empty() && (editable->GetPartGroup() == nullptr || !editable->IsChild(groupStack.back())))

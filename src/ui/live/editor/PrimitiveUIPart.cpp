@@ -44,8 +44,8 @@ void PrimitiveUIPart::UpdatePropertyPane(PropertyPane& props)
 {
    props.EditableHeader("Primitive"s, m_part);
 
-   // Apply asynchronous mesh file dialog results
-   if (m_pendingMeshImport && !m_pendingMeshImport->empty())
+   // Apply asynchronous mesh file dialog results (not in the hidden pin harvest pane, which would open the dialogs out of sight)
+   if (!props.IsHarvest() && m_pendingMeshImport && !m_pendingMeshImport->empty())
    {
       // A file was selected: reset the options to their defaults and show the import option dialog
       m_meshImportFileName = *m_pendingMeshImport;
@@ -59,7 +59,7 @@ void PrimitiveUIPart::UpdatePropertyPane(PropertyPane& props)
       m_meshImportFailed = false;
       ImGui::OpenPopup("Wavefront OBJ Importer");
    }
-   if (m_pendingMeshExport && !m_pendingMeshExport->empty())
+   if (!props.IsHarvest() && m_pendingMeshExport && !m_pendingMeshExport->empty())
    {
       // A file was selected: reset the options to their defaults and show the export option dialog
       m_meshExportFileName = *m_pendingMeshExport;

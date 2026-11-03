@@ -2,6 +2,8 @@
 
 #include "core/stdafx.h"
 #include "PropertiesPanel.h"
+#include "IconsLucide.h"
+#include "EditorTheme.h"
 
 #include "audio/AudioPlayer.h"
 #include "core/editablereg.h"
@@ -10,7 +12,19 @@
 #include "parts/Collection.h"
 #include "parts/Material.h"
 #include "parts/Sound.h"
+#include "parts/bumper.h"
+#include "parts/decal.h"
+#include "parts/flipper.h"
+#include "parts/gate.h"
+#include "parts/hittarget.h"
+#include "parts/kicker.h"
+#include "parts/plunger.h"
 #include "parts/primitive.h"
+#include "parts/ramp.h"
+#include "parts/rubber.h"
+#include "parts/spinner.h"
+#include "parts/surface.h"
+#include "parts/trigger.h"
 #include "physics/PhysicsEngine.h"
 #include "renderer/Texture.h"
 #include "ui/live/EditorUI.h"
@@ -22,6 +36,679 @@
 namespace VPX::EditorUI
 {
 
+// Curation rules: which fields of a type make its Look and Transform sections. A field is Look when the pane registered it under
+// PropertyPane::Tier::Common, or when its group (section or separator) or label is listed below; the group lists are the pin
+// quick sets (see-through, bulb, dome). Everything stays in the full sheet under "Advanced".
+struct CurationRules
+{
+   std::initializer_list<const char *> lookGroups;
+   std::initializer_list<const char *> lookLabels;
+   std::initializer_list<const char *> transformLabels;
+   std::initializer_list<const char *> tracedInsertHiddenGroups; // Groups left out of the Look of a traced insert (fields that do not apply to it)
+};
+
+static const CurationRules *GetCurationRules(PinKind kind, int itemType)
+{
+   static const CurationRules primitive { { "Refractions", "Traced Insert Bulb", "Flasher Dome" }, { "Visible", "Material", "Image", "Reflection Strength", "Modulate Opacity", "Modulate Color" },
+      { "Position", "Orientation", "Scale" }, { "Refractions" } }; // A traced insert has no refraction: its block is all zeros
+   // The light pane marks its Light Settings section Common (PropertyPane::SetTier)
+   static const CurationRules light { {}, { "Type", "State", "Show Bulb", "Transmit", "Modulate" }, { "Center", "Position", "Height", "Surface" } };
+   static const CurationRules flasher { {}, { "Visible", "Color", "Image A", "Image B", "Mix", "Mix Factor (%)", "Opacity (%)", "Additive Blend", "Modulate" }, { "Position", "Rotation" } };
+   static const CurationRules material { { "See-Through Surface" },
+      { "Type", "Color", "Metallic", "Roughness", "Occlusion", "Emission Intensity", "Clear Coat", "Clear Coat Roughness", "Edge Brightness", "Enable Transparency", "Opacity", "Edge Opacity",
+         "Thickness" },
+      {} };
+   static const CurationRules table { { "Environment Lighting" },
+      { "Light Em. Scale", "Light Height", "Light Range", "Scene Lighting Scale", "Bloom Strength", "Tonemapping", "Exposure", "Enable Ambient Occlusion", "Ambient Occlusion Scale",
+         "Enable Sc. Sp. Reflections", "Screen Space Reflection Scale" },
+      {} };
+   switch (kind)
+   {
+   case PinKind::Table: return &table;
+   case PinKind::Material: return &material;
+   case PinKind::Part:
+      switch (itemType)
+      {
+      case eItemPrimitive: return &primitive;
+      case eItemLight: return &light;
+      case eItemFlasher: return &flasher;
+      default: return nullptr;
+      }
+   }
+   return nullptr;
+}
+
+static bool Listed(std::initializer_list<const char *> list, const string &value)
+{
+   return std::ranges::any_of(list, [&value](const char *item) { return value == item; });
+}
+
+// The "Apply to all traced inserts" button at the end of the Look of a traced insert (the full sheet has it under the bulb fields)
+static void DrawApplyBulbButton(PropertyPane &props, PinKind kind, void *obj)
+{
+   if (kind != PinKind::Part || props.IsMultiEdit() || obj == nullptr)
+      return;
+   IEditable *const part = static_cast<IEditable *>(obj);
+   if (part->GetItemType() == eItemPrimitive && static_cast<const Primitive *>(part)->IsTracedInsert())
+      props.ApplyBulbToAllButton(part);
+}
+
+string PropertiesPanel::PartMaterial(const IEditable *part)
+{
+   switch (part->GetItemType())
+   {
+   case eItemPrimitive: return static_cast<const Primitive *>(part)->m_d.m_szMaterial;
+   case eItemRamp: return static_cast<const Ramp *>(part)->m_d.m_szMaterial;
+   case eItemSurface: return static_cast<const Surface *>(part)->m_d.m_szTopMaterial;
+   case eItemDecal: return static_cast<const Decal *>(part)->m_d.m_szMaterial;
+   case eItemFlipper: return static_cast<const Flipper *>(part)->m_d.m_szMaterial;
+   case eItemHitTarget: return static_cast<const HitTarget *>(part)->m_d.m_szMaterial;
+   case eItemPlunger: return static_cast<const Plunger *>(part)->m_d.m_szMaterial;
+   case eItemRubber: return static_cast<const Rubber *>(part)->m_d.m_szMaterial;
+   case eItemSpinner: return static_cast<const Spinner *>(part)->m_d.m_szMaterial;
+   case eItemKicker: return static_cast<const Kicker *>(part)->m_d.m_szMaterial;
+   case eItemTrigger: return static_cast<const Trigger *>(part)->m_d.m_szMaterial;
+   case eItemGate: return static_cast<const Gate *>(part)->m_d.m_szMaterial;
+   case eItemBumper: return static_cast<const Bumper *>(part)->m_d.m_szCapMaterial;
+   default: return string();
+   }
+}
+
+void PropertiesPanel::PrepareCuration()
+{
+   EditorUI &editor = m_editor;
+   PinKind kind = PinKind::Table;
+   string name;
+   int itemType = -1;
+   string partMaterial;
+   switch (editor.m_selection.GetType())
+   {
+   case Selection::S_NONE: break;
+   case Selection::S_MATERIAL:
+      kind = PinKind::Material;
+      name = editor.m_selection.GetMaterial()->m_name;
+      break;
+   case Selection::S_EDITABLE:
+      kind = PinKind::Part;
+      name = editor.m_selection.GetPart()->GetEditable()->GetName();
+      itemType = editor.m_selection.GetPart()->GetEditable()->GetItemType();
+      partMaterial = PartMaterial(editor.m_selection.GetPart()->GetEditable());
+      break;
+   default:
+      m_curation.active = false;
+      m_materialCuration.active = false;
+      return;
+   }
+   // Multi selections keep the full sheet (fields of other types, mixed values)
+   const bool single = editor.m_multiSel.size() <= 1;
+   m_curation.tabbed = single;
+   PrepareCurationFor(kind, name, itemType, single, m_curation);
+   m_hasMaterialTab = single && kind == PinKind::Part && !partMaterial.empty() && editor.m_table->GetMaterial(partMaterial) != nullptr;
+   // Tab memory per object type; a search palette jump goes to the tab holding the field
+   if (m_curation.active && m_curation.tabbed)
+   {
+      if (const auto it = m_tabMemory.find(TabKey()); it != m_tabMemory.end())
+         m_tab = it->second;
+      else
+         m_tab = HasTab(Tab::Look) ? Tab::Look : Tab::Object; // First visit of this type: its look
+      if (PropertyPane::IsFocusPending() && PropertyPane::GetFocusKey().kind == kind && PropertyPane::GetFocusKey().name == name)
+      {
+         m_tab = Tab::Advanced;
+         for (int t = 0; t < static_cast<int>(Tab::Count); t++)
+            if (std::ranges::any_of(m_curation.tabs[t], [](const PinnedPanel::Def *def) { return def->key == PropertyPane::GetFocusKey(); }))
+            {
+               m_tab = static_cast<Tab>(t);
+               break;
+            }
+         m_tabMemory[TabKey()] = m_tab;
+      }
+      if (!HasTab(m_tab))
+         m_tab = HasTab(Tab::Look) ? Tab::Look : HasTab(Tab::Object) ? Tab::Object : Tab::Advanced;
+   }
+   const bool hasMaterial = single && !partMaterial.empty() && editor.m_table->GetMaterial(partMaterial) != nullptr;
+   PrepareCurationFor(PinKind::Material, partMaterial, -1, hasMaterial, m_materialCuration);
+}
+
+bool PropertiesPanel::IsSelectionAlive(const Selection &sel) const
+{
+   const EditorUI &editor = m_editor;
+   const PinTable *const table = editor.m_table;
+   switch (sel.GetType())
+   {
+   case Selection::S_EDITABLE: return std::ranges::find(editor.m_editables, sel.GetPart()) != editor.m_editables.end();
+   case Selection::S_MATERIAL: return std::ranges::find(table->m_materials, sel.GetMaterial()) != table->m_materials.end();
+   case Selection::S_IMAGE: return std::ranges::find(table->m_vimage, sel.GetImage()) != table->m_vimage.end();
+   case Selection::S_SOUND: return std::ranges::find(table->m_vsound, sel.GetSound()) != table->m_vsound.end();
+   case Selection::S_RENDERPROBE: return std::ranges::find(table->m_vrenderprobe, sel.GetProbe()) != table->m_vrenderprobe.end();
+   case Selection::S_COLLECTION: return std::ranges::find(table->GetCollections(), sel.GetCollection()) != table->GetCollections().end();
+   default: return true;
+   }
+}
+
+int PropertiesPanel::TabKey() const
+{
+   return m_curation.kind == PinKind::Table ? -1 : m_curation.kind == PinKind::Material ? -2 : static_cast<IEditable *>(m_curation.obj)->GetItemType();
+}
+
+bool PropertiesPanel::HasTab(Tab tab) const
+{
+   switch (tab)
+   {
+   case Tab::Advanced: return true;
+   case Tab::Object:
+      // Skipped when there is nothing to show (e.g. a light has no object settings and no material)
+      return !m_curation.tabs[static_cast<int>(Tab::Object)].empty()
+         || (m_curation.kind == PinKind::Part && m_curation.obj != nullptr && !PartMaterial(static_cast<const IEditable *>(m_curation.obj)).empty());
+   case Tab::Material: return m_hasMaterialTab;
+   default: return !m_curation.tabs[static_cast<int>(tab)].empty();
+   }
+}
+
+void PropertiesPanel::DrawTabStrip()
+{
+   static constexpr const char *icons[] = { ICON_LC_BOX, ICON_LC_MOVE_3D, ICON_LC_CIRCLE_DOT, ICON_LC_SUN, ICON_LC_ATOM, ICON_LC_CODE, ICON_LC_SLIDERS_HORIZONTAL };
+   static constexpr const char *names[] = { "Object", "Transform", "Material", "Look", "Physics", "Script & Events", "Advanced (every field)" };
+   const float dpi = m_editor.m_liveUI.GetDPI();
+   const float stripWidth = 32.f * dpi;
+   const ImVec2 size(28.f * dpi, 28.f * dpi);
+   // Strip background is the child's (ChildBg); 1 px border on its right edge
+   {
+      const ImVec2 pos = ImGui::GetWindowPos();
+      const ImVec2 winSize = ImGui::GetWindowSize();
+      ImGui::GetWindowDrawList()->AddLine(ImVec2(pos.x + winSize.x - 1.f, pos.y), ImVec2(pos.x + winSize.x - 1.f, pos.y + winSize.y), EditorTheme::Border);
+   }
+   ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.f);
+   ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 4.f * dpi));
+   ImGui::PushStyleColor(ImGuiCol_ButtonHovered, EditorTheme::V(EditorTheme::Hover));
+   ImGui::PushStyleColor(ImGuiCol_ButtonActive, EditorTheme::V(EditorTheme::Hover));
+   const auto tabButton = [&](const char *label, bool active) -> bool
+   {
+      ImGui::SetCursorPosX((stripWidth - size.x) * 0.5f);
+      ImGui::PushStyleColor(ImGuiCol_Button, active ? EditorTheme::V(EditorTheme::Raised) : ImVec4(0.f, 0.f, 0.f, 0.f));
+      ImGui::PushStyleColor(ImGuiCol_Text, EditorTheme::V(active ? EditorTheme::Accent : EditorTheme::TextDim));
+      const bool clicked = ImGui::Button(label, size);
+      ImGui::PopStyleColor(2);
+      return clicked;
+   };
+   ImGui::SetCursorPosY(4.f * dpi);
+   // Pin ID: lock the editor on the current object
+   if (tabButton(ICON_LC_PIN "##PinID", m_locked))
+   {
+      m_locked = !m_locked;
+      m_lockedSel = m_editor.m_selection;
+   }
+   ImGui::SetItemTooltip(m_locked ? "Unpin: follow the selection again" : "Pin: keep showing this object while selecting others");
+   ImGui::Dummy(ImVec2(0.f, 2.f * dpi)); // 10 px between the pin and the tabs (with the item spacings)
+   for (int t = 0; t < static_cast<int>(Tab::Count); t++)
+   {
+      if (!HasTab(static_cast<Tab>(t)))
+         continue;
+      const bool active = m_tab == static_cast<Tab>(t) && !IsSearching(); // A search spans every tab: none is highlighted
+      ImGui::PushID(t);
+      if (tabButton(icons[t], active))
+      {
+         m_search.clear(); // Picking a tab leaves the search
+         m_searchTerms.clear();
+         m_tab = static_cast<Tab>(t);
+         m_tabMemory[TabKey()] = m_tab;
+      }
+      ImGui::PopID();
+      ImGui::SetItemTooltip("%s", names[t]);
+   }
+   ImGui::PopStyleColor(2);
+   ImGui::PopStyleVar(2);
+}
+
+void PropertiesPanel::DrawTabContent(PropertyPane &props)
+{
+   EditorUI &editor = m_editor;
+   const bool tabbed = m_curation.active && m_curation.tabbed;
+   // Object: the part's material chip (a click selects the material) is the first row of the Object section, drawn below
+   string objectMaterial;
+   if ((!tabbed || m_tab == Tab::Object) && !IsSearching() && editor.m_selection.GetType() == Selection::S_EDITABLE && !props.IsMultiEdit())
+      objectMaterial = PartMaterial(props.GetEditedPart(editor.m_selection.GetPart()->GetEditable()));
+   if (tabbed && IsSearching())
+   {
+      const int shown = DrawSearchResults(props, m_curation, "");
+      if (shown == 0 && CountSearchMatches(m_materialCuration) == 0)
+      {
+         ImGui::Indent(ImGui::GetStyle().FramePadding.x * 2.f);
+         ImGui::TextDisabled("No fields match \"%s\"", m_search.c_str());
+         ImGui::Unindent(ImGui::GetStyle().FramePadding.x * 2.f);
+      }
+      props.SkipRest(true);
+      return;
+   }
+   if (!tabbed)
+   {
+      if (!objectMaterial.empty())
+      {
+         props.PropertyLabel("Material"s);
+         if (ImGui::Button((objectMaterial + "  " ICON_LC_ARROW_RIGHT "###MaterialChip").c_str(), ImVec2(ImGui::CalcItemWidth(), 0.f)))
+            m_pendingMaterialSel = editor.m_table->GetMaterial(objectMaterial);
+         ImGui::SetItemTooltip("Select this material");
+         props.FlushRow();
+      }
+      return;
+   }
+   static constexpr const char *titles[] = { "Object", "Transform", "Material", "Look", "Physics", "Script & Events", "Advanced" };
+   const vector<const PinnedPanel::Def *> &defs = m_curation.tabs[static_cast<int>(m_tab)];
+   if (!defs.empty() || !objectMaterial.empty())
+   {
+      const int modifiedBefore = props.GetModifiedField();
+      ImGui::PushID("##Tab"); // The tab rows draw the same fields as the full sheet: keep their IDs apart
+      if (props.BeginSection(titles[static_cast<int>(m_tab)]))
+      {
+         props.SetLookSliders(true);
+         if (!objectMaterial.empty())
+         {
+            props.PropertyLabel("Material"s);
+            if (ImGui::Button((objectMaterial + "  " ICON_LC_ARROW_RIGHT "###MaterialChip").c_str(), ImVec2(ImGui::CalcItemWidth(), 0.f)))
+               m_pendingMaterialSel = editor.m_table->GetMaterial(objectMaterial);
+            ImGui::SetItemTooltip("Select this material");
+            props.FlushRow();
+         }
+         // Several field groups on one tab (Transform: "Position, Rotation & Size" and "Additional Transform"): each gets its sub-header
+         const bool multiGroup = m_tab == Tab::Transform && std::ranges::any_of(defs, [&defs](const PinnedPanel::Def *def) { return def->group != defs.front()->group; });
+         string lastGroup;
+         for (const PinnedPanel::Def *def : defs)
+         {
+            if (multiGroup && !def->group.empty() && def->group != lastGroup && def->group != titles[static_cast<int>(m_tab)])
+               props.Separator(def->group);
+            lastGroup = def->group;
+            def->draw(props, m_curation.obj);
+         }
+         if (m_tab == Tab::Look)
+            DrawApplyBulbButton(props, m_curation.kind, m_curation.obj);
+         props.EndSection();
+      }
+      ImGui::PopID();
+      if (props.GetModifiedField() != modifiedBefore)
+         m_curation.reharvest = true;
+   }
+   props.SkipRest(m_tab != Tab::Advanced);
+}
+
+void PropertiesPanel::PrepareCurationFor(PinKind kind, const string &name, int itemType, bool enabled, Curation &cur)
+{
+   EditorUI &editor = m_editor;
+   const CurationRules *const rules = enabled ? GetCurationRules(kind, itemType) : nullptr;
+   if (!enabled || (rules == nullptr && !cur.tabbed))
+   {
+      cur.active = false;
+      return;
+   }
+   // Harvest again after an edit, and every 2 s for changes made elsewhere (undo, script, other panes) that can show or hide
+   // fields (material type, render mode,...); never while a field is being dragged or typed in
+   const double now = ImGui::GetTime();
+   if ((cur.reharvest || now - cur.harvestTime > 2.0) && !ImGui::IsAnyItemActive())
+   {
+      cur.reharvest = false;
+      cur.harvestTime = now;
+      editor.m_pinned.InvalidateHarvest(kind, name);
+   }
+   void *obj = nullptr;
+   const unsigned stamp = editor.m_pinned.EnsureHarvested(kind, name, &obj);
+   cur.active = stamp != 0 && obj != nullptr;
+   if (!cur.active)
+      return;
+   if (stamp == cur.stamp && kind == cur.kind && name == cur.name && obj == cur.obj)
+      return;
+   cur.kind = kind;
+   cur.name = name;
+   cur.obj = obj;
+   cur.stamp = stamp;
+   editor.m_pinned.CollectDefs(kind, name, stamp, m_defScratch);
+   cur.look.clear();
+   cur.transform.clear();
+   cur.all = m_defScratch;
+   // The insert bulb and dome groups are only Look on the primitives they apply to (the full sheet keeps them for every primitive)
+   const Primitive *const prim = (kind == PinKind::Part && itemType == eItemPrimitive) ? static_cast<const Primitive *>(static_cast<IEditable *>(obj)) : nullptr;
+   const auto offLook = [prim, rules](const PinnedPanel::Def *def)
+   {
+      return prim != nullptr
+         && ((def->group == "Traced Insert Bulb" && !prim->IsTracedInsert()) || (def->group == "Flasher Dome" && !prim->IsFlasherDome())
+            || (rules != nullptr && prim->IsTracedInsert() && Listed(rules->tracedInsertHiddenGroups, def->group)));
+   };
+   // Types without curation rules: the visual sections make their Look tab
+   static constexpr const char *visualSections[] = { "Visuals", "Render Mode", "Light Settings", "Bulb", "Transparency", "Ball Reflections & Shadows" };
+   const auto isLook = [&](const PinnedPanel::Def *def)
+   { return (rules == nullptr && std::ranges::any_of(visualSections, [def](const char *section) { return def->section == section; })) || def->common || Listed(rules->lookGroups, def->group) || Listed(rules->lookLabels, def->key.prop); };
+   const auto isTransform = [&](const PinnedPanel::Def *def)
+   { return def->section == "Position" || def->section == "Center" || (rules != nullptr && Listed(rules->transformLabels, def->key.prop)); };
+   for (auto &list : cur.tabs)
+      list.clear();
+   for (const PinnedPanel::Def *def : m_defScratch)
+   {
+      // Tabs: one domain per field (fields of no domain are only in Advanced, like everything else)
+      Tab tab = Tab::Advanced;
+      if (def->key.prop == "Visible" || def->key.prop == "Static Rendering" || def->key.prop == "Reflection Enabled" || def->key.prop == "Show in Editor")
+         tab = Tab::Object;
+      else if (def->section.find("Physics") != string::npos)
+         tab = Tab::Physics;
+      else if (def->section == "Timer" || def->section == "States" || def->section == "Transient state" || def->key.prop == "State Link"
+         || def->key.prop.find("Hit Event") != string::npos)
+         tab = Tab::Script;
+      else if (isTransform(def))
+         tab = Tab::Transform;
+      else if (!offLook(def) && isLook(def))
+         tab = Tab::Look;
+      if (tab != Tab::Advanced)
+         cur.tabs[static_cast<int>(tab)].push_back(def);
+      // Sections (the part's material pane)
+      if (offLook(def))
+         continue;
+      if (rules != nullptr && isLook(def))
+         cur.look.push_back(def);
+      else if (rules != nullptr && Listed(rules->transformLabels, def->key.prop))
+         cur.transform.push_back(def);
+   }
+   cur.advancedCount = static_cast<int>(m_defScratch.size() - cur.look.size() - cur.transform.size());
+   cur.advancedLabel = "Advanced (" + std::to_string(cur.advancedCount) + " more)###Advanced";
+}
+
+void PropertiesPanel::DrawCuration(PropertyPane &props, Curation &cur)
+{
+   EditorUI &editor = m_editor;
+   // Header material chip of a part: its material, a click selects it (its fields are also drawn under the part, see PartMaterialPane)
+   if (&cur == &m_curation && editor.m_selection.GetType() == Selection::S_EDITABLE && !props.IsMultiEdit())
+   {
+      const string material = PartMaterial(props.GetEditedPart(editor.m_selection.GetPart()->GetEditable()));
+      if (!material.empty())
+      {
+         props.PropertyLabel("Material"s);
+         if (ImGui::Button((material + "  " ICON_LC_ARROW_RIGHT "###MaterialChip").c_str(), ImVec2(ImGui::CalcItemWidth(), 0.f)))
+            m_pendingMaterialSel = editor.m_table->GetMaterial(material);
+         ImGui::SetItemTooltip("Select this material");
+         props.FlushRow();
+      }
+   }
+   if (!cur.active)
+      return;
+   const int modifiedBefore = props.GetModifiedField();
+   ImGui::PushID("##Curated"); // The curated rows draw the same fields as the full sheet below: keep their IDs apart
+   const auto drawDefs = [&props, &cur](const vector<const PinnedPanel::Def *> &defs)
+   {
+      props.SetLookSliders(true);
+      for (const PinnedPanel::Def *def : defs)
+         def->draw(props, cur.obj);
+   };
+   if (!cur.look.empty() && props.BeginSection("Look"s))
+   {
+      drawDefs(cur.look);
+      DrawApplyBulbButton(props, cur.kind, cur.obj);
+      props.EndSection();
+   }
+   if (!cur.transform.empty() && props.BeginSection("Transform"s))
+   {
+      drawDefs(cur.transform);
+      props.EndSection();
+   }
+   ImGui::PopID();
+   if (props.GetModifiedField() != modifiedBefore)
+      cur.reharvest = true;
+   ImGui::Spacing();
+   // Search palette focus on a field of this object: still pending here means it is not curated, so open the full sheet
+   if (PropertyPane::IsFocusPending() && PropertyPane::GetFocusKey().kind == cur.kind && PropertyPane::GetFocusKey().name == cur.name)
+      ImGui::SetNextItemOpen(true);
+   const bool open = PropertyPane::SectionHeader(cur.advancedLabel.c_str());
+   ImGui::SetItemTooltip("Every field of this object, in the full sheet layout");
+   props.SkipRest(!open);
+   if (open)
+   {
+      ImGui::Indent();
+      cur.advancedIndent = true;
+   }
+}
+
+void PropertiesPanel::EndCuration(PropertyPane &props, Curation &cur)
+{
+   props.FlushRow();
+   props.SkipRest(false);
+   if (cur.advancedIndent)
+   {
+      ImGui::Unindent();
+      cur.advancedIndent = false;
+   }
+   if (props.GetModifiedField() > 0)
+      cur.reharvest = true;
+}
+
+void PropertiesPanel::ApplyUnits(PropertyPane &props) const
+{
+   switch (m_editor.m_units)
+   {
+   case EditorUI::Units::VPX: props.SetLengthUnit(PropertyPane::Unit::VPLength); break;
+   case EditorUI::Units::Metric: props.SetLengthUnit(PropertyPane::Unit::Millimeters); break;
+   case EditorUI::Units::Imperial: props.SetLengthUnit(PropertyPane::Unit::Inches); break;
+   }
+}
+
+void PropertiesPanel::PartMaterialPane(bool showStartup, bool isLive)
+{
+   EditorUI &editor = m_editor;
+   if (editor.m_selection.GetType() != Selection::S_EDITABLE || editor.m_multiSel.size() > 1)
+      return;
+   const string name = PartMaterial(editor.m_selection.GetPart()->GetEditable());
+   Material *const material = name.empty() ? nullptr : editor.m_table->GetMaterial(name);
+   if (material == nullptr)
+      return;
+   const bool searching = IsSearching();
+   if (searching && (!m_materialCuration.active || CountSearchMatches(m_materialCuration) == 0))
+      return; // Search: the material pane only shows when one of its fields matches
+   // Parts sharing the material (refreshed twice a second, as assignments change from any pane)
+   if (m_usersFor != material || ImGui::GetFrameCount() - m_usersFrame > 30)
+   {
+      m_users.clear();
+      editor.m_table->ShowWhereMaterialUsed(m_users, material);
+      std::erase_if(m_users, [&editor](const WhereUsedInfo &w) { return w.whereUsedObjectname == editor.m_table->m_name; });
+      // One entry per part (a bumper or wall can use the material for several of its surfaces)
+      for (size_t i = 0; i < m_users.size(); i++)
+         for (size_t j = i + 1; j < m_users.size();)
+            if (m_users[j].whereUsedObjectname == m_users[i].whereUsedObjectname)
+            {
+               m_users[i].whereUsedPropertyName += ", " + m_users[j].whereUsedPropertyName;
+               m_users.erase(m_users.begin() + j);
+            }
+            else
+               j++;
+      m_usersFor = material;
+      m_usersFrame = ImGui::GetFrameCount();
+   }
+
+   ImGui::PushID("##PartMaterialPane"); // Same fields as the material's own pane: keep the IDs apart from the part's
+   ImGui::Spacing();
+   const bool open = PropertyPane::SectionHeader(("Material  " + name + "###PartMaterial").c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+   ImGui::SetItemTooltip("The material of this part, edited in place");
+   if (open)
+   {
+      const int users = static_cast<int>(m_users.size());
+      if (users > 1)
+         ImGui::TextColored(ImVec4(1.f, 0.7f, 0.3f, 1.f), ICON_LC_TRIANGLE_ALERT " Shared: used by %d parts", users);
+      else
+         ImGui::TextDisabled("Used by this part only");
+      if (users > 1)
+      {
+         ImGui::SameLine();
+         if (ImGui::SmallButton("List"))
+            ImGui::OpenPopup("##MaterialUsers");
+         ImGui::SetItemTooltip("Edits here change every part that uses this material");
+      }
+      if (ImGui::BeginPopup("##MaterialUsers"))
+      {
+         for (const WhereUsedInfo &where : m_users)
+         {
+            ImGui::PushID(&where);
+            IEditable *const editable = editor.m_table->GetElementByName(where.whereUsedObjectname.c_str());
+            if (ImGui::Selectable(where.whereUsedObjectname.c_str()) && editable != nullptr)
+               if (const auto it = editor.m_editableMap.find(editable); it != editor.m_editableMap.end())
+                  m_pendingPartSel = it->second;
+            ImGui::SameLine();
+            ImGui::TextDisabled("%s", where.whereUsedPropertyName.c_str());
+            ImGui::PopID();
+         }
+         ImGui::EndPopup();
+      }
+
+      PropertyPane props(editor.m_table);
+      ApplyUnits(props);
+      props.SetPinning(&editor.m_pinned, PropertyPane::PinMode::Panel);
+      if (editor.IsInspectMode())
+         props.SetShowStartup(showStartup);
+      props.SetAfterHeader(
+         [this, searching](PropertyPane &p)
+         {
+            if (searching)
+            {
+               DrawSearchResults(p, m_materialCuration, "Material: ");
+               p.SkipRest(true);
+            }
+            else
+               DrawCuration(p, m_materialCuration);
+         });
+      m_inPartMaterialPane = true;
+      MaterialEditUndo materialUndo(editor.m_undo, editor.m_table, editor.IsInspectMode() ? nullptr : material, MaterialEditUndo::SourcePartMaterial);
+      MaterialProperties(props, material);
+      m_inPartMaterialPane = false;
+      EndCuration(props, m_materialCuration);
+      if (materialUndo.Commit(props.GetModifiedField(), props.GetModifiedLabel()))
+      {
+         editor.m_lastUndoPart = nullptr; // The next part edit is a step of its own
+         editor.m_lastUndoId = 0;
+      }
+      if (props.GetModifiedField() > 0)
+      {
+         // Same tracking as the material's own pane ('Live' tab) and the pinned overlay
+         if (isLive)
+            editor.m_liveEditedMaterials.insert(material);
+         // Outside of an inspection session the edit is an undo step, which marks the table dirty (and clean again when undone)
+      }
+   }
+   ImGui::PopID();
+}
+
+void PropertiesPanel::UpdateSearchTerms()
+{
+   if (m_search == m_searchTermsFor)
+      return;
+   m_searchTermsFor = m_search;
+   m_searchTerms.clear();
+   string lower = m_search;
+   std::ranges::transform(lower, lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+   size_t pos = 0;
+   while (pos < lower.size())
+   {
+      const size_t start = lower.find_first_not_of(" \t", pos);
+      if (start == string::npos)
+         break;
+      const size_t end = lower.find_first_of(" \t", start);
+      m_searchTerms.push_back(lower.substr(start, end == string::npos ? string::npos : end - start));
+      pos = end == string::npos ? lower.size() : end;
+   }
+}
+
+void PropertiesPanel::DrawSearchField()
+{
+   EditorUI &editor = m_editor;
+   const ImGuiStyle &style = ImGui::GetStyle();
+   const bool searchable = m_curation.active && m_curation.tabbed;
+   ImGui::SameLine();
+   ImGui::BeginDisabled(!searchable);
+   ImGui::SetNextItemWidth(max(40.f, ImGui::GetContentRegionAvail().x));
+   if (m_focusSearch)
+   {
+      if (searchable)
+         ImGui::SetKeyboardFocusHere();
+      m_focusSearch = false;
+   }
+   // Esc clears the text and leaves the field (ImGui alone would only restore the text the field had when it was entered)
+   const bool escape = ImGui::GetActiveID() == ImGui::GetID("##PropSearch") && ImGui::IsKeyPressed(ImGuiKey_Escape, false);
+   ImGui::InputTextWithHint("##PropSearch", ICON_LC_SEARCH " Search fields", &m_search);
+   if (escape)
+   {
+      m_search.clear();
+      editor.m_areaEscPending = true; // The Esc is not an editor Esc
+   }
+   ImGui::SetItemTooltip(searchable ? "Filter the fields of all the tabs (Ctrl+F)" : "Search is available for a single selected part, material or the table");
+   if (!m_search.empty())
+   {
+      const ImVec2 fieldMin = ImGui::GetItemRectMin();
+      const ImVec2 fieldMax = ImGui::GetItemRectMax();
+      const float side = fieldMax.y - fieldMin.y;
+      ImGui::SetCursorScreenPos(ImVec2(fieldMax.x - side, fieldMin.y));
+      ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.f, 0.f, 0.f, 0.f));
+      ImGui::PushStyleColor(ImGuiCol_Text, EditorTheme::V(EditorTheme::TextDim));
+      if (ImGui::Button(ICON_LC_X "##ClearPropSearch", ImVec2(side, side)))
+         m_search.clear();
+      ImGui::PopStyleColor(2);
+      ImGui::SetItemTooltip("Clear");
+   }
+   ImGui::EndDisabled();
+   (void)style;
+   UpdateSearchTerms();
+}
+
+bool PropertiesPanel::MatchesSearch(const PinnedPanel::Def &def) const
+{
+   string text = def.label + ' ' + def.key.prop + ' ' + def.section + ' ' + def.group;
+   std::ranges::transform(text, text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+   return std::ranges::all_of(m_searchTerms, [&text](const string &term) { return text.find(term) != string::npos; });
+}
+
+int PropertiesPanel::CountSearchMatches(const Curation &cur) const
+{
+   if (!cur.active || m_searchTerms.empty())
+      return 0;
+   return static_cast<int>(std::ranges::count_if(cur.all, [this](const PinnedPanel::Def *def) { return MatchesSearch(*def); }));
+}
+
+int PropertiesPanel::DrawSearchResults(PropertyPane &props, Curation &cur, const char *titlePrefix)
+{
+   static constexpr const char *tabNames[] = { "Object", "Transform", "Material", "Look", "Physics", "Script & Events", "Advanced" };
+   if (!cur.active)
+      return 0;
+   struct Group
+   {
+      string title;
+      vector<const PinnedPanel::Def *> defs;
+   };
+   vector<Group> groups;
+   int count = 0;
+   for (const PinnedPanel::Def *def : cur.all)
+   {
+      if (!MatchesSearch(*def))
+         continue;
+      int tab = static_cast<int>(Tab::Advanced); // Fields of no domain live in Advanced
+      for (int t = 0; t < static_cast<int>(Tab::Count); t++)
+         if (std::ranges::find(cur.tabs[t], def) != cur.tabs[t].end())
+         {
+            tab = t;
+            break;
+         }
+      const string title = string(titlePrefix) + tabNames[tab] + " / " + (def->section.empty() ? def->group : def->section);
+      auto it = std::ranges::find_if(groups, [&title](const Group &g) { return g.title == title; });
+      if (it == groups.end())
+         it = groups.insert(groups.end(), Group { title, {} });
+      it->defs.push_back(def);
+      count++;
+   }
+   if (groups.empty())
+      return 0;
+   props.SetHighlight(&m_searchTerms);
+   props.SetLookSliders(true);
+   ImGui::PushID("##Search"); // The result rows draw the same fields as the tabs and the full sheet: keep their IDs apart
+   for (const Group &group : groups)
+      if (props.BeginSection(group.title))
+      {
+         for (const PinnedPanel::Def *def : group.defs)
+            def->draw(props, cur.obj);
+         props.EndSection();
+      }
+   ImGui::PopID();
+   props.SetHighlight(nullptr);
+   return count;
+}
+
 PropertiesPanel::PropertiesPanel(EditorUI &editor)
    : m_editor(editor)
 {
@@ -29,22 +716,55 @@ PropertiesPanel::PropertiesPanel(EditorUI &editor)
 
 PropertiesPanel::~PropertiesPanel() = default;
 
-void PropertiesPanel::Render(float topBarHeight)
+void PropertiesPanel::RenderInArea(const ImVec2 &pos, const ImVec2 &size)
 {
    EditorUI &editor = m_editor;
    if (editor.m_table->IsLocked())
       return;
 
-   const ImGuiViewport *const viewport = ImGui::GetMainViewport();
-   const float pane_width = PaneWidth * editor.m_liveUI.GetDPI();
-   ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + viewport->Size.x - pane_width, viewport->Pos.y + topBarHeight));
-   ImGui::SetNextWindowSize(ImVec2(pane_width, viewport->Size.y - topBarHeight));
+   ImGui::SetNextWindowPos(pos);
+   ImGui::SetNextWindowSize(size);
    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f * editor.m_liveUI.GetDPI(), 4.0f * editor.m_liveUI.GetDPI()));
    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+   // Pin ID: draw the locked object as if it were selected (the real selection is restored once the panel is drawn)
+   // A search jump goes to its object: unpin (the pinned object would hide it)
+   if (m_locked && PropertyPane::IsFocusPending())
+      m_locked = false;
+   const bool locked = m_locked && IsSelectionAlive(m_lockedSel);
+   m_locked = locked;
+   Selection realSel;
+   vector<std::shared_ptr<EditorUIPart>> realMultiSel;
+   vector<Texture *> realImages;
+   vector<VPX::Sound *> realSounds;
+   vector<Material *> realMaterials;
+   bool swapped = false;
+   if (locked && !(editor.m_selection == m_lockedSel))
+   {
+      swapped = true;
+      realSel = editor.m_selection;
+      realMultiSel = editor.m_multiSel;
+      realImages = editor.m_multiSelImages;
+      realSounds = editor.m_multiSelSounds;
+      realMaterials = editor.m_multiSelMaterials;
+      editor.SetSelection(m_lockedSel);
+   }
+   m_mouseOver = ImGui::IsMouseHoveringRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), false);
+   PropertyPane::ConsumeEditCancel(); // A cancelled edit nobody handled last frame
+   if (PropertyPane::IsFocusPending()) // A jump to a field (search palette) needs the normal tabs
+   {
+      m_search.clear();
+      m_searchTerms.clear();
+   }
+   PrepareCuration(); // May harvest the selection's pane in a hidden window: before the panel window is begun
    ImGui::Begin("PROPERTIES", nullptr,
-      ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus
+      ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus
          | ImGuiWindowFlags_NoNavFocus);
+
+   // Area header (Blender's editor type switcher), above the tab strip and the content
+   editor.RenderAreaTypeButton(EditorUI::AreaEditor::Properties);
+   DrawSearchField();
+   ImGui::Separator();
 
    // Multi-edit only applies to uniform selections: all selected parts of the same type as the active one
    const bool uniformPartSel = editor.m_selection.GetType() == Selection::S_EDITABLE && editor.m_multiSel.size() > 1
@@ -60,13 +780,34 @@ void PropertiesPanel::Render(float topBarHeight)
    if (editor.m_multiSelMaterials.size() > 1)
       ImGui::TextDisabled("%d materials selected (editing the active one)", (int)editor.m_multiSelMaterials.size());
 
-   PropertyPane props(editor.m_table);
-   switch (editor.m_units)
+   // Vertical tab strip (Blender's Properties editor) at the left, content at the right
+   const bool tabbed = m_curation.active && m_curation.tabbed;
+   if (tabbed)
    {
-   case EditorUI::Units::VPX: props.SetLengthUnit(PropertyPane::Unit::VPLength); break;
-   case EditorUI::Units::Metric: props.SetLengthUnit(PropertyPane::Unit::Millimeters); break;
-   case EditorUI::Units::Imperial: props.SetLengthUnit(PropertyPane::Unit::Inches); break;
+      ImGui::PushStyleColor(ImGuiCol_ChildBg, EditorTheme::V(EditorTheme::Strip));
+      ImGui::BeginChild("##PropTabs", ImVec2(32.f * editor.m_liveUI.GetDPI(), 0.f), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
+      ImGui::PopStyleColor();
+      DrawTabStrip();
+      ImGui::EndChild();
+      ImGui::SameLine(0.f, 4.f);
+      ImGui::BeginChild("##PropContent", ImVec2(0.f, 0.f));
    }
+   else
+   {
+      // Objects without tabs still offer the pin
+      if (ImGui::SmallButton(m_locked ? ICON_LC_PIN " Pinned##PinID" : ICON_LC_PIN "##PinID"))
+      {
+         m_locked = !m_locked;
+         m_lockedSel = editor.m_selection;
+      }
+      ImGui::SetItemTooltip(m_locked ? "Unpin: follow the selection again" : "Pin: keep showing this object while selecting others");
+   }
+
+   PropertyPane props(editor.m_table);
+   props.SetAfterHeader([this](PropertyPane &p) { DrawTabContent(p); });
+   // Fields register their definition for the pinned properties overlay and offer the pin context menu
+   props.SetPinning(&editor.m_pinned, PropertyPane::PinMode::Panel, editor.m_selection.GetType() == Selection::S_EDITABLE ? editor.m_selection.GetPart().get() : nullptr);
+   ApplyUnits(props);
    if (uniformPartSel)
    {
       vector<IEditable *> coParts;
@@ -103,6 +844,9 @@ void PropertiesPanel::Render(float topBarHeight)
                case Selection::S_SOUND: SoundProperties(props, editor.m_selection.GetSound()); break;
                case Selection::S_COLLECTION: CollectionProperties(props, editor.m_selection.GetCollection()); break;
                }
+               EndCuration(props, m_curation);
+               if (!tabbed || m_tab == Tab::Material || IsSearching())
+                  PartMaterialPane(!is_live, is_live);
                // Remember what was edited on the live copy: 'Save' copies it back to the startup table that is written to disk
                if (is_live && props.GetModifiedField() > 0)
                {
@@ -140,6 +884,15 @@ void PropertiesPanel::Render(float topBarHeight)
          }
          else
             editor.m_undo.MarkForUndo(editable);
+         // Alt held while editing: the fields also write to the other selected parts, snapshotted in the same record
+         const bool areaActive = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)
+            || (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsAnyItemActive());
+         const bool altApply = areaActive && ImGui::GetIO().KeyAlt && !props.IsMultiEdit() && editor.m_multiSel.size() > 1
+            && (ImGui::IsMouseDown(ImGuiMouseButton_Left) || ImGui::IsAnyItemActive());
+         if (altApply)
+            for (const std::shared_ptr<EditorUIPart> &part : editor.m_multiSel)
+               editor.m_undo.MarkForUndo(part->GetEditable());
+         editor.m_pinned.ArmApplyToSelected(altApply);
          // The playfield mesh pane edits table fields, which the primitive's undo state does not hold
          if (editable->GetItemType() == eItemPrimitive && static_cast<const Primitive *>(editable)->IsPlayfield())
          {
@@ -151,46 +904,64 @@ void PropertiesPanel::Render(float topBarHeight)
                   table->m_image = image;
                   table->m_winEditorBackdrop = showInEditor;
                   table->m_playfieldReflectionStrength = reflectionStrength;
+               },
+               // Redo: the same four fields as they are when the step is undone
+               [table]() -> std::function<void()>
+               {
+                  return [table, material = table->m_playfieldMaterial, image = table->m_image, showInEditor = table->m_winEditorBackdrop,
+                            reflectionStrength = table->m_playfieldReflectionStrength]()
+                  {
+                     table->m_playfieldMaterial = material;
+                     table->m_image = image;
+                     table->m_winEditorBackdrop = showInEditor;
+                     table->m_playfieldReflectionStrength = reflectionStrength;
+                  };
                });
          }
          editor.m_selection.GetPart()->UpdatePropertyPane(props);
+         editor.m_pinned.ArmApplyToSelected(false);
+         EndCuration(props, m_curation);
          // A renamed surface or ramp retargets the parts placed on it, recorded in the same undo record
          editor.m_table->UpdateSurfaceReferences(editable, nameBefore, [&editor](IEditable *part) { editor.m_undo.MarkForUndo(part); });
+         if (props.GetModifiedField() > 0)
+            editor.m_undo.SetFieldLabel(props.GetModifiedLabel());
          editor.m_undo.EndUndo();
          {
-            // The edit of one field (a drag, a typed value) is one step: its first frame keeps the record, the next ones discard theirs.
-            // The chain ends when the interaction does (mouse released, no item active) or when another item takes it
-            // (Tab between components, a click on another field), so the next edit is a step of its own
+            // The edit of one field (a drag, a typed value) is one step: its first frame keeps the record, the next ones discard theirs. Alt editing
+            // (other parts in the record) has its own key, and the chain ends when the interaction does
             const bool modified = props.GetModifiedField() > 0;
-            const unsigned int editId = 0x2000u | static_cast<unsigned int>(props.GetModifiedField());
+            const unsigned int editId = (altApply ? 0x800000u : 0u) | 0x2000u | static_cast<unsigned int>(props.GetModifiedField());
             const bool continues = modified && editor.m_lastUndoPart == editable && editor.m_lastUndoId == editId;
+            const auto endChain = [&editor]()
+            {
+               if (editor.m_lastUndoId != 0x1000) // The gizmo's own marker is not ours to clear
+               {
+                  editor.m_lastUndoPart = nullptr;
+                  editor.m_lastUndoId = 0;
+               }
+            };
+            if (!modified && !ImGui::IsMouseDown(ImGuiMouseButton_Left) && !ImGui::IsAnyItemActive())
+               endChain();
             if (modified && !continues)
             {
                editor.m_lastUndoPart = editable;
                editor.m_lastUndoId = editId;
-               m_editChainRecord = editor.m_undo.UndoCount();
+               m_editRecordId = editor.m_undo.TopRecordId();
             }
             else
             {
                editor.m_undo.Discard();
                // Esc cancelled the drag / typed value (restored): the step it had started is dropped too, if it is still the latest record
-               if (!modified && props.ConsumeEditCancel() && editor.m_lastUndoPart == editable && editor.m_undo.HasUndo() && editor.m_undo.UndoCount() == m_editChainRecord)
+               if (continues && PropertyPane::ConsumeEditCancel() && editor.m_undo.HasUndo() && editor.m_undo.TopRecordId() == m_editRecordId)
                {
                   editor.m_undo.Discard();
-                  editor.m_lastUndoPart = nullptr;
-                  editor.m_lastUndoId = 0;
-                  m_editChainRecord = 0;
+                  endChain();
                }
             }
-            const bool ended = !modified && !ImGui::IsMouseDown(ImGuiMouseButton_Left) && !ImGui::IsAnyItemActive();
+            // Another item took the interaction (Tab between components, a click on another field): a new edit
             const ImGuiID activeId = ImGui::GetActiveID();
-            if (editor.m_lastUndoId != 0x1000 // The gizmo's own marker is not ours to clear
-               && (ended || (m_prevActiveId != 0 && activeId != m_prevActiveId && activeId != 0)))
-            {
-               editor.m_lastUndoPart = nullptr;
-               editor.m_lastUndoId = 0;
-               m_editChainRecord = 0;
-            }
+            if (activeId != m_prevActiveId)
+               endChain();
             m_prevActiveId = activeId;
          }
          if (props.GetModifiedField() > 0)
@@ -199,17 +970,52 @@ void PropertiesPanel::Render(float topBarHeight)
       }
       case Selection::S_IMAGE: ImageProperties(props, editor.m_selection.GetImage()); break;
       case Selection::S_CAMERA: CameraProperties(props, editor.m_selection.GetCamera()); break;
-      case Selection::S_MATERIAL: MaterialProperties(props, editor.m_selection.GetMaterial()); break;
+      case Selection::S_MATERIAL:
+      {
+         // Material edits are undoable: snapshot before the pane is drawn, recorded when a field was modified
+         MaterialEditUndo materialUndo(editor.m_undo, editor.m_table, editor.m_selection.GetMaterial(), MaterialEditUndo::SourceProperties);
+         MaterialProperties(props, editor.m_selection.GetMaterial());
+         if (materialUndo.Commit(props.GetModifiedField(), props.GetModifiedLabel()))
+         {
+            editor.m_lastUndoPart = nullptr; // The next part edit is a step of its own
+            editor.m_lastUndoId = 0;
+         }
+         break;
+      }
       case Selection::S_RENDERPROBE: RenderProbeProperties(props, editor.m_selection.GetProbe()); break;
       case Selection::S_SOUND: SoundProperties(props, editor.m_selection.GetSound()); break;
       case Selection::S_COLLECTION: CollectionProperties(props, editor.m_selection.GetCollection()); break;
       }
+      if (editor.m_selection.GetType() != Selection::S_EDITABLE)
+         EndCuration(props, m_curation);
+      else if (!tabbed || m_tab == Tab::Material || IsSearching())
+         PartMaterialPane(false, false);
    }
-
-   RenderPopups();
+   RenderPopups(); // In the content child when tabbed: the pane code opens its popups there
+   if (tabbed)
+      ImGui::EndChild();
 
    ImGui::End();
    ImGui::PopStyleVar(3);
+   // Pin ID: back to the real selection, unless the panel itself changed the selection
+   if (swapped && editor.m_selection == m_lockedSel)
+   {
+      editor.m_selection = realSel;
+      editor.m_multiSel = std::move(realMultiSel);
+      editor.m_multiSelImages = std::move(realImages);
+      editor.m_multiSelSounds = std::move(realSounds);
+      editor.m_multiSelMaterials = std::move(realMaterials);
+   }
+   if (m_pendingMaterialSel != nullptr)
+   {
+      editor.SetSelection(Selection(m_pendingMaterialSel));
+      m_pendingMaterialSel = nullptr;
+   }
+   if (m_pendingPartSel != nullptr)
+   {
+      editor.SetSelection(Selection(m_pendingPartSel));
+      m_pendingPartSel = nullptr;
+   }
 }
 
 void PropertiesPanel::RefreshEditedParts(PropertyPane &props)
@@ -438,7 +1244,7 @@ void PropertiesPanel::TableProperties(PropertyPane &props)
          });
 
       props.InputRGB<PinTable>(
-         table, "Light Em. Color", //
+         table, "Light Emission Color", //
          [](const PinTable *table) { return convertColor(table->m_Light[0].emission); }, //
          [&editor](PinTable *table, const vec3 &v)
          {
@@ -446,7 +1252,7 @@ void PropertiesPanel::TableProperties(PropertyPane &props)
             editor.m_renderer->MarkShaderDirty(); // Needed to update shaders with new light settings
          });
       props.InputFloat<PinTable>(
-         table, "Light Em. Scale"s, //
+         table, "Light Emission Scale"s, //
          [](const PinTable *table) { return table->m_lightEmissionScale; }, //
          [&editor](PinTable *table, float v)
          {
@@ -493,7 +1299,7 @@ void PropertiesPanel::TableProperties(PropertyPane &props)
          },
          "Image used for ambient environment lighting");
       props.InputFloat<PinTable>(
-         table, "Environment Em. Scale"s, //
+         table, "Environment Emission"s, //
          [](const PinTable *table) { return table->m_envEmissionScale; }, //
          [&editor](PinTable *table, float v)
          {
@@ -501,20 +1307,19 @@ void PropertiesPanel::TableProperties(PropertyPane &props)
             editor.m_renderer->MarkShaderDirty(); // Needed to update shaders with new light settings
          },
          PropertyPane::Unit::Percent, 3, "Intensity of the environment lighting");
+      props.InputFloat<PinTable>(
+         table, "Environment Reflections"s, //
+         [](const PinTable *table) { return table->m_envReflectionScale; }, //
          [&editor](PinTable *table, float v)
          {
             table->m_envReflectionScale = max(v, 0.f);
             editor.m_renderer->MarkShaderDirty(); // Needed to update shaders with new light settings
          },
          PropertyPane::Unit::None, 3);
-      props.InputFloat<PinTable>(
-         table, "Env. Reflection Scale"s, //
-         [](const PinTable *table) { return table->m_envReflectionScale; }, //
-         [](PinTable *table, float v) { table->m_envReflectionScale = max(v, 0.f); }, PropertyPane::Unit::None, 3);
 
       props.Separator("Render Options"s);
       props.Checkbox<PinTable>(
-         table, "Enable Ambient Occlusion"s, //
+         table, "Ambient Occlusion"s, //
          [](const PinTable *table) { return table->m_enableAO; }, //
          [&editor](PinTable *table, bool v)
          {
@@ -523,7 +1328,7 @@ void PropertiesPanel::TableProperties(PropertyPane &props)
          },
          "Darken creases and contact areas with ambient occlusion");
       props.InputFloat<PinTable>(
-         table, "Ambient Occlusion Scale"s, //
+         table, "AO Scale"s, //
          [](const PinTable *table) { return table->m_AOScale; }, //
          [&editor](PinTable *table, float v)
          {
@@ -532,7 +1337,7 @@ void PropertiesPanel::TableProperties(PropertyPane &props)
          },
          PropertyPane::Unit::Percent, 1, "Strength of the ambient occlusion");
       props.Checkbox<PinTable>(
-         table, "Enable Sc. Sp. Reflections"s, //
+         table, "Screen Space Reflections"s, //
          [](const PinTable *table) { return table->m_enableSSR; }, //
          [&editor](PinTable *table, bool v)
          {
@@ -541,7 +1346,7 @@ void PropertiesPanel::TableProperties(PropertyPane &props)
          },
          "Reflect on-screen content on glossy surfaces (screen-space reflections)");
       props.InputFloat<PinTable>(
-         table, "Screen Space Reflection Scale"s, //
+         table, "SSR Scale"s, //
          [](const PinTable *table) { return table->m_SSRScale; }, //
          [](PinTable *table, float v) { table->m_SSRScale = v; }, PropertyPane::Unit::Percent, 1, "Strength of the screen-space reflections");
       props.InputFloat<PinTable>(
@@ -725,7 +1530,7 @@ void PropertiesPanel::RenderProbeProperties(PropertyPane &props, RenderProbe *pr
       props.EndSection();
    }
 
-   if (ImGui::CollapsingHeader("Users", ImGuiTreeNodeFlags_DefaultOpen))
+   if (PropertyPane::SectionHeader("Users", ImGuiTreeNodeFlags_DefaultOpen))
    {
       // Add a white line above
       const ImVec2 headerMin = ImGui::GetItemRectMin();
@@ -758,9 +1563,12 @@ void PropertiesPanel::MaterialProperties(PropertyPane &props, Material *material
    Material *editedMaterial = props.GetEditedPart<Material>(material);
    props.Header("Material"s, [editedMaterial]() { return editedMaterial->m_name; }, [editedMaterial](const string &v) { editedMaterial->m_name = v; });
 
-   ImGui::BeginDisabled(m_editor.m_table->m_liveBaseTable != nullptr); // Material list actions are not supported in inspection mode
-   MaterialActions(props);
-   ImGui::EndDisabled();
+   if (!m_inPartMaterialPane) // The material list actions act on the material selection, not on a part's material
+   {
+      ImGui::BeginDisabled(m_editor.m_table->m_liveBaseTable != nullptr); // Material list actions are not supported in inspection mode
+      MaterialActions(props);
+      ImGui::EndDisabled();
+   }
 
    if (props.BeginSection("Visuals"s))
    {
@@ -832,12 +1640,6 @@ void PropertiesPanel::MaterialProperties(PropertyPane &props, Material *material
             material, "Clear Coat Roughness"s, //
             [](const Material *material) { return material->m_fClearcoatRoughness; }, //
             [](Material *material, float v) { material->m_fClearcoatRoughness = v; }, PropertyPane::Unit::None, 2);
-            material, "Scatter Saturation"s, //
-            [](const Material *material) { return material->m_fScatterSaturation; }, //
-            [](Material *material, float v) { material->m_fScatterSaturation = clamp(v, 0.f, 2.f); }, 0.f, 2.f, 2);
-            material, "Absorption Light Tint"s, //
-            [](const Material *material) { return material->m_fAbsorptionLightTint; }, //
-            [](Material *material, float v) { material->m_fAbsorptionLightTint = clamp(v, 0.f, 1.f); }, 0.f, 1.f, 2);
          props.Separator("See-Through Surface"s);
          props.SliderFloat<Material>(
             material, "Scatter"s, //
@@ -876,6 +1678,10 @@ void PropertiesPanel::MaterialProperties(PropertyPane &props, Material *material
             [](const Material *material) { return material->m_fScatterWidth; }, //
             [](Material *material, float v) { material->m_fScatterWidth = v <= 0.f ? 0.f : clamp(v, 0.05f, 1.f); }, 0.f, 1.f, 2); // 0 = no band
          props.SliderFloat<Material>(
+            material, "Scatter Saturation"s, //
+            [](const Material *material) { return material->m_fScatterSaturation; }, //
+            [](Material *material, float v) { material->m_fScatterSaturation = clamp(v, 0.f, 2.f); }, 0.f, 2.f, 2);
+         props.SliderFloat<Material>(
             material, "Dense Edge Albedo"s, //
             [](const Material *material) { return material->m_fDenseAlbedo; }, //
             [](Material *material, float v) { material->m_fDenseAlbedo = max(v, 0.f); }, 0.f, 1.f, 3);
@@ -887,9 +1693,15 @@ void PropertiesPanel::MaterialProperties(PropertyPane &props, Material *material
             material, "Absorption"s, //
             [](const Material *material) { return material->m_fAbsorption; }, //
             [](Material *material, float v) { material->m_fAbsorption = max(v, 0.f); }, 0.f, 3.f, 3);
+         props.SliderFloat<Material>(
+            material, "Absorption Light Tint"s, //
+            [](const Material *material) { return material->m_fAbsorptionLightTint; }, //
+            [](Material *material, float v) { material->m_fAbsorptionLightTint = clamp(v, 0.f, 1.f); }, 0.f, 1.f, 2);
+         props.SliderFloat<Material>(
             material, "Edge Glow"s, //
             [](const Material *material) { return material->m_fEdgeGlow; }, //
             [](Material *material, float v) { material->m_fEdgeGlow = clamp(v, 0.f, 5.f); }, 0.f, 5.f, 2);
+         props.SliderFloat<Material>(
             material, "Edge Glow Tint"s, //
             [](const Material *material) { return material->m_fEdgeGlowTint; }, //
             [](Material *material, float v) { material->m_fEdgeGlowTint = clamp(v, 0.f, 1.f); }, 0.f, 1.f, 2);
@@ -964,7 +1776,7 @@ void PropertiesPanel::SoundProperties(PropertyPane &props, VPX::Sound *sound)
    ImGui::EndDisabled();
 
    ImGui::BeginDisabled(audioPlayer == nullptr);
-   if (ImGui::Button(isPlaying ? (ICON_FK_STOP " Stop"s).c_str() : (ICON_FK_PLAY " Play"s).c_str()))
+   if (ImGui::Button(isPlaying ? (ICON_LC_SQUARE " Stop"s).c_str() : (ICON_LC_PLAY " Play"s).c_str()))
    {
       if (isPlaying)
       {
@@ -1186,7 +1998,7 @@ void PropertiesPanel::CollectionProperties(PropertyPane &props, Collection *coll
       // Members, in the collection's order which is the order exposed to scripts
       if (members.empty())
          ImGui::TextDisabled("Empty collection");
-      const float buttonWidth = ImGui::CalcTextSize(ICON_FK_ARROW_UP).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+      const float buttonWidth = ImGui::CalcTextSize(ICON_LC_ARROW_UP).x + ImGui::GetStyle().FramePadding.x * 2.0f;
       const float buttonsX = ImGui::GetContentRegionAvail().x - 3.f * buttonWidth - 2.f * ImGui::GetStyle().ItemSpacing.x;
       int moveIndex = -1, removeIndex = -1;
       for (int i = 0; i < static_cast<int>(members.size()); i++)
@@ -1205,20 +2017,20 @@ void PropertiesPanel::CollectionProperties(PropertyPane &props, Collection *coll
             ImGui::SetTooltip("%s", LocalString(EditableRegistry::GetTypeNameStringID(member->GetItemType())).m_szbuffer);
          ImGui::SameLine(buttonsX);
          ImGui::BeginDisabled(i == 0);
-         if (ImGui::SmallButton(ICON_FK_ARROW_UP))
+         if (ImGui::SmallButton(ICON_LC_ARROW_UP))
             moveIndex = i - 1;
          ImGui::EndDisabled();
          if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Move up");
          ImGui::SameLine();
          ImGui::BeginDisabled(i == static_cast<int>(members.size()) - 1);
-         if (ImGui::SmallButton(ICON_FK_ARROW_DOWN))
+         if (ImGui::SmallButton(ICON_LC_ARROW_DOWN))
             moveIndex = i;
          ImGui::EndDisabled();
          if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Move down");
          ImGui::SameLine();
-         if (ImGui::SmallButton(ICON_FK_TIMES))
+         if (ImGui::SmallButton(ICON_LC_X))
             removeIndex = i;
          if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Remove from collection");
@@ -1291,7 +2103,7 @@ void PropertiesPanel::RenderPopups()
          ImGui::CloseCurrentPopup();
       }
       ImGui::SameLine();
-      if (ImGui::Button("Cancel"))
+      if (ImGui::Button("Cancel") || PropertyPane::ModalEscapePressed())
       {
          m_confirmAction = nullptr;
          ImGui::CloseCurrentPopup();

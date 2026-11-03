@@ -62,8 +62,14 @@ void EditorUIPart::UpdateCurveSection(PropertyPane& props)
    if (m_pointEditCtx == nullptr || m_pointEditCtx->IsCenterEditMode())
       return;
    DragPointCurve* const curve = GetDragPointCurve();
+   // The point edit tools stay visible when the full sheet is collapsed under the properties panel's Advanced header
+   const bool skipping = props.IsSkippingRest();
+   props.SkipRest(false);
    if (curve == nullptr || !props.BeginSection("Curve"s))
+   {
+      props.SkipRest(skipping);
       return;
+   }
    const vector<DragPoint*>& sel = m_pointEditCtx->GetSelectedPoints();
 
    ImGui::Text("%d of %d point(s) selected", (int)sel.size(), (int)curve->GetPoints().size());
@@ -132,6 +138,7 @@ void EditorUIPart::UpdateCurveSection(PropertyPane& props)
    ImGui::TextDisabled("Click or box select points, drag or use the gizmo (G/R/S) to move them in the playfield plane, Shift+A to add a point on the nearest segment, Del to "
                        "delete, Tab/Esc to exit");
    props.EndSection();
+   props.SkipRest(skipping);
 }
 
 void EditorUIPart::UpdatePointZField(PropertyPane& props, DragPoint* point)

@@ -93,6 +93,7 @@ void LightUIPart::UpdatePropertyPane(PropertyPane& props)
 
    if (props.BeginSection("Light Settings"s))
    {
+      const PropertyPane::TierScope look(props, PropertyPane::Tier::Common); // The whole section is the light's Look
       props.InputFloat<Light>(
          m_part, "Intensity"s, //
          [](const Light* light) { return light->m_d.m_intensity; }, //
