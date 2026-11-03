@@ -5,6 +5,7 @@
 
 #include <charconv>
 #include <cstdlib>
+#include <string>
 #include <stdexcept>
 
 namespace UnityYaml
