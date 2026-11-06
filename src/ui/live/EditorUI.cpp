@@ -74,6 +74,7 @@ EditorUI::EditorUI(LiveUI &liveUI)
    , m_chrome(*this)
    , m_auditDialog(*this)
    , m_inspectionModal(*this)
+   , m_pbrConvertModal(*this)
    , m_partLibrary(*this)
    , m_scriptPanel(*this)
    , m_undo(m_player->m_ptable)
@@ -195,6 +196,7 @@ void EditorUI::Close()
    RestorePartsVisibility();
    m_auditDialog.Close();
    m_inspectionModal.Close();
+   m_pbrConvertModal.Close();
    m_partLibrary.CancelPlacement(); // Drops a pending pack placement; the part library and script areas stay in the layout
    SaveAreaLayoutSettings(); // The layout and the view setups survive the session end
    m_renderer->DisableStaticPrePass(false);
@@ -858,6 +860,7 @@ void EditorUI::RenderUI()
    }
    m_auditDialog.Render();
    m_inspectionModal.Render();
+   m_pbrConvertModal.Render();
    m_partLibrary.Update();
    m_scriptPanel.Update();
 

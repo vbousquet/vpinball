@@ -352,6 +352,9 @@ void EditorChrome::RenderMenuBar()
             editor.m_auditDialog.Show();
          if (ImGui::MenuItem(ICON_LC_EYE " Inspect Renderer..."))
             editor.m_inspectionModal.Show();
+         ImGui::Separator();
+         if (ImGui::MenuItem(ICON_LC_ATOM " Convert to PBR...", nullptr, false, !editor.m_table->IsLocked()))
+            editor.m_pbrConvertModal.Show();
          ImGui::EndMenu();
       }
       if (ImGui::BeginMenu("View"))
