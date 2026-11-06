@@ -400,6 +400,12 @@ void EditorChrome::RenderMenuBar()
             editor.ResetAreaLayouts();
          ImGui::EndMenu();
       }
+      if (!editor.IsInspectMode() && ImGui::BeginMenu("Tools"))
+      {
+         if (ImGui::MenuItem("Convert to PBR...", nullptr, false, !editor.m_table->IsLocked()))
+            editor.m_pbrConvertModal.Show();
+         ImGui::EndMenu();
+      }
       if (editor.IsInspectMode() && !editor.m_table->IsLocked() && ImGui::BeginMenu("Debug"))
       {
          if (ImGui::MenuItem(ICON_LC_CODE_XML " Open debugger"))

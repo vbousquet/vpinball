@@ -339,6 +339,9 @@
     <ClCompile Include="$(SolutionDir)/../../src/parts/lightseq.cpp">
       <Filter>parts</Filter>
     </ClCompile>
+    <ClCompile Include="$(SolutionDir)/../../src/parts/PBRConversion.cpp">
+      <Filter>parts</Filter>
+    </ClCompile>
     <ClCompile Include="$(SolutionDir)/../../src/parts/pintable.cpp">
       <Filter>parts</Filter>
     </ClCompile>
@@ -620,6 +623,8 @@
     </ClCompile>
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/ops/ReferenceImageOp.cpp">
       <Filter>ui\live\editor\ops</Filter>
+    <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/ConvertToPBRModal.cpp">
+      <Filter>ui\live</Filter>
     </ClCompile>
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/editor/RendererInspectionModal.cpp">
       <Filter>ui\live\editor</Filter>
@@ -1448,6 +1453,9 @@
     <ClInclude Include="$(SolutionDir)/../../src/parts/lightseq.h">
       <Filter>parts</Filter>
     </ClInclude>
+    <ClInclude Include="$(SolutionDir)/../../src/parts/PBRConversion.h">
+      <Filter>parts</Filter>
+    </ClInclude>
     <ClInclude Include="$(SolutionDir)/../../src/parts/pintable.h">
       <Filter>parts</Filter>
     </ClInclude>
@@ -1783,6 +1791,8 @@
     </ClInclude>
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/ops/ReferenceImageOp.h">
       <Filter>ui\live\editor\ops</Filter>
+    <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/ConvertToPBRModal.h">
+      <Filter>ui\live</Filter>
     </ClInclude>
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/editor/RendererInspectionModal.h">
       <Filter>ui\live\editor</Filter>

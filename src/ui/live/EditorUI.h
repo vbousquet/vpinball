@@ -16,6 +16,7 @@
 #include "editor/PartLibraryPanel.h"
 #include "editor/PropertiesPanel.h"
 #include "editor/RendererInspectionModal.h"
+#include "editor/ConvertToPBRModal.h"
 #include "editor/ScriptPanel.h"
 #include "editor/ViewportPane.h"
 #include "editor/ops/LayerSpaceChangeOp.h"
@@ -64,6 +65,7 @@ class EditorUI final
    friend class PropertiesPanel;
    friend class PropertyPane;
    friend class RendererInspectionModal;
+   friend class ConvertToPBRModal;
    friend class PartLibraryPanel;
    friend class PartLibraryPane;
    friend class ScriptPanel;
@@ -124,6 +126,7 @@ private:
    // Sub components (UI panels & modals)
    EditorChrome m_chrome;
    RendererInspectionModal m_inspectionModal;
+   ConvertToPBRModal m_pbrConvertModal;
    PartLibraryPanel m_partLibrary;
    ScriptPanel m_scriptPanel;
 
