@@ -1509,6 +1509,8 @@ RenderTarget* RenderView::ApplyPBRSpecularResolve(RenderTarget* renderedRT)
    rd->m_FBShader->SetTexture(ShaderUniform::tex_pbr_data, prepassRT->GetPBRDataSampler());
    rd->m_FBShader->SetTexture(ShaderUniform::tex_ao_dither, r->m_aoDitherSampler);
    rd->m_FBShader->SetVector(ShaderUniform::w_h_height, (float)(1.0 / halfRT->GetWidth()), (float)(1.0 / halfRT->GetHeight()), 1.0f, 1.0f);
+   // x: SSR coverage fade start roughness, y: fade end (march early-outs there), z: max pooling radius in low res texels, w: firefly clamp factor
+   rd->m_FBShader->SetVector(ShaderUniform::pbrResolveParams, 0.5f, 0.9f, 8.0f, 4.0f);
    rd->m_FBShader->SetMatrix(ShaderUniform::matProj, &matProj[0], nEyes);
    rd->m_FBShader->SetMatrix(ShaderUniform::matProjInv, &matProjInv[0], nEyes);
    rd->m_FBShader->SetTechnique(ShaderTechnique::PBR_march);
@@ -1527,6 +1529,7 @@ RenderTarget* RenderView::ApplyPBRSpecularResolve(RenderTarget* renderedRT)
    rd->m_FBShader->SetTexture(ShaderUniform::tex_pbr_att1, renderedRT->GetPBRSidebandSampler(0));
    rd->m_FBShader->SetTexture(ShaderUniform::tex_pbr_att2, renderedRT->GetPBRSidebandSampler(1));
    rd->m_FBShader->SetVector(ShaderUniform::w_h_height, (float)(1.0 / renderedRT->GetWidth()), (float)(1.0 / renderedRT->GetHeight()), 1.0f, 1.0f);
+   rd->m_FBShader->SetVector(ShaderUniform::pbrResolveParams, 0.5f, 0.9f, 8.0f, 4.0f);
    rd->m_FBShader->SetVector(ShaderUniform::pbrProbeParams, 0.f, 0.f, 0.8f, 0.f); // mu: SSR suppression weight against probe coverage
    rd->m_FBShader->SetMatrix(ShaderUniform::matProjInv, &matProjInv[0], nEyes);
    rd->m_FBShader->SetTechnique(ShaderTechnique::PBR_resolve);
