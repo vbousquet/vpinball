@@ -404,6 +404,8 @@ void EditorChrome::RenderMenuBar()
       {
          if (ImGui::MenuItem("Convert to PBR...", nullptr, false, !editor.m_table->IsLocked()))
             editor.m_pbrConvertModal.Show();
+         if (ImGui::MenuItem("Import Unity Prefab...", nullptr, false, !editor.m_table->IsLocked()))
+            editor.PickUnityPrefab();
          ImGui::EndMenu();
       }
       if (editor.IsInspectMode() && !editor.m_table->IsLocked() && ImGui::BeginMenu("Debug"))

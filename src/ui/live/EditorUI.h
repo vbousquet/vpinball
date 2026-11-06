@@ -353,6 +353,7 @@ private:
    vector<std::filesystem::path> m_recentTables; // Scratch copy of the shared list, refreshed by GetRecentTables()
    std::shared_ptr<string> m_pendingSaveAsPath;
    std::shared_ptr<string> m_pendingLoadPath;
+   std::shared_ptr<string> m_pendingUnityPrefabPath;
    bool m_pendingSaveAsFolder = false; // Pending 'Save As' result is a folder pack, not a file
    bool m_pendingLoadFolder = false; // Pending 'Load' result is a folder pack, not a file
    std::optional<NewTableTemplate> m_pendingNewTable; // New table template awaiting the 'discard unsaved changes' confirmation
@@ -419,6 +420,10 @@ public:
    void OpenPartLibrary() { m_partLibrary.Show(); }
    bool CanExportPartSelection() const { return m_partLibrary.CanExportSelection(); }
    void ExportPartSelection() { m_partLibrary.ExportSelection(); }
+
+   // Unity prefab import (Tools > Import Unity Prefab...)
+   void PickUnityPrefab();
+   void ImportUnityPrefab(const std::filesystem::path &path);
 
 public:
    // Closes the session with the given Player::CloseState, first asking to discard unsaved changes when they would be lost

@@ -39,6 +39,7 @@ set(VPX_TEST_SOURCES
    tests/misc/test-sound.cpp
    tests/misc/test-table-io.cpp
    tests/misc/test-tbn-shader.cpp
+   tests/misc/test-unity-import.cpp
    tests/parts/test-ball.cpp
    tests/parts/test-bumper.cpp
    tests/parts/test-decal.cpp

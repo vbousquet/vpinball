@@ -16,9 +16,11 @@ if(PLATFORM STREQUAL "windows")
    endif()
 
    set_source_files_properties(third-party/include/miniz/miniz.c PROPERTIES LANGUAGE CXX)
+   set_source_files_properties(third-party/include/ufbx/ufbx.c PROPERTIES LANGUAGE CXX)
 
    set_source_files_properties(
       third-party/include/miniz/miniz.c
+      third-party/include/ufbx/ufbx.c
       third-party/include/bc6h/basisu_bc6h.cpp
       third-party/include/bc7f/basisu_bc7f.cpp
       PROPERTIES SKIP_PRECOMPILE_HEADERS ON

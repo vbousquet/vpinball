@@ -3421,7 +3421,8 @@ namespace
 const std::map<std::filesystem::path, ankerl::unordered_dense::set<string>> &AssetRefFieldNames()
 {
    static const std::map<std::filesystem::path, ankerl::unordered_dense::set<string>> fields = {
-      { "images"s, { "image"s, "side_image"s, "image_b"s, "normal_map"s, "env_image"s, "ball_image"s, "backdrop_image_0"s, "backdrop_image_1"s, "backdrop_image_2"s } },
+      { "images"s,
+         { "image"s, "side_image"s, "image_b"s, "normal_map"s, "orm_map"s, "emission_map"s, "env_image"s, "ball_image"s, "backdrop_image_0"s, "backdrop_image_1"s, "backdrop_image_2"s } },
       { "sounds"s, { "sound"s } },
       { "fonts"s, { "font"s } },
       { "materials"s,
