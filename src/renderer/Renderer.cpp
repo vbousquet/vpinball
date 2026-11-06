@@ -4706,7 +4706,11 @@ RenderTarget* Renderer::ApplyUpscaling(RenderTarget* renderedRT, RenderTarget* o
    assert(outputRT != renderedRT);
    m_renderDevice->SetRenderTarget("Upscale"s, outputRT, false);
    m_renderDevice->AddRenderTargetDependency(renderedRT);
-   m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_fb_filtered, renderedRT->GetColorSampler());
+   // VPX_UPSCALE_NEAREST=1 (perf POC, default off): point sampling instead of bilinear, so an integer ratio (e.g. AAFactor 0.5
+   // on a 2x Retina display, or a 1x window rendered at half size) is a crisp pixel doubling instead of a slightly soft one.
+   // Non-integer ratios get uneven pixels.
+   static const bool upscaleNearest = []() { const char* const e = std::getenv("VPX_UPSCALE_NEAREST"); return e && e[0] == '1'; }();
+   m_renderDevice->m_FBShader->SetTexture(ShaderUniform::tex_fb_filtered, renderedRT->GetColorSampler(), upscaleNearest ? SamplerFilter::SF_NONE : SamplerFilter::SF_UNDEFINED);
    m_renderDevice->m_FBShader->SetTechnique(ShaderTechnique::fb_copy);
    m_renderDevice->m_FBShader->SetVector(ShaderUniform::w_h_height, (float)(1.0 / renderedRT->GetWidth()), (float)(1.0 / renderedRT->GetHeight()), 1.0f, 1.0f);
    m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
