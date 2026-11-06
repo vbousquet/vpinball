@@ -387,7 +387,7 @@ void Light::UpdateMeshBuffer()
    {
       m_lightmapMeshBufferDirty = false;
       float height = m_initSurfaceHeight;
-      if ((m_d.m_type == LightType::Halo))
+      if (m_d.m_type == LightType::Halo)
       {
          height += m_d.m_bulbHaloHeight;
          m_surfaceHeight = height;
