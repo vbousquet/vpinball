@@ -1105,6 +1105,21 @@ Texture* Texture::CreateFromFile(const std::filesystem::path& filename, const bo
    return tex;
 }
 
+Texture* Texture::CreateFromMemory(const string& name, const std::filesystem::path& path, vector<uint8_t>&& data)
+{
+   std::shared_ptr<BaseTexture> const imageBuffer = BaseTexture::CreateFromData(data.data(), data.size(), true);
+   if (imageBuffer == nullptr)
+      return nullptr;
+
+   PinBinary* const ppb = new PinBinary();
+   ppb->m_path = path;
+   ppb->m_buffer = std::move(data);
+   Texture* tex = new Texture(name, ppb, imageBuffer->m_realWidth, imageBuffer->m_realHeight);
+   tex->m_imageBuffer = imageBuffer;
+   tex->UpdateOpaque(); // Cheap while the decoded image is alive
+   return tex;
+}
+
 Texture::~Texture()
 {
    delete m_ppb;

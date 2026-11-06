@@ -292,6 +292,12 @@ Liberation Sans
 - Version: ?
 - License: ZLib
 
+### ufbx
+
+- Upstream: https://github.com/ufbx/ufbx
+- Version: 0.23.1
+- License: MIT or Public Domain (see LICENSE)
+
 ### unordered-dense
 
 - Upstream: ?

@@ -355,6 +355,8 @@ void EditorChrome::RenderMenuBar()
          ImGui::Separator();
          if (ImGui::MenuItem(ICON_LC_ATOM " Convert to PBR...", nullptr, false, !editor.m_table->IsLocked()))
             editor.m_pbrConvertModal.Show();
+         if (ImGui::MenuItem(ICON_LC_BOX " Import Unity Prefab...", nullptr, false, !editor.m_table->IsLocked()))
+            editor.PickUnityPrefab();
          ImGui::EndMenu();
       }
       if (ImGui::BeginMenu("View"))

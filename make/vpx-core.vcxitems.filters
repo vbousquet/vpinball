@@ -1116,6 +1116,12 @@
     <ClCompile Include="$(SolutionDir)/../../src/utils/ushock_output.cpp">
       <Filter>utils</Filter>
     </ClCompile>
+    <ClCompile Include="$(SolutionDir)/../../src/utils/UnityPrefabImporter.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="$(SolutionDir)/../../src/utils/UnityYaml.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
     <ClCompile Include="$(SolutionDir)/../../src/utils/wintimer.cpp">
       <Filter>utils</Filter>
     </ClCompile>
@@ -1175,6 +1181,9 @@
     </ClCompile>
     <ClCompile Include="$(SolutionDir)/../../third-party/include/textedit/TextEditor.cpp">
       <Filter>third-party\textedit</Filter>
+    </ClCompile>
+    <ClCompile Include="$(SolutionDir)/../../third-party/include/ufbx/ufbx.c">
+      <Filter>third-party</Filter>
     </ClCompile>
     <ClCompile Include="$(SolutionDir)/../../third-party/include/pole/pole.cpp">
       <Filter>third-party</Filter>
@@ -2343,6 +2352,12 @@
       <Filter>utils</Filter>
     </ClInclude>
     <ClInclude Include="$(SolutionDir)/../../src/utils/ushock_output.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="$(SolutionDir)/../../src/utils/UnityPrefabImporter.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="$(SolutionDir)/../../src/utils/UnityYaml.h">
       <Filter>utils</Filter>
     </ClInclude>
     <ClInclude Include="$(SolutionDir)/../../src/utils/Logger.h">
