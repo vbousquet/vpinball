@@ -310,7 +310,11 @@ vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv, const float roughness, 
    float wSum = 0.0;
    BRANCH if (pbrProbeParams.x > 0.0)
    {
-      const float d = max(dot(pbrProbes0.xyz, wPos) + pbrProbes0.w, 0.0);
+      // Signed distance to the plane. A fragment behind the mirror (under the playfield, seen through a cut-out or in an editor view) sees
+      // nothing of the probe: full weight down to 1 VPU below the plane (parts sunk a hair to avoid z-fighting), then a fade to 0 at 3 VPU.
+      // Clamped to 0 alone, such a fragment took the probe at full weight and showed whatever the probe held at its pixel, mostly the cleared black
+      const float sd = dot(pbrProbes0.xyz, wPos) + pbrProbes0.w;
+      const float d = max(sd, 0.0);
       // Parallax reprojection: the probe is only a flat mirror for fragments on its plane.
       // Mirror the fragment about the plane and reproject it in screen space to sample the
       // probe at the direction of the actual mirror ray (degenerates to suv at d = 0)
@@ -323,14 +327,15 @@ vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv, const float roughness, 
       #endif
       // Fade at the probe frustum border (and behind the mirrored camera): no valid content there
       const float inFrustum = saturate(min(uv.x, min(uv.y, min(1.0 - uv.x, 1.0 - uv.y))) * 16.0);
-      const float w = saturate(1.0 - d / pbrProbeParams.x) * inFrustum;
+      const float w = saturate(1.0 - d / pbrProbeParams.x) * saturate(1.0 + (sd + 1.0) * 0.5) * inFrustum;
       const vec4 t = texStereoLod(tex_pbr_probe0, uv, roughness * pbrProbeLods.x);
       Lp += w * t.rgb;
       wSum += alphaCoverage ? w * t.a : w;
    }
    BRANCH if (pbrProbeParams.y > 0.0)
    {
-      const float d = max(dot(pbrProbes1.xyz, wPos) + pbrProbes1.w, 0.0);
+      const float sd = dot(pbrProbes1.xyz, wPos) + pbrProbes1.w;
+      const float d = max(sd, 0.0);
       const vec3 mirrored = wPos - 2.0 * d * pbrProbes1.xyz;
       const vec4 proj = mul(mRotViewProj, vec4(mirrored - cCameraPosWorld, 1.0));
       #if TEX_V_IS_UP
@@ -339,7 +344,7 @@ vec4 pbr_probe_specular(const vec3 wPos, const vec2 suv, const float roughness, 
       const vec2 uv = vec2(0.5, 0.5) + vec2(proj.x, -proj.y) * (0.5 / proj.w);
       #endif
       const float inFrustum = saturate(min(uv.x, min(uv.y, min(1.0 - uv.x, 1.0 - uv.y))) * 16.0);
-      const float w = saturate(1.0 - d / pbrProbeParams.y) * inFrustum;
+      const float w = saturate(1.0 - d / pbrProbeParams.y) * saturate(1.0 + (sd + 1.0) * 0.5) * inFrustum;
       const vec4 t = texStereoLod(tex_pbr_probe1, uv, roughness * pbrProbeLods.y);
       Lp += w * t.rgb;
       wSum += alphaCoverage ? w * t.a : w;
