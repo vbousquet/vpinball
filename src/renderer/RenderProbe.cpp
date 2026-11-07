@@ -225,6 +225,10 @@ void RenderProbe::ApplyRoughness(RenderTarget* probe, const int roughness)
    assert(0 <= roughness && roughness <= 12);
    if (roughness > 0)
    {
+      // The blur samples the probe through its sampled texture, which for a mipmapped target is the mip chain refreshed by GenerateMipmaps: refresh it from
+      // what was just rendered or copied first, else the blur would read the previous frame's probe
+      if (probe->GetMipCount() > 1)
+         m_renderer->m_renderDevice->GenerateMipmaps(probe);
       if (m_blurRT == nullptr)
          m_blurRT = probe->Duplicate(probe->m_name+".Blur", true);
       // The kernel sizes were chosen by reverse engineering the blur shader. So there's a part of guess here.
