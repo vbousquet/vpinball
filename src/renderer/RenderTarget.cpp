@@ -979,6 +979,11 @@ void RenderTarget::GenerateMipmaps()
 {
    if (!bgfx::isValid(m_colorTexMips))
       return;
+   // A view of its own: within a view BGFX executes the blits before the draws, so a refresh sharing the view of the pass that drew into the attachment
+   // (a probe's blur, recorded on the same render target just before) would copy the attachment as it was before those draws. The new view has no
+   // framebuffer: a later pass on this target must activate it again
+   m_rd->NextView();
+   OnFrameFlushed();
    const bgfx::ProgramHandle program = m_rd->GetMipgenProgram(m_colorFormat, m_nLayers > 1);
    if (!bgfx::isValid(program))
    {
