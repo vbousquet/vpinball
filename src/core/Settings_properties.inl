@@ -147,6 +147,7 @@ PropInt(Player, PBRShadowMapSize, "PBR Shadow Map Size"s, "Virtual resolution in
 PropInt(Player, PBRShadowPoolPages, "PBR Shadow Pool Pages"s, "Number of 128x128 physical pages shared by all shadowed PBR lights"s, 64, 1024, 1024);
 PropInt(Player, PBRShadowMaxLights, "PBR Shadow Max Lights"s, "Maximum number of PBR lights with virtual shadow maps"s, 1, 32, 32);
 PropInt(Player, PBRShadowPagesPerFrame, "PBR Shadow Pages Per Frame"s, "Maximum number of shadow map pages rendered per frame (bakes and dynamic updates amortize over frames)"s, 1, 128, 32);
+PropFloat(Player, PBRDimLightCutoff, "PBR Dim Light Cutoff"s, "Speed-up for scenes with many lights: a light whose unshadowed irradiance luminance at a pixel is under this value only adds plain diffuse there (no specular, coat, transmission or shadow). 0 = off, 2 is barely visible"s, 0.f, 16.f, 0.f);
 PropBool(Player, HDRDisableToneMapper, "Disable tonemapping on HDR display"s, "Do not perform tonemapping when rendering on a high dynamic range (HDR) capable monitor/gfxboard/OS"s, true);
 PropFloat(Player, HDRGlobalExposure, "HDR Display Global Exposure"s, "Global exposure scale multiplier for high dynamic range (HDR) capable monitors"s, 0.f, 5.f, 1.f);
 PropBool(Player, ForceBloomOff, "Disable Bloom"s, "Disable postprocessed bloom filter"s, false);

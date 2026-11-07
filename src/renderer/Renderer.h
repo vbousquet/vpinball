@@ -349,6 +349,7 @@ private:
    int m_vsmVirtRes = 8192; // ortho virtual map edge in texels (Player_PBRShadowMapSize)
    int m_vsmMaxLights = VSM::MAX_LIGHTS; // shadowed-light cap (Player_PBRShadowMaxLights)
    SaveDirtyState m_vsmLastTableDirty = SaveDirtyState::Clean; // table dirty state sampled per VSM frame
+   float m_pbrDimLightCutoff = 0.f; // PBR dim light cutoff (Player_PBRDimLightCutoff), 0 = off
    int m_vsmPageBudget = 32; // dirty pages rendered per frame (Player_PBRShadowPagesPerFrame)
 #endif
    void RenderDynamics(); // Render static parts if not IsUsingStaticPrepass, then render dynamic parts

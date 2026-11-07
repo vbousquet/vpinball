@@ -126,6 +126,7 @@ SAMPLER2DARRAY(tex_vsm_trans, 6);    // VSM page pool transmittance: translucent
 uniform mat4 matShadowVP[32];   // ortho virtual map view-projection per shadowed light
 uniform vec4 pbrVSMParams[32];  // x: page-table texel base, y: pages across (face grid for cube), z: pages down, w: ortho depth range
 uniform vec4 pbrVSMBox[32];     // x/y: world->virtual-uv scale (1/ortho box extents), z: ortho near depth (used CPU side)
+uniform vec4 pbrDimParams;      // x: dim light cutoff T (PBRDimLightCutoff / VPX_DIM_LIGHT_CUTOFF): a light under T unshadowed irradiance luminance at the pixel gets plain Lambert only, 0 = off
 uniform vec4 pbrShadowParams;   // x: 1/page size, y: slope-scaled depth bias, z/w: page render linear depth start + 1/range (SHADOW_TRANS)
 
 #ifdef TRANSPARENT
@@ -496,6 +497,33 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 
       const float gFade = transmission > 0.0 || alpha < 1.0 ? 1.0 : saturate(gNdotLraw * 20.0);
       if (gFade <= 0.0)
          continue;
+      // Thin surface translucency: the transmitted fraction (transmission) of the light arriving on the far side leaves
+      // this side diffusely, filtered by the surface colour (printed ink: dark ink passes little, white flood glows). Light
+      // ink scatters wider: a wrapped lobe lets grazing light through, spreading the glow away from the bulb. Clear
+      // plastics additionally show a view-dependent transmission cone toward the light (the bulb seen through the
+      // sheet), widening from a tight hot spot to the wrap term as the material roughness frosts over.
+      float transmitted = 0.0;
+      BRANCH if (NdotLraw < 0.0)
+      {
+         const float wrap = 0.4 * dot(diffuse, vec3(0.2126, 0.7152, 0.0722));
+         const vec3 l2 = normalize(-l + wN * 0.5);
+         const float lobe = pow(saturate(dot(-wV, l2)), exp2(mix(12.0, 2.0, roughness)));
+         transmitted = transmission * saturate((wrap - NdotLraw) / (1.0 + wrap) + lobe * (1.0 - roughness));
+      }
+      // Dim light cutoff (off when pbrDimParams.x <= 0): too little of this light reaches the pixel to show specular, coat
+      // reflection or a shadow. Same diffuse term as below (Fresnel, coat attenuation, transmission, gFade) minus the
+      // specular lobes and the shadow lookups, with Fresnel / coat taken at the punctual light direction.
+      const vec3 lIrr = lCol * (x * x / dist2);
+      BRANCH if (pbrDimParams.x > 0.0 && dot(lIrr, vec3(0.2126, 0.7152, 0.0722)) < pbrDimParams.x)
+      {
+         const vec3 dh = normalize(l + wV);
+         const vec3 dF = F0 + (vec3_splat(1.0) - F0) * pow(1.0 - saturate(dot(wV, dh)), 5.0);
+         float dCoatAtt = 1.0;
+         if (coatStrength > 0.0 && cNdotLraw > 0.0)
+            dCoatAtt = 1.0 - coatStrength * (0.04 + 0.96 * pow(1.0 - saturate(dot(wV, dh)), 5.0));
+         acc += gFade * (diffuse * ((vec3_splat(1.0) - dF) * (NdotL * dCoatAtt) + transmitted * coatExit) * (1.0 / PI) * lIrr);
+         continue;
+      }
       // Shadow lookups on the light's side of the geometric surface (the far side for a light behind it), slope bias from
       // the geometric normal: a normal mapped clear ramp lit from below otherwise compared against the opaque decal right
       // under it at grazing incidence, and the result flipped from cube texel to cube texel (stair-step stripes)
@@ -652,19 +680,6 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 
       }
       BRANCH if (shadowMode == 1 || shadowMode >= 3) // RAYTRACED_BALL_SHADOWS or PBR ball shadow tiers
          shadow *= get_light_ball_shadow(lPos.xyz, -dl, sqrt(dist2));
-      // Thin surface translucency: the transmitted fraction (transmission) of the light arriving on the far side leaves
-      // this side diffusely, filtered by the surface colour (printed ink: dark ink passes little, white flood glows). Light
-      // ink scatters wider: a wrapped lobe lets grazing light through, spreading the glow away from the bulb. Clear
-      // plastics additionally show a view-dependent transmission cone toward the light (the bulb seen through the
-      // sheet), widening from a tight hot spot to the wrap term as the material roughness frosts over.
-      float transmitted = 0.0;
-      BRANCH if (NdotLraw < 0.0)
-      {
-         const float wrap = 0.4 * dot(diffuse, vec3(0.2126, 0.7152, 0.0722));
-         const vec3 l2 = normalize(-l + wN * 0.5);
-         const float lobe = pow(saturate(dot(-wV, l2)), exp2(mix(12.0, 2.0, roughness)));
-         transmitted = transmission * saturate((wrap - NdotLraw) / (1.0 + wrap) + lobe * (1.0 - roughness));
-      }
       acc += (gFade * shadow) * (diffuse * ((vec3_splat(1.0) - F) * (NdotL * coatAtt) + transmitted * coatExit) * (1.0 / PI) * (lCol * (x * x / dist2)));
       specOut += (gFade * shadow) * spec;
    }

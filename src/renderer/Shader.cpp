@@ -378,6 +378,7 @@ ShaderUniformDef ShaderUniformDef::coreUniforms[static_cast<unsigned int>(Shader
    SHADER_UNIFORM(ShaderUniformType::Float4x4, matShadowVP, 32), // ortho virtual shadow map view-projection, per shadowed light
    SHADER_UNIFORM(ShaderUniformType::Float4v, pbrVSMParams, 32), // per shadowed light: x: page-table texel base, y: pages across (face grid for cube), z: pages down, w: ortho depth range
    SHADER_UNIFORM(ShaderUniformType::Float4v, pbrVSMBox, 32), // per shadowed light: x/y: world->virtual-uv scale (1/ortho box extents)
+   SHADER_UNIFORM(ShaderUniformType::Float4, pbrDimParams, 1), // x: dim light cutoff (0 = off)
    SHADER_UNIFORM(ShaderUniformType::Float4, pbrShadowParams, 1), // x: 1/page size, y: slope-scaled depth bias, z/w: unused
    SHADER_SAMPLER(tex_pbr_orm, 8, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // packed occlusion/roughness/metallic
    SHADER_SAMPLER(tex_pbr_emission, 9, SamplerAddressMode::SA_REPEAT, SamplerAddressMode::SA_REPEAT, SamplerFilter::SF_TRILINEAR), // emission map
