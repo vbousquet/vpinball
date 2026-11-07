@@ -2849,6 +2849,7 @@ void Renderer::UpdateVirtualShadowMaps()
    m_vsmPoolPages = m_table->GetSettings().GetPlayer_PBRShadowPoolPages();
    m_vsmVirtRes = m_table->GetSettings().GetPlayer_PBRShadowMapSize();
    m_vsmMaxLights = std::clamp(m_table->GetSettings().GetPlayer_PBRShadowMaxLights(), 1, VSM::MAX_LIGHTS);
+   m_pbrShadowFast = m_table->GetSettings().GetPlayer_PBRShadowFastFilter();
    m_vsmPageBudget = m_table->GetSettings().GetPlayer_PBRShadowPagesPerFrame();
    CreateVSMPagePoolTargets();
    m_vsmTouchedRTs.clear();
@@ -3338,10 +3339,17 @@ void Renderer::UpdateVirtualShadowMaps()
    m_renderDevice->m_basicShader->SetMatrix(ShaderUniform::matShadowVP, m_vsmShadowVP, VSM::MAX_LIGHTS);
    m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrVSMParams, m_vsmParams, VSM::MAX_LIGHTS);
    m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrVSMBox, m_vsmBox, VSM::MAX_LIGHTS);
-   // z: importance gate, w: tap mode (fs_pbr pbr_shadow_gate / pbr_shadow_tap_mode). VPX_SHADOW_EARLY=1 (4 corner taps first, the other 12
-   // only in a penumbra) or 2 (4 taps only); VPX_SHADOW_GATE=<irradiance luminance>: no shadow lookup for a light under it at the pixel
-   static const float shadowTapMode = std::getenv("VPX_SHADOW_EARLY") ? (float)std::clamp(atoi(std::getenv("VPX_SHADOW_EARLY")), 0, 2) : 0.f;
-   static const float shadowGate = std::getenv("VPX_SHADOW_GATE") ? (float)atof(std::getenv("VPX_SHADOW_GATE")) : 0.f;
+   // z: importance gate, w: tap mode (fs_pbr pbr_shadow_gate / pbr_shadow_tap_mode). The PBRShadowFastFilter setting (default on) = tap mode 1
+   // (4 corner taps first, the other 12 only in a penumbra) + importance gate 0.5 (no shadow lookup for a light whose unshadowed
+   // irradiance luminance at the pixel is under it). VPX_SHADOW_EARLY=0|1|2 (2 = 4 taps only) / VPX_SHADOW_GATE=<luminance> override it (A/B)
+   static const char* const envEarly = std::getenv("VPX_SHADOW_EARLY");
+   static const char* const envGate = std::getenv("VPX_SHADOW_GATE");
+   float shadowTapMode = m_pbrShadowFast ? 1.f : 0.f;
+   float shadowGate = m_pbrShadowFast ? 0.5f : 0.f;
+   if (envEarly)
+      shadowTapMode = (float)std::clamp(atoi(envEarly), 0, 2);
+   if (envGate)
+      shadowGate = (float)atof(envGate);
    m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrShadowParams, 1.f / VSM::PAGE_DIM, 0.002f, shadowGate, shadowTapMode);
 }
 #endif
