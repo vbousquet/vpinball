@@ -389,6 +389,12 @@ vec4 pbr_light_texel(const int idx)
    return texelFetch(tex_pbr_lights, ivec2(idx & 255, idx >> 8), 0);
 }
 
+// Main pass shadow filter options: pbrShadowParams.w = tap mode (0 = 16 taps, 1 = 4 corner taps first and the other 12 only
+// in a penumbra, 2 = the 4 corner taps only), pbrShadowParams.z = importance gate (a light whose unshadowed irradiance
+// luminance at the pixel is under it gets no shadow lookup; 0 = off). The page render passes use .z/.w as a depth range instead.
+float pbr_shadow_tap_mode() { return pbrShadowParams.w; }
+float pbr_shadow_gate() { return pbrShadowParams.z; }
+
 // Geometric specular AA: the GGX roughness widened by the screen-space variance of the normal n (Tokuyoshi & Kaplanyan
 // 2019: sigma^2 = 1/2pi, kappa = 0.18). Fragment derivatives: call from uniform control flow only.
 float pbr_aa_roughness(const vec3 n, const float roughness)
@@ -434,21 +440,22 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 
    // fragment coords. The previous axis-aligned 3x3 grid quantized the penumbra into ~10 visibly banded
    // levels; the rotated disk spreads the taps so the residual quantization reads as fine noise instead.
    // (elementwise init: shaderc has no array literals, same pattern as the SMAA offset[] declarations)
+   // the first 4 taps are the outer corners (the early-out set of pbrShadowParams.w)
    vec2 vsmDisk[16];
    vsmDisk[0] = vec2(-0.94201624, -0.39906216);
    vsmDisk[1] = vec2(0.94558609, -0.76890725);
-   vsmDisk[2] = vec2(-0.09418410, -0.92938870);
-   vsmDisk[3] = vec2(0.34495938, 0.29387760);
+   vsmDisk[2] = vec2(0.97484398, 0.75648379);
+   vsmDisk[3] = vec2(-0.81409955, 0.91437590);
    vsmDisk[4] = vec2(-0.91588581, 0.45771432);
    vsmDisk[5] = vec2(-0.81544232, -0.87912464);
    vsmDisk[6] = vec2(-0.38277543, 0.27676845);
-   vsmDisk[7] = vec2(0.97484398, 0.75648379);
+   vsmDisk[7] = vec2(-0.09418410, -0.92938870);
    vsmDisk[8] = vec2(0.44323325, -0.97511554);
    vsmDisk[9] = vec2(0.53742981, -0.47373420);
    vsmDisk[10] = vec2(-0.26496911, -0.41893023);
    vsmDisk[11] = vec2(0.79197514, 0.19090188);
    vsmDisk[12] = vec2(-0.24188840, 0.99706507);
-   vsmDisk[13] = vec2(-0.81409955, 0.91437590);
+   vsmDisk[13] = vec2(0.34495938, 0.29387760);
    vsmDisk[14] = vec2(0.19984126, 0.78641367);
    vsmDisk[15] = vec2(0.14383161, -0.14100790);
    for (int i = 0; i < count; i++)
@@ -564,7 +571,9 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 
       const int shadowIndex = ((shadowInfo >> 4) & 255) - 1;
       const int shadowLayout = (shadowInfo >> 12) & 15;
       const float lightRadius = float(shadowInfo >> 16) * 0.5;
-      BRANCH if (shadowIndex >= 0 && shadowLayout <= 1)
+      // Importance gate (pbr_shadow_gate): too little of this light reaches the pixel for its shadow to show
+      const bool shadowGated = dot(lCol * (x * x / dist2), vec3(0.2126, 0.7152, 0.0722)) < pbr_shadow_gate();
+      BRANCH if (shadowIndex >= 0 && shadowLayout <= 1 && !shadowGated)
       {
          // Ortho virtual map: project once, then each PCF tap resolves its own page through the
          // page table (a tap landing in a non-resident page counts as lit: pages without casters
@@ -589,19 +598,31 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 
                // incidence like the bias) instead of a binary step, so the penumbra comes out continuous
                const float cmpWin = 1.5 * max(1.0 / (vsmB.x * grid.x), 1.0 / (vsmB.y * grid.y)) / (max(NdotLs, 0.3) * 128.0);
                float shadowAcc = 0.0;
-               UNROLL for (int t = 0; t < 16; t++)
+               UNROLL for (int t = 0; t < 4; t++)
                {
                   const vec2 tuv = suv + pbr_vsm_rot(vsmDisk[t], vsmRot) * filterRadius;
                   const float d = pbr_vsm_depth(vsmP.x, grid, tuv);
                   shadowAcc += d < 0.0 ? 1.0 : smoothstep(-cmpWin, cmpWin, (d - sc.z + bias) * vsmP.w);
                }
+               // Early-out (pbr_shadow_tap_mode): the 4 corner taps agreeing (fully lit or fully shadowed) stand for all 16
+               BRANCH if (pbr_shadow_tap_mode() < 0.5 || (pbr_shadow_tap_mode() < 1.5 && shadowAcc > 0.001 && shadowAcc < 3.999))
+               {
+                  UNROLL for (int t = 4; t < 16; t++)
+                  {
+                     const vec2 tuv = suv + pbr_vsm_rot(vsmDisk[t], vsmRot) * filterRadius;
+                     const float d = pbr_vsm_depth(vsmP.x, grid, tuv);
+                     shadowAcc += d < 0.0 ? 1.0 : smoothstep(-cmpWin, cmpWin, (d - sc.z + bias) * vsmP.w);
+                  }
+               }
+               else
+                  shadowAcc *= 4.0;
                // Translucent casters: one bilinear tap at the centre (receiver 2 VPU behind them at least)
                const float nearness = 1.0 - sc.z + 2.0 / max(vsmP.w, 1.0);
                shadow = shadowAcc * (1.0 / 16.0) * pbr_vsm_tint(pbr_vsm_index(vsmP.x, grid, suv), fract(suv * grid), nearness);
             }
          }
       }
-      BRANCH if (shadowIndex >= 0 && shadowLayout == 2)
+      BRANCH if (shadowIndex >= 0 && shadowLayout == 2 && !shadowGated)
       {
          // Cube layout: 6 faces of faceGrid^2 pages each, rasterized as regular 90 deg perspective
          // depth and reconstructed to the projected distance along the face's forward axis (world units).
@@ -635,7 +656,7 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 
             // Soft compare window: ~one face texel projected at the receiver distance in world units
             const float cmpWin = max(0.25, dist * 2.0 * invFaceRes) / max(NdotLs, 0.3);
             float shadowAcc = 0.0;
-            UNROLL for (int t = 0; t < 16; t++)
+            UNROLL for (int t = 0; t < 4; t++)
             {
                const vec2 toff = pbr_vsm_rot(vsmDisk[t], vsmRot);
                const vec3 tdir = normalize(ldir + (toff.x * tX + toff.y * tY) * filterRadius);
@@ -644,6 +665,21 @@ vec3 pbr_direct_light(const vec3 wN, const vec3 wNc, const vec3 wNg, const vec3 
                const float tapBlocker = tapNdc < 0.0 ? -1.0 : zN * zF / (zF - tapNdc * (zF - zN));
                shadowAcc += tapBlocker < 0.0 ? 1.0 : smoothstep(-cmpWin, cmpWin, tapBlocker - (dist * tl.w - bias));
             }
+            // Early-out (pbr_shadow_tap_mode): the 4 corner taps agreeing (fully lit or fully shadowed) stand for all 16
+            BRANCH if (pbr_shadow_tap_mode() < 0.5 || (pbr_shadow_tap_mode() < 1.5 && shadowAcc > 0.001 && shadowAcc < 3.999))
+            {
+               UNROLL for (int t = 4; t < 16; t++)
+               {
+                  const vec2 toff = pbr_vsm_rot(vsmDisk[t], vsmRot);
+                  const vec3 tdir = normalize(ldir + (toff.x * tX + toff.y * tY) * filterRadius);
+                  const vec4 tl = pbr_shadow_cube_lookup(tdir);
+                  const float tapNdc = pbr_vsm_cube_depth(vsmP.x, faceGrid, tl);
+                  const float tapBlocker = tapNdc < 0.0 ? -1.0 : zN * zF / (zF - tapNdc * (zF - zN));
+                  shadowAcc += tapBlocker < 0.0 ? 1.0 : smoothstep(-cmpWin, cmpWin, tapBlocker - (dist * tl.w - bias));
+               }
+            }
+            else
+               shadowAcc *= 4.0;
             const int g = int(faceGrid + 0.5);
             const vec2 pg = floor(cl.xy * vec2_splat(faceGrid));
             const int cidx = int(vsmP.x + 0.5) + int(cl.z + 0.5) * g * g + int(pg.y) * g + int(pg.x);

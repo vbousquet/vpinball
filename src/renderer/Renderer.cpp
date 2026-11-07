@@ -3338,7 +3338,11 @@ void Renderer::UpdateVirtualShadowMaps()
    m_renderDevice->m_basicShader->SetMatrix(ShaderUniform::matShadowVP, m_vsmShadowVP, VSM::MAX_LIGHTS);
    m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrVSMParams, m_vsmParams, VSM::MAX_LIGHTS);
    m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrVSMBox, m_vsmBox, VSM::MAX_LIGHTS);
-   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrShadowParams, 1.f / VSM::PAGE_DIM, 0.002f, 0.f, 0.f);
+   // z: importance gate, w: tap mode (fs_pbr pbr_shadow_gate / pbr_shadow_tap_mode). VPX_SHADOW_EARLY=1 (4 corner taps first, the other 12
+   // only in a penumbra) or 2 (4 taps only); VPX_SHADOW_GATE=<irradiance luminance>: no shadow lookup for a light under it at the pixel
+   static const float shadowTapMode = std::getenv("VPX_SHADOW_EARLY") ? (float)std::clamp(atoi(std::getenv("VPX_SHADOW_EARLY")), 0, 2) : 0.f;
+   static const float shadowGate = std::getenv("VPX_SHADOW_GATE") ? (float)atof(std::getenv("VPX_SHADOW_GATE")) : 0.f;
+   m_renderDevice->m_basicShader->SetVector(ShaderUniform::pbrShadowParams, 1.f / VSM::PAGE_DIM, 0.002f, shadowGate, shadowTapMode);
 }
 #endif
 
