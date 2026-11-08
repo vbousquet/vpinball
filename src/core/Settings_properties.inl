@@ -147,6 +147,7 @@ PropInt(Player, PBRShadowMapSize, "PBR Shadow Map Size"s, "Virtual resolution in
 PropInt(Player, PBRShadowPoolPages, "PBR Shadow Pool Pages"s, "Number of 128x128 physical pages shared by all shadowed PBR lights"s, 64, 1024, 1024);
 PropInt(Player, PBRShadowMaxLights, "PBR Shadow Max Lights"s, "Maximum number of PBR lights with virtual shadow maps"s, 1, 32, 32);
 PropInt(Player, PBRShadowPagesPerFrame, "PBR Shadow Pages Per Frame"s, "Maximum number of shadow map pages rendered per frame (bakes and dynamic updates amortize over frames)"s, 1, 128, 32);
+PropBool(Player, PBRShadowFastFilter, "PBR Fast Shadow Filter"s, "Cheaper PBR soft shadows with the same look: the 4 outer filter taps first (the other 12 only where they disagree, in a penumbra), and no shadow lookup for a light too faint at the pixel for its shadow to show"s, true);
 PropBool(Player, HDRDisableToneMapper, "Disable tonemapping on HDR display"s, "Do not perform tonemapping when rendering on a high dynamic range (HDR) capable monitor/gfxboard/OS"s, true);
 PropFloat(Player, HDRGlobalExposure, "HDR Display Global Exposure"s, "Global exposure scale multiplier for high dynamic range (HDR) capable monitors"s, 0.f, 5.f, 1.f);
 PropBool(Player, ForceBloomOff, "Disable Bloom"s, "Disable postprocessed bloom filter"s, false);
