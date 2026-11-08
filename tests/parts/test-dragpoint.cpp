@@ -223,5 +223,65 @@ TEST_CASE("DragPoint curve")
       CHECK(points[1]->GetZ() == 6.f);
    }
 
+   SUBCASE("skippable points are skipped whole by a loader that does not know their tag")
+   {
+      DragPointCurve curve(owner, 1);
+      AddPoint(curve, 1.f, 2.f, 3.f, true)->m_uiLocked = true;
+      AddPoint(curve, 4.f, 5.f, 6.f);
+
+      // XPNT / XAFT: arbitrary tags, not known by any loader (a point list added to a part, and a field the part saves after it)
+      InMemStream stream;
+      {
+         BiffWriter writer(&stream, nullptr);
+         curve.SavePoints(writer, FID(XPNT), true);
+         writer.WriteInt(FID(XAFT), 42);
+         writer.EndObject();
+         CHECK_FALSE(writer.HasError());
+      }
+
+      // An older loader: no case for the tag, the record is skipped and the next field is read as its own
+      {
+         BiffReader reader(stream.Data(), static_cast<uint32_t>(stream.Size()), CURRENT_FILE_FORMAT_VERSION, nullptr, 0);
+         int after = 0;
+         bool locked = false;
+         reader.AsObject(
+            [&](int tag, IObjectReader& fieldReader)
+            {
+               if (tag == FID(XAFT))
+                  after = fieldReader.AsInt();
+               else if (tag == FID(LOCK))
+                  locked = fieldReader.AsBool();
+               return true;
+            });
+         CHECK_FALSE(reader.HasError());
+         CHECK(after == 42);
+         CHECK_FALSE(locked);
+      }
+
+      // A loader that knows the tag reads the points
+      {
+         DragPointCurve loaded(owner, 1);
+         BiffReader reader(stream.Data(), static_cast<uint32_t>(stream.Size()), CURRENT_FILE_FORMAT_VERSION, nullptr, 0);
+         int after = 0;
+         reader.AsObject(
+            [&](int tag, IObjectReader& fieldReader)
+            {
+               if (tag == FID(XPNT))
+                  loaded.LoadPointToken(fieldReader, true);
+               else if (tag == FID(XAFT))
+                  after = fieldReader.AsInt();
+               return true;
+            });
+         CHECK_FALSE(reader.HasError());
+         CHECK(after == 42);
+         const auto& points = loaded.GetPoints();
+         REQUIRE(points.size() == 2);
+         CHECK(points[0]->GetX() == 1.f);
+         CHECK(points[0]->IsSmooth() == true);
+         CHECK(points[0]->m_uiLocked == true);
+         CHECK(points[1]->GetZ() == 6.f);
+      }
+   }
+
    owner->Release();
 }

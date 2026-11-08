@@ -94,8 +94,11 @@ public:
 
    int GetMinimumPoints() const { return m_minPoints; }
 
-   void SavePoints(IObjectWriter &writer) const;
-   void LoadPointToken(IObjectReader &reader);
+   // tag: the record tag of each point (DPNT by default). skippable: each point's record covers its fields, so a loader without a case for the tag skips the
+   // point whole and keeps reading the parent's fields after it (for point lists added to parts whose older loaders do not know them). In packs (JSON) a tag
+   // other than DPNT needs its own field name in the parent's map and a GetSubObjectKind case, else its points are not written
+   void SavePoints(IObjectWriter &writer, int tag = FID(DPNT), bool skippable = false) const;
+   void LoadPointToken(IObjectReader &reader, bool skippable = false);
 
    const Vertex2D &GetCenter() const;
    const Vertex2D &GetCentroid() const;
