@@ -10,6 +10,7 @@ extern "C"
 #include "libavutil/imgutils.h"
 #include "libavutil/intreadwrite.h"
 #include "libavcodec/avcodec.h"
+#include "libavcodec/bsf.h"
 #include "libavformat/avformat.h"
 #include "libswscale/swscale.h"
 #include "libswresample/swresample.h"
@@ -84,6 +85,14 @@ public:
    typedef int(CDECL* fn_avcodec_parameters_to_context)(AVCodecContext* codec, const struct AVCodecParameters* par);
    typedef int(CDECL* fn_avcodec_receive_frame)(AVCodecContext* avctx, AVFrame* frame);
    typedef int(CDECL* fn_avcodec_send_packet)(AVCodecContext* avctx, const AVPacket* avpkt);
+   typedef int(CDECL* fn_avcodec_parameters_copy)(AVCodecParameters* dst, const AVCodecParameters* src);
+   typedef const AVBitStreamFilter*(CDECL* fn_av_bsf_get_by_name)(const char* name);
+   typedef int(CDECL* fn_av_bsf_alloc)(const AVBitStreamFilter* filter, AVBSFContext** ctx);
+   typedef int(CDECL* fn_av_bsf_init)(AVBSFContext* ctx);
+   typedef int(CDECL* fn_av_bsf_send_packet)(AVBSFContext* ctx, AVPacket* pkt);
+   typedef int(CDECL* fn_av_bsf_receive_packet)(AVBSFContext* ctx, AVPacket* pkt);
+   typedef void(CDECL* fn_av_bsf_flush)(AVBSFContext* ctx);
+   typedef void(CDECL* fn_av_bsf_free)(AVBSFContext** ctx);
 
    typedef void(CDECL* fn_av_fast_malloc)(void* ptr, unsigned int* size, size_t min_size);
    typedef AVFrame*(CDECL* fn_av_frame_alloc)(void);
@@ -131,6 +140,14 @@ public:
    fn_avcodec_parameters_to_context _avcodec_parameters_to_context = nullptr;
    fn_avcodec_receive_frame _avcodec_receive_frame = nullptr;
    fn_avcodec_send_packet _avcodec_send_packet = nullptr;
+   fn_avcodec_parameters_copy _avcodec_parameters_copy = nullptr;
+   fn_av_bsf_get_by_name _av_bsf_get_by_name = nullptr;
+   fn_av_bsf_alloc _av_bsf_alloc = nullptr;
+   fn_av_bsf_init _av_bsf_init = nullptr;
+   fn_av_bsf_send_packet _av_bsf_send_packet = nullptr;
+   fn_av_bsf_receive_packet _av_bsf_receive_packet = nullptr;
+   fn_av_bsf_flush _av_bsf_flush = nullptr;
+   fn_av_bsf_free _av_bsf_free = nullptr;
 
    fn_av_fast_malloc _av_fast_malloc = nullptr;
    fn_av_free _av_free = nullptr;
@@ -206,6 +223,14 @@ private:
          _avcodec_parameters_to_context = reinterpret_cast<fn_avcodec_parameters_to_context>(GetProcAddress(hinstLib, "avcodec_parameters_to_context"));
          _avcodec_receive_frame = reinterpret_cast<fn_avcodec_receive_frame>(GetProcAddress(hinstLib, "avcodec_receive_frame"));
          _avcodec_send_packet = reinterpret_cast<fn_avcodec_send_packet>(GetProcAddress(hinstLib, "avcodec_send_packet"));
+         _avcodec_parameters_copy = reinterpret_cast<fn_avcodec_parameters_copy>(GetProcAddress(hinstLib, "avcodec_parameters_copy"));
+         _av_bsf_get_by_name = reinterpret_cast<fn_av_bsf_get_by_name>(GetProcAddress(hinstLib, "av_bsf_get_by_name"));
+         _av_bsf_alloc = reinterpret_cast<fn_av_bsf_alloc>(GetProcAddress(hinstLib, "av_bsf_alloc"));
+         _av_bsf_init = reinterpret_cast<fn_av_bsf_init>(GetProcAddress(hinstLib, "av_bsf_init"));
+         _av_bsf_send_packet = reinterpret_cast<fn_av_bsf_send_packet>(GetProcAddress(hinstLib, "av_bsf_send_packet"));
+         _av_bsf_receive_packet = reinterpret_cast<fn_av_bsf_receive_packet>(GetProcAddress(hinstLib, "av_bsf_receive_packet"));
+         _av_bsf_flush = reinterpret_cast<fn_av_bsf_flush>(GetProcAddress(hinstLib, "av_bsf_flush"));
+         _av_bsf_free = reinterpret_cast<fn_av_bsf_free>(GetProcAddress(hinstLib, "av_bsf_free"));
          isLoaded &= _av_packet_alloc && _av_packet_free && _av_packet_unref && _av_new_packet && _av_packet_get_side_data && _avcodec_alloc_context3 && _avcodec_find_decoder
             && _avcodec_flush_buffers && _avcodec_free_context && _avcodec_get_name && _avcodec_open2 && _avcodec_parameters_to_context && _avcodec_receive_frame && _avcodec_send_packet;
       }
@@ -283,6 +308,14 @@ private:
       _avcodec_parameters_to_context = &avcodec_parameters_to_context;
       _avcodec_receive_frame = &avcodec_receive_frame;
       _avcodec_send_packet = &avcodec_send_packet;
+      _avcodec_parameters_copy = &avcodec_parameters_copy;
+      _av_bsf_get_by_name = &av_bsf_get_by_name;
+      _av_bsf_alloc = &av_bsf_alloc;
+      _av_bsf_init = &av_bsf_init;
+      _av_bsf_send_packet = &av_bsf_send_packet;
+      _av_bsf_receive_packet = &av_bsf_receive_packet;
+      _av_bsf_flush = &av_bsf_flush;
+      _av_bsf_free = &av_bsf_free;
 
       _av_get_bytes_per_sample = &av_get_bytes_per_sample;
       _av_find_best_stream = &av_find_best_stream;

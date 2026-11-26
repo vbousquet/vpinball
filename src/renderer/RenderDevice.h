@@ -335,6 +335,11 @@ public:
 
    uint64_t m_lastGPUFrameLength = 0;
 
+   // bgfx frame counter value of the last submitted (presented) frame, updated on the render
+   // thread. Used by worker threads waiting for a resource command (e.g. video readback) to
+   // have been processed. Wraparound safe when compared with < on the delta.
+   std::atomic<uint32_t> m_lastPresentFrameIdx = 0;
+
 #if BX_PLATFORM_WINDOWS
    void OnInputSampled();
    struct PresentMonProvider* m_presentMonProvider = nullptr;
@@ -352,7 +357,6 @@ private:
 
    uint32_t m_frameIndex = 0;
 
-   uint32_t m_lastPresentFrameIdx = 0;
    float m_renderLatency = 0.f;
 
    std::atomic<bool> m_renderDeviceAlive;

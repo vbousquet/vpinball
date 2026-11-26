@@ -1595,7 +1595,13 @@ void Renderer::DrawImage(VPXRenderContext2D* ctx, VPXTexture texture, const floa
       return;
    AddAncillaryContent(ctx, srcX, srcY, srcW, srcH); // Image rotation ignored: only the area used by the layout is wanted
    const bool isLinearOutput = g_pplayer->m_renderer->m_ancillaryRenderSetup.isOutputLinear;
-   std::shared_ptr<BaseTexture> const tex = g_pplayer->m_pluginAPI.GetTexture(texture);
+   VPXPluginAPIImpl& vxpApi = g_pplayer->m_pluginAPI;
+   std::shared_ptr<Sampler> const gpuSampler = vxpApi.GetVideoTexture(texture, isLinearOutput);
+   std::shared_ptr<BaseTexture> const tex = gpuSampler ? nullptr : vxpApi.GetTexture(texture);
+   const int texWidth = gpuSampler ? gpuSampler->GetWidth() : tex->width();
+   const int texHeight = gpuSampler ? gpuSampler->GetHeight() : tex->height();
+   // GPU decoded videos are opaque (alpha-layered medias stay on the CPU decode path)
+   const bool isOpaque = gpuSampler || tex->IsOpaque();
    RenderDevice* const rdl = g_pplayer->m_renderer->m_renderDevice;
    rdl->ResetRenderState();
    rdl->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE); // 2D (not mirrored) or on a double sided flasher: the mirrored default cull mode must not apply
@@ -1604,23 +1610,26 @@ void Renderer::DrawImage(VPXRenderContext2D* ctx, VPXTexture texture, const floa
    rdl->SetRenderState(RenderState::SRCBLEND, RenderState::SRC_ALPHA);
    rdl->SetRenderState(RenderState::DESTBLEND, RenderState::INVSRC_ALPHA);
    rdl->SetRenderState(RenderState::BLENDOP, RenderState::BLENDOP_ADD);
-   rdl->SetRenderState(RenderState::ALPHABLENDENABLE, (alpha != 1.f || !tex->IsOpaque()) ? RenderState::RS_TRUE : RenderState::RS_FALSE);
+   rdl->SetRenderState(RenderState::ALPHABLENDENABLE, (alpha != 1.f || !isOpaque) ? RenderState::RS_TRUE : RenderState::RS_FALSE);
    rdl->m_basicShader->SetVector(ShaderUniform::staticColor_Alpha, tintR, tintG, tintB, alpha);
    // We force to linear (no sRGB decoding) when rendering in sRGB colorspace, this assumes that the texture is in sRGB colorspace to get correct gamma (other situations would need dedicated shaders to handle them efficiently)
-   assert(tex->m_format == BaseTexture::SRGB || tex->m_format == BaseTexture::SRGBA || tex->m_format == BaseTexture::SRGB565);
+   assert(gpuSampler || tex->m_format == BaseTexture::SRGB || tex->m_format == BaseTexture::SRGBA || tex->m_format == BaseTexture::SRGB565);
    // Disable filtering and mipmap generation if they are not needed
-   const SamplerFilter sf = (ctx->is2D && (srcW * ctx->outWidth == ctx->srcWidth * (float)tex->width()) && (srcH * ctx->outHeight == ctx->srcHeight * (float)tex->height()))
+   const SamplerFilter sf = (ctx->is2D && (srcW * ctx->outWidth == ctx->srcWidth * (float)texWidth) && (srcH * ctx->outHeight == ctx->srcHeight * (float)texHeight))
       ? SamplerFilter::SF_NONE
       : SamplerFilter::SF_UNDEFINED;
-   rdl->m_basicShader->SetTexture(ShaderUniform::tex_base_color, tex.get(), !isLinearOutput, sf);
+   if (gpuSampler)
+      rdl->m_basicShader->SetTexture(ShaderUniform::tex_base_color, gpuSampler, sf);
+   else
+      rdl->m_basicShader->SetTexture(ShaderUniform::tex_base_color, tex.get(), !isLinearOutput, sf);
    const float vx1 = srcX / ctx->srcWidth;
    const float vy1 = srcY / ctx->srcHeight;
    const float vx2 = vx1 + srcW / ctx->srcWidth;
    const float vy2 = vy1 + srcH / ctx->srcHeight;
-   const float tx1 = texX / (float)tex->width();
-   const float ty1 = 1.f - texY / (float)tex->height();
-   const float tx2 = (texX + texW) / (float)tex->width();
-   const float ty2 = 1.f - (texY + texH) / (float)tex->height();
+   const float tx1 = texX / (float)texWidth;
+   const float ty1 = 1.f - texY / (float)texHeight;
+   const float tx2 = (texX + texW) / (float)texWidth;
+   const float ty2 = 1.f - (texY + texH) / (float)texHeight;
    Vertex3D_NoTex2 vertices[4] = { //
       { vx2, vy1, 0.f, 0.f, 0.f, 1.f, tx2, ty2 }, //
       { vx2, vy2, 0.f, 0.f, 0.f, 1.f, tx2, ty1 }, //
@@ -1653,6 +1662,8 @@ void Renderer::DrawMatrixDisplay(VPXRenderContext2D* ctx, VPXDisplayRenderStyle 
    VPXPluginAPIImpl& vxpApi = g_pplayer->m_pluginAPI;
    std::shared_ptr<BaseTexture> const gTex = glassTex ? vxpApi.GetTexture(glassTex) : nullptr;
    std::shared_ptr<BaseTexture> const dTex = vxpApi.GetTexture(dispTex);
+   if (dTex == nullptr)
+      return; // GPU resident video texture: not supported by the matrix display renderer
    RenderDevice* const rdl = g_pplayer->m_renderer->m_renderDevice;
    rdl->ResetRenderState();
    rdl->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE); // 2D (not mirrored) or on a double sided flasher: the mirrored default cull mode must not apply

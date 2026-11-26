@@ -207,11 +207,13 @@ Sampler::Sampler(RenderDevice* rd, string name, const vector<std::shared_ptr<con
 }
 
 #if defined(ENABLE_BGFX)
-Sampler::Sampler(RenderDevice* rd, string name, SurfaceType type, bgfx::TextureHandle bgfxTexture, bgfx::TextureFormat::Enum bgfxFormat, unsigned int width, unsigned int height, bool ownTexture)
+Sampler::Sampler(RenderDevice* rd, string name, SurfaceType type, bgfx::TextureHandle bgfxTexture, bgfx::TextureFormat::Enum bgfxFormat, unsigned int width, unsigned int height,
+   bool ownTexture, bool isSRGB)
    : m_type(type)
    , m_name(std::move(name))
    , m_rd(rd)
    , m_ownTexture(ownTexture)
+   , m_isSRGB(isSRGB)
    , m_nomipsTexture(bgfxTexture)
    , m_width(width)
    , m_height(height)

@@ -4,17 +4,21 @@
 
 #include "plugins/VPXPlugin.h"
 #include "LibAv.h"
+#include "VideoDecodeSession.h"
 
 #include <atomic>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <vector>
 
 struct AVFormatContext;
 struct AVCodecContext;
 struct AVPacket;
 struct AVFrame;
+struct AVBSFContext;
 struct SwsContext;
 struct SwrContext;
 
@@ -26,11 +30,13 @@ namespace VPX
 // are materialized by GetFramePixels/UpdateTextureFromFrame, then released.
 struct DecodedFrame
 {
-   AVFrame* frame = nullptr; // Decoded source frame (owned), freed once materialized or released
+   AVFrame* frame = nullptr; // Decoded source frame (owned), freed once materialized or released (nullptr for GPU decoded frames)
    double pts = 0.; // Presentation timestamp [s]
    uint8_t* pixels = nullptr; // Materialized RGBA pixels, from the session pool
    unsigned int width = 0; // Materialized size
    unsigned int height = 0;
+   bool isGpuFrame = false; // Frame decoded by the GPU session: gpuPtsUs selects the picture in its reorder pool
+   int64_t gpuPtsUs = 0; // Presentation timestamp [µs] of GPU decoded frames
 };
 
 // Synchronous media (video & audio) decoding session, implementing the
@@ -41,12 +47,24 @@ struct DecodedFrame
 class MediaPlayer
 {
 public:
-   // Open a session, returning nullptr on failure (also when the FFmpeg runtime
-   // libraries are not available, lazily loaded on Windows)
-   static MediaPlayer* TryOpen(const char* path);
+   // Factory creating a GPU video decode session for a video stream, called once per
+   // opened media (codecId is an AVCodecID). Returning nullptr falls back to CPU decode.
+   using VideoDecodeSessionFactory
+      = std::function<std::shared_ptr<VideoDecodeSession>(int codecId, unsigned int width, unsigned int height, const uint8_t* parameterSets, uint32_t parameterSetsSize)>;
 
-   explicit MediaPlayer(const char* path);
+   // Open a session, returning nullptr on failure (also when the FFmpeg runtime
+   // libraries are not available, lazily loaded on Windows). When a gpuSessionFactory
+   // is provided and the video stream is hardware decodable, frames stay GPU resident.
+   static MediaPlayer* TryOpen(const char* path, const VideoDecodeSessionFactory& gpuSessionFactory = {});
+
+   explicit MediaPlayer(const char* path, const VideoDecodeSessionFactory& gpuSessionFactory = {});
    ~MediaPlayer();
+
+   // GPU decoded session: the video stream is fed to the hardware decoder and frames
+   // stay GPU resident (nullptr when decoded on CPU)
+   std::shared_ptr<VideoDecodeSession> GetGpuSession() const { return m_gpuSession; }
+   // Advance the GPU decoder's presentation clock for the given frame
+   void PresentGpuFrame(MediaFrame frame);
 
    bool IsOpen() const { return m_formatContext != nullptr; }
 
@@ -84,6 +102,27 @@ private:
    AVCodecContext* OpenAlphaStream();
    void ReceiveAlphaFrames();
    void AttachAlphaFrame(AVFrame* frame);
+
+   // GPU hardware decode session: when set, the video stream has no avcodec context and
+   // demuxed packets are bitstream converted then submitted to the GPU decoder. AUs are
+   // submitted in decode order; video outputs are emitted in presentation order once the
+   // reorder lookahead window is filled (or at end of stream).
+   VideoDecodeSessionFactory m_gpuSessionFactory;
+   std::shared_ptr<VideoDecodeSession> m_gpuSession;
+   struct AVBSFContext* m_bsfContext = nullptr;
+   bool OpenGpuVideoSession();
+   void GpuFeedPacket(AVPacket* pkt);
+   void GpuVideoStep(); // Submit pending AUs / emit presentation ordered frames
+   static constexpr size_t kGpuReorderLookahead = 16; // Matches the decoder reorder pool depth
+   bool m_gpuNeedStreamReset = false;
+   int64_t m_gpuLastPtsUs = 0;
+   struct PendingAu
+   {
+      std::vector<uint8_t> data;
+      int64_t ptsUs;
+   };
+   std::deque<PendingAu> m_pendingAus; // Converted access units in decode order, awaiting submission
+   std::multiset<int64_t> m_submittedPts; // Submitted AUs awaiting emission (presentation order)
 
    int m_audioStream = -1;
    AVCodecContext* m_audioContext = nullptr;

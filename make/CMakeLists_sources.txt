@@ -117,6 +117,7 @@ set(VPX_SOURCES
    src/media/LibAv.h
    src/media/MediaPlayer.cpp
    src/media/MediaPlayer.h
+   src/media/VideoDecodeSession.h
 
    src/meshes/ballMesh.h
    src/meshes/bulbLightMesh.h
@@ -282,6 +283,8 @@ set(VPX_SOURCES
    src/renderer/TextureManager.h
    src/renderer/VertexBuffer.cpp
    src/renderer/VertexBuffer.h
+   src/renderer/VideoDecodeTexture.cpp
+   src/renderer/VideoDecodeTexture.h
    src/renderer/ViewSetup.cpp
    src/renderer/ViewSetup.h
    src/renderer/VRDevice.cpp

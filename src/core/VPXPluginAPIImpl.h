@@ -14,6 +14,7 @@
 #include "unordered_dense.h"
 
 class BaseTexture;
+class Sampler;
 class Settings;
 
 // VPX serves as a plugin host, using the generic messaging plugin API
@@ -42,6 +43,9 @@ public:
    IDispatch* CreateCOMPluginObject(const string& classId);
 
    std::shared_ptr<BaseTexture> GetTexture(VPXTexture texture) const;
+   // Returns a bindable sampler for GPU decoded video textures (nullptr for CPU textures).
+   // srgbDecode selects sRGB->linear conversion at sampling time (for linear output targets).
+   std::shared_ptr<Sampler> GetVideoTexture(VPXTexture texture, bool srgbDecode) const;
 
    bool IsScriptContributor(const unsigned int endpointId) const;
 

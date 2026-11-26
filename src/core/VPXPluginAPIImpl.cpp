@@ -11,6 +11,8 @@
 #include "input/PlungerHandler.h"
 #include "physics/cabinet/NudgeHandler.h"
 #include "media/MediaPlayer.h"
+#include "renderer/Sampler.h"
+#include "renderer/VideoDecodeTexture.h"
 
 VPXPluginAPIImpl* VPXPluginAPIImpl::s_instance = nullptr;
 
@@ -224,11 +226,21 @@ struct VPXTextureBlock
    // Secondary texture holding the previous content: it absorbs an update while 'tex' is still
    // referenced by a pending GPU upload, then takes over the pending role (see UpdateTexture)
    std::shared_ptr<BaseTexture> spare;
+   // GPU decoded video session owning the texture content (tex/spare are then unused and nullptr)
+   std::shared_ptr<VPX::VideoDecodeSession> gpuSession;
    VPXTextureInfo info;
 };
 
 static void UpdateVPXTextureInfo(VPXTextureBlock* tex)
 {
+   if (tex->gpuSession)
+   {
+      tex->info.width = tex->gpuSession->GetWidth();
+      tex->info.height = tex->gpuSession->GetHeight();
+      tex->info.format = VPXTextureFormat::VPXTEXFMT_sRGBA8;
+      tex->info.data = nullptr; // GPU resident: no CPU pixels
+      return;
+   }
    tex->info.width = tex->tex->width();
    tex->info.height = tex->tex->height();
    switch (tex->tex->m_format)
@@ -245,7 +257,13 @@ static void UpdateVPXTextureInfo(VPXTextureBlock* tex)
 std::shared_ptr<BaseTexture> VPXPluginAPIImpl::GetTexture(VPXTexture texture) const
 {
    VPXTextureBlock* tex = reinterpret_cast<VPXTextureBlock*>(texture);
-   return tex->tex;
+   return tex->gpuSession ? nullptr : tex->tex; // GPU video textures have no CPU copy
+}
+
+std::shared_ptr<Sampler> VPXPluginAPIImpl::GetVideoTexture(VPXTexture texture, bool srgbDecode) const
+{
+   VPXTextureBlock* tex = reinterpret_cast<VPXTextureBlock*>(texture);
+   return (tex && tex->gpuSession) ? tex->gpuSession->GetSampler(srgbDecode) : nullptr;
 }
 
 void MSGPIAPI VPXPluginAPIImpl::UpdateTexture(VPXTexture* texture, int width, int height, VPXTextureFormat format, const void* image)
@@ -256,6 +274,7 @@ void MSGPIAPI VPXPluginAPIImpl::UpdateTexture(VPXTexture* texture, int width, in
    VPXTextureBlock** tex = reinterpret_cast<VPXTextureBlock**>(texture);
    if (*tex == nullptr)
       *tex = new VPXTextureBlock();
+   (*tex)->gpuSession = nullptr; // A CPU pixel update turns the texture back to a CPU texture
    // A texture shared_ptr use count above 1 means it is still referenced, that is to say by a pending GPU
    // upload (the only other holder besides this block on the API thread). Its content must not be written
    // while the upload reads it, so the update is redirected to the spare texture and the two are swapped:
@@ -848,7 +867,28 @@ Media MSGPIAPI VPXPluginAPIImpl::MediaOpen(const char* path, unsigned int flags)
    assert(flags == MEDIA_OPEN_DEFAULT);
    if (path == nullptr)
       return nullptr;
-   VPX::MediaPlayer* media = VPX::MediaPlayer::TryOpen(path);
+   VPX::MediaPlayer::VideoDecodeSessionFactory gpuSessionFactory;
+#if defined(ENABLE_BGFX)
+   if (g_pplayer && g_pplayer->m_renderer && (bgfx::getCaps()->supported & BGFX_CAPS_VIDEO_DECODE))
+   {
+      RenderDevice* rd = g_pplayer->m_renderer->m_renderDevice;
+      gpuSessionFactory = [rd](int codecId, unsigned int width, unsigned int height, const uint8_t* parameterSets, uint32_t parameterSetsSize) -> std::shared_ptr<VPX::VideoDecodeSession>
+      {
+         bgfx::VideoCodec::Enum codec;
+         switch (codecId)
+         {
+         case AV_CODEC_ID_H264: codec = bgfx::VideoCodec::H264; break;
+         case AV_CODEC_ID_HEVC: codec = bgfx::VideoCodec::H265; break;
+         case AV_CODEC_ID_AV1: codec = bgfx::VideoCodec::AV1; break;
+         default: return nullptr;
+         }
+         if (bgfx::getCaps()->codecs[codec] == 0)
+            return nullptr;
+         return VideoDecodeTexture::Create(rd, codec, width, height, parameterSets, parameterSetsSize);
+      };
+   }
+#endif
+   VPX::MediaPlayer* media = VPX::MediaPlayer::TryOpen(path, gpuSessionFactory);
    if (media == nullptr) // FFmpeg runtime not available
       return nullptr;
    if (!media->IsOpen())
@@ -898,9 +938,33 @@ void MSGPIAPI VPXPluginAPIImpl::MediaUpdateTextureFromFrame(Media media, MediaFr
 {
    if (media == nullptr || frame == nullptr || texture == nullptr)
       return;
+   VPX::MediaPlayer* player = static_cast<VPX::MediaPlayer*>(media);
+   VPX::DecodedFrame* mediaFrame = static_cast<VPX::DecodedFrame*>(frame);
+   if (mediaFrame->isGpuFrame && player->GetGpuSession())
+   {
+      // GPU decoded frame: present it in the decoder's reorder pool and mark the texture
+      // as bound to the decode session (its content is selected at sampling time)
+      if (s_instance == nullptr)
+         return;
+      s_instance->m_pluginManager.AssertAPIThread();
+      player->PresentGpuFrame(frame);
+      VPXTextureBlock** tex = reinterpret_cast<VPXTextureBlock**>(texture);
+      if (*tex == nullptr)
+         *tex = new VPXTextureBlock();
+      (*tex)->gpuSession = player->GetGpuSession();
+      if ((*tex)->tex)
+      {
+         if (g_pplayer)
+            g_pplayer->m_renderer->m_renderDevice->m_texMan.UnloadTexture((*tex)->tex.get());
+         (*tex)->tex = nullptr;
+      }
+      (*tex)->spare = nullptr;
+      UpdateVPXTextureInfo(*tex);
+      return;
+   }
    const uint8_t* data = nullptr;
    unsigned int width = 0, height = 0;
-   if (static_cast<VPX::MediaPlayer*>(media)->GetFramePixels(frame, &data, &width, &height) == 0)
+   if (player->GetFramePixels(frame, &data, &width, &height) == 0)
       UpdateTexture(texture, width, height, VPXTextureFormat::VPXTEXFMT_sRGBA8, data);
 }
 

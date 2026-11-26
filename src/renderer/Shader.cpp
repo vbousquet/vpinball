@@ -1185,6 +1185,9 @@ void Shader::ApplyUniform(const ShaderUniform uniformName)
             bgfx::setTexture(ShaderUniformDef::coreUniforms[static_cast<unsigned int>(uniformName)].tex_unit, desc, m_renderDevice->m_nullTexture->GetCoreTexture(false));
             return;
          }
+         // Select the sRGB SRV of sRGB mutable textures (video decode destinations) at bind time
+         if (texel->IsSRGB())
+            flags |= BGFX_SAMPLER_SRGB;
          bgfx::setTexture(ShaderUniformDef::coreUniforms[static_cast<unsigned int>(uniformName)].tex_unit, desc, texHandle, flags);
 
          #elif defined(ENABLE_OPENGL)

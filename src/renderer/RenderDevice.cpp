@@ -1524,6 +1524,9 @@ RenderDevice::RenderDevice(
    //init.profile = true;
    #endif
 
+   // Enable the backend hardware video decoder (used to keep decoded video frames GPU resident)
+   init.videoDecode = true;
+
    ResetActiveView();
 
    m_frameMutex.lock();

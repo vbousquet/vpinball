@@ -27,7 +27,7 @@ namespace VPX
  */
 #define MEDIA_PLAYER_SWS_DST_PADDING 64
 
-MediaPlayer* MediaPlayer::TryOpen(const char* path)
+MediaPlayer* MediaPlayer::TryOpen(const char* path, const VideoDecodeSessionFactory& gpuSessionFactory)
 {
    // The FFmpeg runtime is lazily loaded on Windows: report its absence as a
    // simple open failure
@@ -36,10 +36,11 @@ MediaPlayer* MediaPlayer::TryOpen(const char* path)
       PLOGE << "MediaPlayer: FFmpeg runtime is not available";
       return nullptr;
    }
-   return new MediaPlayer(path);
+   return new MediaPlayer(path, gpuSessionFactory);
 }
 
-MediaPlayer::MediaPlayer(const char* path)
+MediaPlayer::MediaPlayer(const char* path, const VideoDecodeSessionFactory& gpuSessionFactory)
+   : m_gpuSessionFactory(gpuSessionFactory)
 {
    m_libAV._av_log_set_level(AV_LOG_ERROR);
 
@@ -63,8 +64,11 @@ MediaPlayer::MediaPlayer(const char* path)
 
    if (m_videoStream >= 0)
    {
-      m_videoContext = OpenStream(m_videoStream);
-      if (m_videoContext == nullptr)
+      // Keep frames GPU resident when the renderer supports hardware decoding of this
+      // stream, otherwise open the software decoder
+      if (!(m_gpuSessionFactory && OpenGpuVideoSession()))
+         m_videoContext = OpenStream(m_videoStream);
+      if (m_videoContext == nullptr && m_gpuSession == nullptr)
       {
          PLOGE << "MediaPlayer: unable to open video stream: " << path;
       }
@@ -103,7 +107,7 @@ MediaPlayer::MediaPlayer(const char* path)
       }
    }
 
-   if (!m_videoContext && !m_audioContext)
+   if (!m_videoContext && !m_audioContext && !m_gpuSession)
    {
       PLOGE << "MediaPlayer: no video or audio stream found: " << path;
       m_libAV._avformat_close_input(&m_formatContext);
@@ -120,7 +124,7 @@ MediaPlayer::MediaPlayer(const char* path)
       return;
    }
 
-   if (m_videoContext)
+   if (m_videoContext || m_gpuSession)
    {
       const AVRational videoTimeBase = m_formatContext->streams[m_videoStream]->time_base;
       m_videoTimeBaseSec = static_cast<double>(videoTimeBase.num) / videoTimeBase.den;
@@ -152,6 +156,8 @@ MediaPlayer::~MediaPlayer()
    for (AVFrame* alphaFrame : m_alphaFrames)
       m_libAV._av_frame_free(&alphaFrame);
    m_alphaFrames.clear();
+   if (m_bsfContext)
+      m_libAV._av_bsf_free(&m_bsfContext);
    if (m_formatContext)
       m_libAV._avformat_close_input(&m_formatContext);
    if (m_packet)
@@ -198,7 +204,7 @@ AVCodecContext* MediaPlayer::OpenStream(int streamIndex)
 // data, so it is decoded by a second instance of the same codec, without codec parameters
 AVCodecContext* MediaPlayer::OpenAlphaStream()
 {
-   const AVCodec* const codec = m_libAV._avcodec_find_decoder(m_videoContext->codec_id);
+   const AVCodec* const codec = m_libAV._avcodec_find_decoder(m_formatContext->streams[m_videoStream]->codecpar->codec_id);
    AVCodecContext* context = codec ? m_libAV._avcodec_alloc_context3(codec) : nullptr;
    if (context == nullptr)
       return nullptr;
@@ -210,6 +216,131 @@ AVCodecContext* MediaPlayer::OpenAlphaStream()
       return nullptr;
    }
    return context;
+}
+
+bool MediaPlayer::OpenGpuVideoSession()
+{
+   const AVCodecParameters* par = m_formatContext->streams[m_videoStream]->codecpar;
+
+   // Select the Annex-B bitstream filter for length-prefixed codecs. H.264 parameter
+   // sets are required up front to initialize the decoder, so streams without any
+   // (e.g. Annex-B transport streams) fall back to CPU decoding.
+   const char* bsfName = nullptr;
+   switch (par->codec_id)
+   {
+   case AV_CODEC_ID_H264: bsfName = "h264_mp4toannexb"; break;
+   case AV_CODEC_ID_HEVC: bsfName = "hevc_mp4toannexb"; break;
+   case AV_CODEC_ID_AV1: break; // Demuxed packets are already OBU access units
+   default: return false;
+   }
+
+   const uint8_t* parameterSets = par->extradata;
+   uint32_t parameterSetsSize = static_cast<uint32_t>(par->extradata_size);
+
+   if (bsfName != nullptr)
+   {
+      if (m_libAV._av_bsf_get_by_name == nullptr || m_libAV._av_bsf_alloc == nullptr || m_libAV._av_bsf_init == nullptr || m_libAV._av_bsf_send_packet == nullptr
+         || m_libAV._av_bsf_receive_packet == nullptr || m_libAV._av_bsf_flush == nullptr || m_libAV._av_bsf_free == nullptr)
+         return false; // Older FFmpeg runtime without the bitstream filter API
+      const AVBitStreamFilter* bsf = m_libAV._av_bsf_get_by_name(bsfName);
+      if (bsf == nullptr || m_libAV._av_bsf_alloc(bsf, &m_bsfContext) < 0)
+         return false;
+      m_bsfContext->time_base_in = m_formatContext->streams[m_videoStream]->time_base;
+      if (m_libAV._avcodec_parameters_copy(m_bsfContext->par_in, par) < 0 || m_libAV._av_bsf_init(m_bsfContext) < 0)
+      {
+         m_libAV._av_bsf_free(&m_bsfContext);
+         return false;
+      }
+      // The mp4toannexb filters expose the converted Annex-B parameter sets as output extradata
+      parameterSets = m_bsfContext->par_out->extradata;
+      parameterSetsSize = static_cast<uint32_t>(m_bsfContext->par_out->extradata_size);
+   }
+
+   if (parameterSets == nullptr || parameterSetsSize == 0)
+   {
+      if (m_bsfContext)
+         m_libAV._av_bsf_free(&m_bsfContext);
+      return false;
+   }
+
+   m_gpuSession = m_gpuSessionFactory(static_cast<int>(par->codec_id), par->width, par->height, parameterSets, parameterSetsSize);
+   if (m_gpuSession == nullptr)
+   {
+      if (m_bsfContext)
+         m_libAV._av_bsf_free(&m_bsfContext);
+      return false;
+   }
+   m_gpuNeedStreamReset = true;
+   return true;
+}
+
+void MediaPlayer::GpuFeedPacket(AVPacket* pkt)
+{
+   const auto appendAu = [this](AVPacket* p)
+   {
+      PendingAu& au = m_pendingAus.emplace_back();
+      au.data.assign(p->data, p->data + p->size);
+      if (p->pts != AV_NOPTS_VALUE)
+         m_gpuLastPtsUs = static_cast<int64_t>(llrint(static_cast<double>(p->pts) * m_videoTimeBaseSec * 1e6));
+      else
+         m_gpuLastPtsUs += static_cast<int64_t>(llrint(m_frameDuration * 1e6));
+      au.ptsUs = m_gpuLastPtsUs;
+   };
+
+   if (m_bsfContext)
+   {
+      if (m_libAV._av_bsf_send_packet(m_bsfContext, pkt) < 0)
+         return;
+      while (m_libAV._av_bsf_receive_packet(m_bsfContext, pkt ? pkt : m_packet) >= 0)
+      {
+         appendAu(pkt ? pkt : m_packet);
+         m_libAV._av_packet_unref(pkt ? pkt : m_packet);
+      }
+   }
+   else if (pkt)
+   {
+      appendAu(pkt);
+   }
+}
+
+void MediaPlayer::GpuVideoStep()
+{
+   // Submit access units in decode order, keeping a reorder lookahead of pending AUs in
+   // front of the submission point (drained at end of stream)
+   while (!m_pendingAus.empty() && (m_inputEof || m_pendingAus.size() > kGpuReorderLookahead))
+   {
+      PendingAu au = std::move(m_pendingAus.front());
+      m_pendingAus.pop_front();
+      VPX::VideoDecodeAu decodeAu { static_cast<uint32_t>(au.data.size()), au.ptsUs };
+      m_gpuSession->SubmitAccessUnits(au.data.data(), static_cast<uint32_t>(au.data.size()), &decodeAu, 1, m_gpuNeedStreamReset, m_inputEof && m_pendingAus.empty());
+      m_gpuNeedStreamReset = false;
+      m_submittedPts.insert(au.ptsUs);
+   }
+   // Emit video frames in presentation order once the submitted window exceeds the
+   // decoder reorder depth, matching the order avcodec would have produced
+   while (!m_submittedPts.empty() && (m_inputEof || m_submittedPts.size() > kGpuReorderLookahead))
+   {
+      const auto it = m_submittedPts.begin();
+      const int64_t ptsUs = *it;
+      m_submittedPts.erase(it);
+      DecodedFrame* mediaFrame = new DecodedFrame();
+      mediaFrame->isGpuFrame = true;
+      mediaFrame->gpuPtsUs = ptsUs;
+      mediaFrame->pts = static_cast<double>(ptsUs) * 1e-6;
+      QueuedOutput queued;
+      queued.output.type = MEDIA_OUT_VIDEO;
+      queued.output.pts = mediaFrame->pts;
+      queued.output.videoFrame = mediaFrame;
+      m_outputs.push_back(std::move(queued));
+      m_liveFrames++;
+   }
+}
+
+void MediaPlayer::PresentGpuFrame(MediaFrame frame)
+{
+   DecodedFrame* mediaFrame = static_cast<DecodedFrame*>(frame);
+   if (m_gpuSession && mediaFrame && mediaFrame->isGpuFrame)
+      m_gpuSession->Present(mediaFrame->gpuPtsUs);
 }
 
 void MediaPlayer::GetInfo(MediaInfo* info) const
@@ -227,7 +358,7 @@ void MediaPlayer::GetInfo(MediaInfo* info) const
       info->startTime = (stream->start_time != AV_NOPTS_VALUE) ? static_cast<double>(stream->start_time) * stream->time_base.num / stream->time_base.den : 0.;
    }
 
-   if (m_videoContext)
+   if (m_videoContext || m_gpuSession)
    {
       const AVStream* stream = m_formatContext->streams[m_videoStream];
       info->videoWidth = stream->codecpar->width;
@@ -247,6 +378,10 @@ int MediaPlayer::Read(MediaOutput* output)
 {
    while (m_outputs.empty())
    {
+      if (m_gpuSession)
+         GpuVideoStep(); // Submit pending AUs to the decoder and emit queued frames
+      if (!m_outputs.empty())
+         break;
       if (m_inputEof)
       {
          output->type = MEDIA_OUT_EOF;
@@ -267,6 +402,8 @@ int MediaPlayer::Read(MediaOutput* output)
             m_libAV._avcodec_send_packet(m_alphaContext, nullptr);
             ReceiveAlphaFrames();
          }
+         if (m_gpuSession)
+            GpuFeedPacket(nullptr); // Drain the bitstream filter into the pending AU queue
          ReceiveFrames(m_audioContext);
          ReceiveFrames(m_videoContext);
       }
@@ -275,6 +412,11 @@ int MediaPlayer::Read(MediaOutput* output)
          PLOGE << "MediaPlayer: error reading frame, ret=" << rfRet;
          output->type = MEDIA_OUT_ERROR;
          return 0;
+      }
+      else if (m_packet->stream_index == m_videoStream && m_gpuSession)
+      {
+         GpuFeedPacket(m_packet);
+         m_libAV._av_packet_unref(m_packet);
       }
       else
       {
@@ -346,6 +488,16 @@ int MediaPlayer::Seek(double position)
    for (AVFrame* alphaFrame : m_alphaFrames)
       m_libAV._av_frame_free(&alphaFrame);
    m_alphaFrames.clear();
+   if (m_gpuSession)
+   {
+      if (m_bsfContext)
+         m_libAV._av_bsf_flush(m_bsfContext);
+      // The next submitted AU starts a new stream segment beginning on a keyframe
+      m_pendingAus.clear();
+      m_submittedPts.clear();
+      m_gpuNeedStreamReset = true;
+      m_gpuLastPtsUs = 0;
+   }
    m_inputEof = false;
    m_lastVideoPts = 0.;
    m_lastAudioPts = 0.;
@@ -540,6 +692,29 @@ bool MediaPlayer::Materialize(DecodedFrame* mediaFrame)
    std::lock_guard lock(m_pixelsMutex);
    if (mediaFrame->pixels)
       return true;
+
+   if (mediaFrame->isGpuFrame)
+   {
+      // GPU decoded frame: select its picture in the decoder's reorder pool and read it
+      // back. This stalls the GPU pipeline, plugins needing per frame CPU pixels should
+      // be avoided on hardware decoded media.
+      if (!m_gpuSession)
+         return false;
+      const unsigned int width = m_gpuSession->GetWidth();
+      const unsigned int height = m_gpuSession->GetHeight();
+      uint8_t* buffer = AcquirePixels(width, height);
+      if (!buffer || !m_gpuSession->ReadPixels(mediaFrame->gpuPtsUs, buffer))
+      {
+         if (buffer)
+            m_pixelsPool.push_back({ buffer, width, height });
+         return false;
+      }
+      mediaFrame->pixels = buffer;
+      mediaFrame->width = width;
+      mediaFrame->height = height;
+      return true;
+   }
+
    if (mediaFrame->frame == nullptr || mediaFrame->frame->format < 0)
       return false;
 

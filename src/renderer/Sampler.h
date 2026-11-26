@@ -46,7 +46,8 @@ public:
    ~Sampler();
 
 #if defined(ENABLE_BGFX)
-   Sampler(RenderDevice* rd, string name, SurfaceType type, bgfx::TextureHandle bgfxTexture, bgfx::TextureFormat::Enum bgfxFormat, unsigned int width, unsigned int height, bool ownTexture);
+   Sampler(RenderDevice* rd, string name, SurfaceType type, bgfx::TextureHandle bgfxTexture, bgfx::TextureFormat::Enum bgfxFormat, unsigned int width, unsigned int height, bool ownTexture,
+      bool isSRGB = false);
    bgfx::TextureHandle GetCoreTexture(bool withMipmaps);
    void ReleaseCoreTexture();
    // The wrapped texture was destroyed by its owner (e.g. a released render target): keep the handle in sync so
