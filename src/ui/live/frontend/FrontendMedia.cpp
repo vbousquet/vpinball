@@ -12,12 +12,35 @@
 #include "renderer/Shader.h"
 #include "renderer/Texture.h"
 #include "renderer/TextureManager.h"
+#include "renderer/VideoDecodeTexture.h"
 
 #include <system_error>
 
 
 namespace VPX::Frontend
 {
+
+static VPX::MediaPlayer::VideoDecodeSessionFactory CreateGpuVideoSessionFactory(RenderDevice *renderDevice)
+{
+#if defined(ENABLE_BGFX)
+   if (renderDevice != nullptr && (bgfx::getCaps()->supported & BGFX_CAPS_VIDEO_DECODE) != 0)
+      return [renderDevice](int codecId, unsigned int width, unsigned int height, const uint8_t *parameterSets, uint32_t parameterSetsSize) -> std::shared_ptr<VPX::VideoDecodeSession>
+      {
+         bgfx::VideoCodec::Enum codec;
+         switch (codecId)
+         {
+         case AV_CODEC_ID_H264: codec = bgfx::VideoCodec::H264; break;
+         case AV_CODEC_ID_HEVC: codec = bgfx::VideoCodec::H265; break;
+         case AV_CODEC_ID_AV1: codec = bgfx::VideoCodec::AV1; break;
+         default: return nullptr;
+         }
+         if (bgfx::getCaps()->codecs[codec] == 0)
+            return nullptr;
+         return VideoDecodeTexture::Create(renderDevice, codec, width, height, parameterSets, parameterSetsSize);
+      };
+#endif
+   return {};
+}
 
 // One decoding session per video file: a worker thread reads the media through the shared
 // VPX::MediaPlayer service (synchronous single threaded session), materializes each video frame
@@ -38,6 +61,10 @@ struct FrontendMedia::VideoSession
    std::shared_ptr<BaseTexture> recycled; // Render thread to worker: a frame buffer free for reuse
    std::shared_ptr<const BaseTexture> pending; // Worker to render thread: latest materialized frame
    uint64_t seq = 0; // Publication counter of pending
+   VPX::MediaPlayer::VideoDecodeSessionFactory gpuSessionFactory;
+   std::shared_ptr<Sampler> gpuSampler;
+   uint64_t gpuSeq = 0;
+   std::atomic<uint64_t> cpuFramesWantedUntilNs { 0 };
    uint64_t lastUsed = 0; // Render thread only: m_tick of the last request on this file
    std::atomic<unsigned int> decodeW { 0 }; // Largest decode bound requested by referencing items
    std::atomic<unsigned int> decodeH { 0 }; // (0 = default media cell bound)
@@ -109,7 +136,7 @@ FrontendMedia::~FrontendMedia()
 void FrontendMedia::DecodeVideo(VideoSession *const session)
 {
    SetThreadName("Frontend Video");
-   std::unique_ptr<VPX::MediaPlayer> player(VPX::MediaPlayer::TryOpen(PathToUTF8(session->file).c_str()));
+   std::unique_ptr<VPX::MediaPlayer> player(VPX::MediaPlayer::TryOpen(PathToUTF8(session->file).c_str(), session->gpuSessionFactory));
    if (player == nullptr || !player->IsOpen())
    {
       PLOGW << "FrontendMedia: failed to open video '" << session->file << "'";
@@ -124,6 +151,21 @@ void FrontendMedia::DecodeVideo(VideoSession *const session)
       session->failed = true;
       session->finished = true;
       return;
+   }
+   if (player->GetGpuSession())
+   {
+      const std::shared_ptr<Sampler> sampler = player->GetGpuSession()->GetSampler(true);
+      if (sampler == nullptr)
+      {
+         session->failed = true;
+         session->finished = true;
+         return;
+      }
+      {
+         std::lock_guard lock(session->mutex);
+         session->gpuSampler = sampler;
+      }
+      PLOGI << "FrontendMedia: hardware decoding video '" << session->file << "' on the GPU";
    }
    // Decode at a bounded resolution: frontend medias are mostly shown at cell or pane size and
    // the upload cost scales with the frame size. Items presenting a media larger (e.g. a theme
@@ -201,9 +243,31 @@ void FrontendMedia::DecodeVideo(VideoSession *const session)
          player->ReleaseFrame(output.videoFrame);
          continue;
       }
+      const bool gpuDecode = player->GetGpuSession() != nullptr;
+      const bool cpuFrameWanted = gpuDecode && SDL_GetTicksNS() < session->cpuFramesWantedUntilNs.load();
+      if (gpuDecode && !cpuFrameWanted)
+      {
+         player->PresentGpuFrame(output.videoFrame);
+         {
+            std::lock_guard lock(session->mutex);
+            session->gpuSeq++;
+         }
+         player->ReleaseFrame(output.videoFrame);
+         continue;
+      }
       const uint8_t *pixels = nullptr;
       unsigned int width = 0, height = 0;
-      if (player->GetFramePixels(output.videoFrame, &pixels, &width, &height) == 0)
+      const int pixelResult = player->GetFramePixels(output.videoFrame, &pixels, &width, &height);
+      if (gpuDecode)
+      {
+         if (pixelResult != 0)
+            player->PresentGpuFrame(output.videoFrame);
+         {
+            std::lock_guard lock(session->mutex);
+            session->gpuSeq++;
+         }
+      }
+      if (pixelResult == 0)
       {
          std::shared_ptr<BaseTexture> tex;
          {
@@ -236,6 +300,7 @@ std::shared_ptr<FrontendMedia::VideoSession> FrontendMedia::GetVideoSession(cons
       return it->second;
    std::shared_ptr<VideoSession> session = std::make_shared<VideoSession>();
    session->file = file;
+   session->gpuSessionFactory = CreateGpuVideoSessionFactory(m_rd);
    try
    {
       session->thread = std::thread(&FrontendMedia::DecodeVideo, session.get());
@@ -364,8 +429,21 @@ std::shared_ptr<Sampler> FrontendMedia::Load(const std::filesystem::path &key, c
 // has been stopped (a media and its blurred variant share the same session)
 void FrontendMedia::TouchVideo(Item &item, const std::filesystem::path &file)
 {
+   if (item.video == nullptr)
+   {
+      constexpr unsigned int warmupFrames = 6;
+      item.videoWarmup = item.videoWarmupTick + 1 == m_tick ? item.videoWarmup + 1 : 1;
+      item.videoWarmupTick = m_tick;
+      if (item.videoWarmup < warmupFrames)
+         return;
+   }
    if (item.video == nullptr || item.video->quit)
-      item.video = GetVideoSession(file);
+   {
+      const std::shared_ptr<VideoSession> session = GetVideoSession(file);
+      if (item.video != session)
+         item.gpuBacked = false;
+      item.video = session;
+   }
    item.video->lastUsed = m_tick;
    // Raise the session decode bound to this item's need (render thread only writes, the worker reads)
    item.video->decodeW = std::max(item.video->decodeW.load(), item.decodeW);
@@ -386,6 +464,8 @@ std::shared_ptr<const BaseTexture> FrontendMedia::GetVideoFrame(const std::files
    const auto it = m_items.find(file);
    if (it == m_items.end())
       return nullptr;
+   if (it->second.video != nullptr)
+      it->second.video->cpuFramesWantedUntilNs.store(SDL_GetTicksNS() + 500000000ull);
    if (seq != nullptr)
       *seq = it->second.videoSeq;
    return it->second.videoBitmap;
@@ -394,16 +474,21 @@ std::shared_ptr<const BaseTexture> FrontendMedia::GetVideoFrame(const std::files
 void FrontendMedia::BeginFrame()
 {
    m_tick++;
-   Pump();
    Prune();
    Evict();
+   Pump();
 
    // Suspend the decode of video sessions no longer requested, stop the long stale ones and join
    // the finished threads of the stopping list
    for (auto it = m_videos.begin(); it != m_videos.end();)
    {
       VideoSession *const session = it->second.get();
-      if (session->lastUsed + 600 <= m_tick)
+      bool gpuBacked = false;
+      {
+         std::lock_guard lock(session->mutex);
+         gpuBacked = session->gpuSampler != nullptr;
+      }
+      if (session->lastUsed + (gpuBacked ? 30 : 600) <= m_tick)
       {
          StopVideoSession(it->second);
          it = m_videos.erase(it);
@@ -508,6 +593,48 @@ void FrontendMedia::Pump()
          item.failed = true;
          continue;
       }
+      const bool recentlyUsed = item.lastUsed + 1 >= m_tick;
+      bool gpuBacked = false;
+      std::shared_ptr<Sampler> gpuSampler;
+      {
+         std::lock_guard lock(session->mutex);
+         gpuBacked = session->gpuSampler != nullptr;
+         if (item.gpuSeq != session->gpuSeq)
+         {
+            gpuSampler = session->gpuSampler;
+            item.gpuSeq = session->gpuSeq;
+         }
+      }
+      if (session->finished && item.gpuBacked)
+      {
+         // GPU decode textures are owned by the decoding session, not cached with the item: once
+         // the session ends, their samplers are invalidated and must not be presented as a still frame
+         std::shared_ptr<Sampler> &target = item.blurred ? item.rawSampler : item.sampler;
+         target.reset();
+         if (item.bytes != 0)
+         {
+            m_bytes -= item.bytes;
+            item.bytes = 0;
+         }
+         item.gpuBacked = false;
+      }
+      if (gpuSampler != nullptr && !session->finished)
+      {
+         item.gpuBacked = true;
+         std::shared_ptr<Sampler> &target = item.blurred ? item.rawSampler : item.sampler;
+         target = gpuSampler;
+         const size_t frameBytes = static_cast<size_t>(gpuSampler->GetWidth()) * gpuSampler->GetHeight() * 4;
+         if (item.bytes != frameBytes)
+         {
+            m_bytes -= item.bytes;
+            item.bytes = frameBytes;
+            m_bytes += item.bytes;
+         }
+         if (item.blurred && recentlyUsed)
+            item.needsBlur = true;
+         if (item.readyTime == 0)
+            item.readyTime = static_cast<uint32_t>(SDL_GetTicks());
+      }
       std::shared_ptr<const BaseTexture> frame;
       {
          std::lock_guard lock(session->mutex);
@@ -526,6 +653,8 @@ void FrontendMedia::Pump()
          session->recycled = std::const_pointer_cast<BaseTexture>(item.videoBitmap);
       }
       item.videoBitmap = frame;
+      if (gpuBacked)
+         continue;
       std::shared_ptr<Sampler> &target = item.blurred ? item.rawSampler : item.sampler;
       // The decode bound can change mid session (a fullscreen consumer upgrading a stream that
       // was opened for a cell): reallocate the sampler when the frame size changes
@@ -540,7 +669,7 @@ void FrontendMedia::Pump()
          item.bytes = frameBytes;
          m_bytes += item.bytes;
       }
-      if (item.blurred)
+      if (item.blurred && recentlyUsed)
          item.needsBlur = true;
       if (item.readyTime == 0)
          item.readyTime = static_cast<uint32_t>(SDL_GetTicks());
@@ -636,8 +765,8 @@ void FrontendMedia::Evict()
       if (m_bytes <= ByteBudget)
          break;
       auto it = m_items.find(path);
-      if (it == m_items.end() || it->second.lastUsed == m_tick)
-         continue; // keep media used by the current frame
+      if (it == m_items.end() || it->second.lastUsed + 1 >= m_tick)
+         continue; // keep media used by the frame being prepared
       if (it->second.bitmap != nullptr)
          m_rd->m_texMan.UnloadTexture(it->second.bitmap.get());
       m_bytes -= it->second.bytes;

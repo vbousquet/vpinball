@@ -14,6 +14,11 @@ class RenderDevice;
 class RenderTarget;
 class Sampler;
 
+namespace VPX
+{
+class VideoDecodeSession;
+}
+
 namespace VPX::Frontend
 {
 
@@ -75,6 +80,10 @@ private:
       std::shared_ptr<VideoSession> video; // Video medias only: the decode session for this file
       std::shared_ptr<const BaseTexture> videoBitmap; // Video medias only: last uploaded frame
       uint64_t videoSeq = 0; // Video medias only: sequence of videoBitmap
+      bool gpuBacked = false; // Video medias only: the current session publishes a GPU-resident sampler
+      uint64_t gpuSeq = 0;
+      uint64_t videoWarmupTick = 0;
+      unsigned int videoWarmup = 0;
       unsigned int decodeW = 0, decodeH = 0; // Video medias only: requested decode bound (0 = cell sized)
       unsigned int imageMaxDimension = 0; // Still images only: largest requested decode bound
    };
