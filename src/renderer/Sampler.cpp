@@ -316,7 +316,10 @@ bgfx::TextureHandle Sampler::GetCoreTexture(bool withMipmaps)
 {
    // If this is an external render target texture, just return it (no update or mipmap generation allowed)
    if (!m_ownTexture)
+   {
+      const std::lock_guard lock(m_textureUpdateMutex);
       return m_nomipsTexture;
+   }
 
    if (m_usePrecompressed)
    {

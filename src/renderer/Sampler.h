@@ -52,7 +52,11 @@ public:
    void ReleaseCoreTexture();
    // The wrapped texture was destroyed by its owner (e.g. a released render target): keep the handle in sync so
    // binding the sampler falls back to the null texture instead of a stale handle
-   void Invalidate() { m_nomipsTexture = m_mipsTexture = BGFX_INVALID_HANDLE; }
+   void Invalidate()
+   {
+      const std::lock_guard lock(m_textureUpdateMutex);
+      m_nomipsTexture = m_mipsTexture = BGFX_INVALID_HANDLE;
+   }
    bool IsUploadPending() const { return (m_textureUpdate != nullptr) || m_pendingMipMapGen || m_compressedUploadPending; }
 
 #elif defined(ENABLE_OPENGL)
